@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>Tax Compliance Experiment</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
@@ -844,13 +847,17 @@ const DATA_LOG = {
   demo_mode: null,
   treatment: null,
   session_start: Date.now(),
+  session_start_iso: new Date().toISOString(),
+  last_updated_iso: null,
   // survey (step 1)
   elicitation_pref: null,      // slider 0..100
   elicitation_start_value: null,
+  elicitation_time_ms: 0,      // time spent on the elicitation screen specifically
   memory_sequence: null,       // emojis shown
   // experiment (step 2)
   reelicitation_pref: null,    // T3 only
   reelicitation_start_value: null,
+  reelicitation_time_ms: 0,    // time spent on the re-elicitation screen specifically
   you_rank: null,
   baseline_tau_pct: null,        // a priori baseline split (0-100) used for the "earned" amount at reveal
   initial_earning: null,         // dollar amount shown at the rank-reveal screen
@@ -865,12 +872,17 @@ const DATA_LOG = {
   recall_score_norm: null,     // 0..1
   giving_pref: null,           // slider 0..100
   giving_start_value: null,
+  giving_time_ms: 0,           // time spent on the redistribution screen specifically
   final_payoff: null,
+  phase1_completed_at_iso: null,
+  phase2_completed_at_iso: null,
   // interaction summary (ms), split by study
   survey_total_time_ms: 0,        // total time spent in Step 1 (survey)
-  survey_active_time_ms: 0,       // time in Step 1 during which the mouse was moving
+  survey_active_time_ms: 0,       // time in Step 1 with recent mouse/keyboard/click activity
+  survey_idle_time_ms: 0,         // total - active, Step 1
   experiment_total_time_ms: 0,    // total time spent in Step 2 (experiment)
-  experiment_active_time_ms: 0,   // time in Step 2 during which the mouse was moving
+  experiment_active_time_ms: 0,   // time in Step 2 with recent mouse/keyboard/click activity
+  experiment_idle_time_ms: 0,     // total - active, Step 2
   slider_events: []            // [field, value, t]
 };
 
@@ -880,6 +892,9 @@ function logSlider(field, value) {
 }
 function exportData() {
   _flushTime();
+  DATA_LOG.survey_idle_time_ms     = Math.max(0, DATA_LOG.survey_total_time_ms - DATA_LOG.survey_active_time_ms);
+  DATA_LOG.experiment_idle_time_ms = Math.max(0, DATA_LOG.experiment_total_time_ms - DATA_LOG.experiment_active_time_ms);
+  DATA_LOG.last_updated_iso = new Date().toISOString();
   return JSON.stringify(DATA_LOG);
 }
 
@@ -888,10 +903,19 @@ function exportData() {
 // the flow array (whether we are at/after the Step-2 consent screen), not the
 // screen's static id — necessary because some screens (e.g. the debrief screen)
 // are reused in both Step 1 and Step 2 contexts.
-const ACTIVE_GAP = 500;   // a mousemove gap longer than this counts as idle
+//
+// "Active" time counts any recent mouse movement, click, keypress, or slider
+// drag — not just raw mousemove — so someone reading a slider value or typing
+// in the recall task still counts as engaged, not idle.
+const ACTIVE_GAP = 500;   // a gap longer than this since the last activity counts as idle
 let _lastTick = Date.now();
-let _lastMove = null;
+let _lastActivity = null;
 let _lastKnownInStudy2 = false;
+
+// Per-section timers (elicitation / re-elicitation / redistribution): which
+// DATA_LOG field is currently accruing time, ticked alongside the main clock.
+let _activeSectionField = null;
+let _sectionLastTick = Date.now();
 
 function _flushTime() {
   const now = Date.now();
@@ -901,20 +925,38 @@ function _flushTime() {
     else                    DATA_LOG.survey_total_time_ms += dt;
   }
   _lastTick = now;
+
+  if (_activeSectionField) {
+    const sdt = now - _sectionLastTick;
+    if (sdt > 0) DATA_LOG[_activeSectionField] += sdt;
+  }
+  _sectionLastTick = now;
 }
 
-document.addEventListener('mousemove', () => {
+function startSectionTimer(field) {
+  _flushTime();
+  _activeSectionField = field;
+  _sectionLastTick = Date.now();
+}
+function stopSectionTimer() {
+  _flushTime();
+  _activeSectionField = null;
+}
+
+function _registerActivity() {
   const now = Date.now();
   _flushTime(); // accrue total time up to now, in the correct bucket
-  if (_lastMove !== null) {
-    const dt = now - _lastMove;
+  if (_lastActivity !== null) {
+    const dt = now - _lastActivity;
     if (dt <= ACTIVE_GAP) {
       if (_lastKnownInStudy2) DATA_LOG.experiment_active_time_ms += dt;
       else                    DATA_LOG.survey_active_time_ms += dt;
     }
   }
-  _lastMove = now;
-});
+  _lastActivity = now;
+}
+['mousemove', 'mousedown', 'click', 'keydown', 'wheel', 'touchstart', 'touchmove']
+  .forEach(evt => document.addEventListener(evt, _registerActivity, { passive: true }));
 
 // ============================================================
 // DATA — 10 people ranked by performance (rank 1 = best ... rank 10 = worst)
@@ -1061,6 +1103,81 @@ function setTreatment(t, phase) {
   showScreen(flow[0]);
 }
 
+// ============================================================
+// RESUME ON RELOAD
+// If the participant reloads or closes the tab mid-study, the next time they
+// open the same link (same PROLIFIC_PID, same phase) we restore them to
+// exactly where they left off, rather than restarting from scratch. Disabled
+// entirely in demo mode, where every reload should start fresh via the
+// treatment dropdown.
+// ============================================================
+function resumeKey_() {
+  const pid = DATA_LOG.prolific_pid || 'anon';
+  return 'taxstudy_resume_' + pid + '_' + APP_PHASE;
+}
+
+function saveResumeState() {
+  if (APP_DEMO_MODE) return;
+  try {
+    const snapshot = {
+      treatment, flow, flowPos, APP_PHASE,
+      YOU_RANK, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
+      TASK_N_CORRECT, TASK_FREEBIE_PROPORTION, MEMORY_SEQUENCE,
+      sStar, sStar2, sStarSet, sStar2Set,
+      data: DATA_LOG
+    };
+    localStorage.setItem(resumeKey_(), JSON.stringify(snapshot));
+  } catch (e) {
+    console.warn('[Study] Could not save resume state (localStorage unavailable?).', e);
+  }
+}
+
+// Returns true if a saved session was found and restored.
+function tryRestoreResumeState(phase) {
+  if (APP_DEMO_MODE) return false;
+  const pid = DATA_LOG.prolific_pid || 'anon';
+  const key = 'taxstudy_resume_' + pid + '_' + phase;
+  let raw;
+  try {
+    raw = localStorage.getItem(key);
+  } catch (e) {
+    return false;
+  }
+  if (!raw) return false;
+  try {
+    const s = JSON.parse(raw);
+    treatment = s.treatment;
+    flow = s.flow;
+    flowPos = s.flowPos;
+    APP_PHASE = s.APP_PHASE;
+    YOU_RANK = s.YOU_RANK;
+    BASELINE_TAU_PCT = s.BASELINE_TAU_PCT;
+    YOU_INITIAL_EARNING = s.YOU_INITIAL_EARNING;
+    TASK_N_CORRECT = s.TASK_N_CORRECT;
+    TASK_FREEBIE_PROPORTION = s.TASK_FREEBIE_PROPORTION;
+    MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
+    sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
+    Object.assign(DATA_LOG, s.data);
+    // session_start must restay anchored to NOW for the live timers to keep
+    // ticking correctly going forward; only the accumulated *_time_ms fields
+    // carry over from the snapshot (already restored via Object.assign above).
+    _lastTick = Date.now();
+    _sectionLastTick = Date.now();
+    showScreen(flow[flowPos]);
+    return true;
+  } catch (e) {
+    console.warn('[Study] Found a resume snapshot but failed to parse/restore it — starting fresh.', e);
+    return false;
+  }
+}
+
+function clearResumeState(phase) {
+  try {
+    const pid = DATA_LOG.prolific_pid || 'anon';
+    localStorage.removeItem('taxstudy_resume_' + pid + '_' + phase);
+  } catch (e) { /* ignore */ }
+}
+
 // Study-2 status is determined by POSITION in the flow array relative to the
 // Step-2 consent screen (id 4), not by a screen's static id — some screens
 // (e.g. the debrief screen, id 11) are reused in both Step 1 and Step 2.
@@ -1068,6 +1185,15 @@ let _currentScreenIdx = null;
 function showScreen(idx) {
   _flushTime();           // close out time for the screen we're leaving (old bucket)
   _currentScreenIdx = idx;
+  saveResumeState();      // persist progress before anything else can fail
+
+  // Section timers: elicitation (2), re-elicitation (5), redistribution (8).
+  // Stop whichever was running; start a fresh one only if we're entering one
+  // of those screens.
+  stopSectionTimer();
+  if (idx === 2) startSectionTimer('elicitation_time_ms');
+  if (idx === 5) startSectionTimer('reelicitation_time_ms');
+  if (idx === 8) startSectionTimer('giving_time_ms');
 
   const study2Pos = flow.indexOf(4);
   _lastKnownInStudy2 = study2Pos >= 0 && flowPos >= study2Pos;
@@ -1833,7 +1959,9 @@ async function postToBackend_(payload) {
 
 async function submitPhase1Complete() {
   if (APP_DEMO_MODE) return;
-  return postToBackend_({
+  DATA_LOG.phase1_completed_at_iso = new Date().toISOString();
+  exportData(); // flush timers and idle calc into DATA_LOG before sending
+  const ok = await postToBackend_({
     action: 'phase1_complete',
     pid: DATA_LOG.prolific_pid,
     study_id: DATA_LOG.study_id,
@@ -1841,16 +1969,22 @@ async function submitPhase1Complete() {
     treatment: DATA_LOG.treatment,
     data: DATA_LOG
   });
+  if (ok) clearResumeState('phase1');
+  return ok;
 }
 
 async function submitPhase2Complete() {
   if (APP_DEMO_MODE) return;
-  return postToBackend_({
+  DATA_LOG.phase2_completed_at_iso = new Date().toISOString();
+  exportData();
+  const ok = await postToBackend_({
     action: 'phase2_complete',
     pid: DATA_LOG.prolific_pid,
     treatment: DATA_LOG.treatment,
     data: DATA_LOG
   });
+  if (ok) clearResumeState('phase2');
+  return ok;
 }
 
 async function bootstrapApp() {
@@ -1892,6 +2026,16 @@ async function bootstrapApp() {
     if (prior && prior.treatment) assignedTreatment = prior.treatment;
   }
 
+  DATA_LOG.app_phase = phase;
+
+  // If this participant already has in-progress local state for this exact
+  // phase (e.g. they reloaded the page or came back after closing the tab),
+  // restore it and skip treatment (re-)assignment entirely.
+  if (tryRestoreResumeState(phase)) {
+    console.log('[Study] Resumed an in-progress session for this participant.');
+    return;
+  }
+
   // Explicit Phase-2 entry still needs the participant's original treatment.
   if (phase === 'phase2' && !assignedTreatment) {
     const prior = await lookupPriorResponse(pid);
@@ -1901,11 +2045,10 @@ async function bootstrapApp() {
   if (!assignedTreatment) {
     assignedTreatment = sampleRandomTreatment();
     if (phase === 'phase2') {
-      console.warn('[Study] No Phase-1 treatment record found for this participant — assigning a new random treatment as a fallback. Verify responses.csv integration before launch.');
+      console.warn('[Study] No Phase-1 treatment record found for this participant — assigning a new random treatment as a fallback. Verify the backend lookup before launch.');
     }
   }
 
-  DATA_LOG.app_phase = phase;
   setTreatment(assignedTreatment, phase);
 }
 
