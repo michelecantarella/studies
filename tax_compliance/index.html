@@ -536,6 +536,15 @@
 </head>
 <body>
 
+<!-- BOOT LOADING OVERLAY — blocks all interaction until bootstrapApp() has
+     fully resolved (backend lookup for resume/already-completed/treatment).
+     Visible by default; bootstrapApp() hides it once it's safe to interact. -->
+<div id="boot-loading-overlay" style="position:fixed; inset:0; z-index:9999; background:var(--bg); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px;">
+  <div style="width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:bootSpin 0.8s linear infinite;"></div>
+  <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">Checking your study status, please wait…</div>
+</div>
+<style>@keyframes bootSpin { to { transform: rotate(360deg); } }</style>
+
 <!-- HEADER -->
 <div class="header">
   <div class="logo" id="header-title">Survey Study</div>
@@ -2012,7 +2021,20 @@ async function submitPhase2Complete() {
   return ok;
 }
 
+function hideBootOverlay_() {
+  const el = document.getElementById('boot-loading-overlay');
+  if (el) el.style.display = 'none';
+}
+
 async function bootstrapApp() {
+  try {
+    await bootstrapAppInner_();
+  } finally {
+    hideBootOverlay_();
+  }
+}
+
+async function bootstrapAppInner_() {
   const params = new URLSearchParams(window.location.search);
   const pid       = params.get('PROLIFIC_PID');
   const studyId   = params.get('STUDY_ID');
@@ -2038,7 +2060,10 @@ async function bootstrapApp() {
   document.getElementById('demo-switcher-panel').style.display = 'none';
 
   // Single backend lookup, used for everything below: phase fallback,
-  // already-completed checks, treatment recovery, and resume.
+  // already-completed checks, treatment recovery, and resume. The boot
+  // overlay stays up (blocking all clicks, including the consent button)
+  // for the entire duration of this await — this is what prevents the
+  // "click consent, then get bounced back to screen 0" race condition.
   const prior = await lookupPriorResponse(pid);
 
   let phase;
