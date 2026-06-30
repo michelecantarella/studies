@@ -708,6 +708,15 @@
     </div>
   </div>
 
+  <!-- ===================== SCREEN 14: ALREADY COMPLETED (standalone, not part of any flow) ===================== -->
+  <div class="screen" id="screen-14">
+    <h1>Thank You</h1>
+    <div class="card">
+      <p>We have already received your response for <strong id="already-completed-which">this part of the study</strong>.</p>
+      <p style="margin-top:8px">You may safely close this page. If you believe this is an error, please contact the research team via Prolific.</p>
+    </div>
+  </div>
+
   <!-- ===================== SCREEN 6: REAL EFFORT TASK (all) ===================== -->
   <div class="screen" id="screen-6">
     <h1>Task</h1>
@@ -1041,7 +1050,7 @@ let reelicitMoved = false;
 // Screen IDs
 const SCREENS = ['screen-0','screen-1','screen-2','screen-3','screen-4',
                  'screen-5','screen-6','screen-7','screen-8','screen-9','screen-10',
-                 'screen-11','screen-12','screen-13'];
+                 'screen-11','screen-12','screen-13','screen-14'];
 
 // Flows (10=emoji recall, 11=pre-elicitation/re-elicitation debrief,
 // 12=end of Phase 1, 13=pre-task debrief):
@@ -1105,70 +1114,72 @@ function setTreatment(t, phase) {
 
 // ============================================================
 // RESUME ON RELOAD
-// If the participant reloads or closes the tab mid-study, the next time they
-// open the same link (same PROLIFIC_PID, same phase) we restore them to
-// exactly where they left off, rather than restarting from scratch. Disabled
-// entirely in demo mode, where every reload should start fresh via the
-// treatment dropdown.
+// The backend (Google Sheet) is the SOURCE OF TRUTH for resume state, since a
+// participant may reload from a different browser/device than the one that
+// saved a local snapshot. Every screen transition pushes a lightweight
+// "progress" snapshot to the backend; bootstrapApp() always checks the
+// backend's lookup response first. localStorage is kept only as a same-device
+// fast path so a reload doesn't have to wait on a network round trip, but it
+// is never trusted over a backend record that's missing or marks the phase
+// complete. Disabled entirely in demo mode.
 // ============================================================
-function resumeKey_() {
-  const pid = DATA_LOG.prolific_pid || 'anon';
-  return 'taxstudy_resume_' + pid + '_' + APP_PHASE;
+function buildSnapshot_() {
+  return {
+    treatment, flow, flowPos, APP_PHASE,
+    YOU_RANK, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
+    TASK_N_CORRECT, TASK_FREEBIE_PROPORTION, MEMORY_SEQUENCE,
+    sStar, sStar2, sStarSet, sStar2Set,
+    data: DATA_LOG
+  };
 }
 
 function saveResumeState() {
   if (APP_DEMO_MODE) return;
+  const snapshot = buildSnapshot_();
   try {
-    const snapshot = {
-      treatment, flow, flowPos, APP_PHASE,
-      YOU_RANK, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
-      TASK_N_CORRECT, TASK_FREEBIE_PROPORTION, MEMORY_SEQUENCE,
-      sStar, sStar2, sStarSet, sStar2Set,
-      data: DATA_LOG
-    };
-    localStorage.setItem(resumeKey_(), JSON.stringify(snapshot));
-  } catch (e) {
-    console.warn('[Study] Could not save resume state (localStorage unavailable?).', e);
+    const pid = DATA_LOG.prolific_pid || 'anon';
+    localStorage.setItem('taxstudy_resume_' + pid + '_' + APP_PHASE, JSON.stringify(snapshot));
+  } catch (e) { /* localStorage unavailable — backend copy still gets sent below */ }
+
+  // Best-effort heartbeat to the backend so resume works from any device.
+  // Never awaited by callers — must not block screen transitions.
+  if (backendConfigured_() && DATA_LOG.prolific_pid) {
+    postToBackend_({
+      action: 'progress',
+      pid: DATA_LOG.prolific_pid,
+      study_id: DATA_LOG.study_id,
+      session_id: DATA_LOG.session_id,
+      treatment: DATA_LOG.treatment,
+      phase: APP_PHASE,
+      data: DATA_LOG,
+      snapshot: snapshot
+    });
   }
 }
 
-// Returns true if a saved session was found and restored.
-function tryRestoreResumeState(phase) {
-  if (APP_DEMO_MODE) return false;
-  const pid = DATA_LOG.prolific_pid || 'anon';
-  const key = 'taxstudy_resume_' + pid + '_' + phase;
-  let raw;
-  try {
-    raw = localStorage.getItem(key);
-  } catch (e) {
-    return false;
-  }
-  if (!raw) return false;
-  try {
-    const s = JSON.parse(raw);
-    treatment = s.treatment;
-    flow = s.flow;
-    flowPos = s.flowPos;
-    APP_PHASE = s.APP_PHASE;
-    YOU_RANK = s.YOU_RANK;
-    BASELINE_TAU_PCT = s.BASELINE_TAU_PCT;
-    YOU_INITIAL_EARNING = s.YOU_INITIAL_EARNING;
-    TASK_N_CORRECT = s.TASK_N_CORRECT;
-    TASK_FREEBIE_PROPORTION = s.TASK_FREEBIE_PROPORTION;
-    MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
-    sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
-    Object.assign(DATA_LOG, s.data);
-    // session_start must restay anchored to NOW for the live timers to keep
-    // ticking correctly going forward; only the accumulated *_time_ms fields
-    // carry over from the snapshot (already restored via Object.assign above).
-    _lastTick = Date.now();
-    _sectionLastTick = Date.now();
-    showScreen(flow[flowPos]);
-    return true;
-  } catch (e) {
-    console.warn('[Study] Found a resume snapshot but failed to parse/restore it — starting fresh.', e);
-    return false;
-  }
+// Restores all session state from a snapshot object (same shape produced by
+// buildSnapshot_ / saved by the backend's "progress" action) and jumps to the
+// saved screen. Does not itself decide WHETHER to resume — callers check
+// phase-completion status first.
+function restoreFromSnapshot(s) {
+  treatment = s.treatment;
+  flow = s.flow;
+  flowPos = s.flowPos;
+  APP_PHASE = s.APP_PHASE;
+  YOU_RANK = s.YOU_RANK;
+  BASELINE_TAU_PCT = s.BASELINE_TAU_PCT;
+  YOU_INITIAL_EARNING = s.YOU_INITIAL_EARNING;
+  TASK_N_CORRECT = s.TASK_N_CORRECT;
+  TASK_FREEBIE_PROPORTION = s.TASK_FREEBIE_PROPORTION;
+  MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
+  sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
+  Object.assign(DATA_LOG, s.data);
+  // session_start must stay anchored to NOW for the live timers to keep
+  // ticking correctly going forward; only the accumulated *_time_ms fields
+  // carry over from the snapshot (already restored via Object.assign above).
+  _lastTick = Date.now();
+  _sectionLastTick = Date.now();
+  showScreen(flow[flowPos]);
 }
 
 function clearResumeState(phase) {
@@ -1176,6 +1187,14 @@ function clearResumeState(phase) {
     const pid = DATA_LOG.prolific_pid || 'anon';
     localStorage.removeItem('taxstudy_resume_' + pid + '_' + phase);
   } catch (e) { /* ignore */ }
+}
+
+function showAlreadyCompletedScreen(which) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-14').classList.add('active');
+  document.getElementById('already-completed-which').textContent = which;
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('stepDots').innerHTML = '';
 }
 
 // Study-2 status is determined by POSITION in the flow array relative to the
@@ -1922,11 +1941,17 @@ async function lookupPriorResponse(pid) {
   if (!pid || !backendConfigured_()) return null;
   try {
     const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
-    const resp = await fetch(url, { method: 'GET' });
+    const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
     if (!resp.ok) return null;
     const json = await resp.json();
     if (!json.found) return null;
-    return { treatment: json.treatment || null, phase1_complete: !!json.phase1_complete };
+    return {
+      treatment: json.treatment || null,
+      phase1_complete: !!json.phase1_complete,
+      phase2_complete: !!json.phase2_complete,
+      resume_phase: json.resume_phase || null,
+      resume_snapshot: json.resume_snapshot || null
+    };
   } catch (e) {
     console.warn('[Study] Backend lookup failed — defaulting as a new Phase 1 participant.', e);
     return null;
@@ -2012,36 +2037,57 @@ async function bootstrapApp() {
   // Production: demo UI stays hidden throughout.
   document.getElementById('demo-switcher-panel').style.display = 'none';
 
-  let phase, assignedTreatment = null;
+  // Single backend lookup, used for everything below: phase fallback,
+  // already-completed checks, treatment recovery, and resume.
+  const prior = await lookupPriorResponse(pid);
 
+  let phase;
   if (studyId === STUDY_ID_PHASE1) {
     phase = 'phase1';
   } else if (studyId === STUDY_ID_PHASE2) {
     phase = 'phase2';
   } else {
-    // STUDY_ID didn't match either configured value — fall back to checking
-    // whether this participant already has a Phase-1 record.
-    const prior = await lookupPriorResponse(pid);
-    phase = prior ? 'phase2' : 'phase1';
-    if (prior && prior.treatment) assignedTreatment = prior.treatment;
+    // STUDY_ID didn't match either configured value — fall back to whether
+    // this participant already has any record at all.
+    phase = (prior && prior.phase1_complete) ? 'phase2' : 'phase1';
   }
 
   DATA_LOG.app_phase = phase;
 
-  // If this participant already has in-progress local state for this exact
-  // phase (e.g. they reloaded the page or came back after closing the tab),
-  // restore it and skip treatment (re-)assignment entirely.
-  if (tryRestoreResumeState(phase)) {
-    console.log('[Study] Resumed an in-progress session for this participant.');
+  // Already completed THIS phase? Don't let them redo it / overwrite data.
+  if (phase === 'phase1' && prior && prior.phase1_complete) {
+    showAlreadyCompletedScreen('Part 1 of this study');
+    return;
+  }
+  if (phase === 'phase2' && prior && prior.phase2_complete) {
+    showAlreadyCompletedScreen('Part 2 of this study');
     return;
   }
 
-  // Explicit Phase-2 entry still needs the participant's original treatment.
-  if (phase === 'phase2' && !assignedTreatment) {
-    const prior = await lookupPriorResponse(pid);
-    if (prior && prior.treatment) assignedTreatment = prior.treatment;
+  // In-progress session for this exact phase, saved server-side? Restore it
+  // — this works even from a different browser/device than the one that was
+  // originally used, since the snapshot lives in the Sheet, not just locally.
+  if (prior && prior.resume_phase === phase && prior.resume_snapshot) {
+    console.log('[Study] Resuming an in-progress session from the backend record.');
+    restoreFromSnapshot(prior.resume_snapshot);
+    return;
   }
 
+  // No backend snapshot — fall back to a local one in case the backend
+  // heartbeat hasn't caught up yet (e.g. brief network hiccup right before
+  // a reload on the same device).
+  try {
+    const localKey = 'taxstudy_resume_' + (pid || 'anon') + '_' + phase;
+    const raw = localStorage.getItem(localKey);
+    if (raw) {
+      console.log('[Study] Resuming from a local snapshot (backend had none yet).');
+      restoreFromSnapshot(JSON.parse(raw));
+      return;
+    }
+  } catch (e) { /* ignore */ }
+
+  // Genuinely new for this phase: assign a treatment.
+  let assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
   if (!assignedTreatment) {
     assignedTreatment = sampleRandomTreatment();
     if (phase === 'phase2') {
