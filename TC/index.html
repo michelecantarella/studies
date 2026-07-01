@@ -677,9 +677,11 @@
 
   <!-- ===================== SCREEN 5: RE-ELICITATION (T3 only — before task) ===================== -->
   <div class="screen" id="screen-5">
-    <h1>How should rewards be distributed?</h1>
-    <div class="anchor-box" style="display:block; margin-bottom:20px">
-      In a <strong>previous study</strong>, you told us how you think people in studies like this should share a bonus based on their performance. Your earlier choice is shown in <strong>orange</strong> below. Before today's task, please tell us again — you may keep it or change it.
+    <h1>Before we start: what makes rewards fair?</h1>
+    <div class="card">
+      <p>People taking part in this study will receive rewards based on their <strong>performance</strong>. Are these rewards <strong>fair</strong>? We would like to hear your opinion.</p>
+      <p style="margin-top:8px">In the next section, before you begin the task, we will ask you to tell us <strong>how rewards should be distributed</strong> across participants in the study.</p>
+      <p style="margin-top:8px">Your earlier choice is shown in <strong>orange</strong> below. You may keep it or change it.</p>
     </div>
     <div class="card">
       <div class="card-title">Bonus by performance rank</div>
@@ -1211,11 +1213,11 @@ function restoreFromSnapshot(s) {
   MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
   sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
   Object.assign(DATA_LOG, s.data);
-  // session_start must stay anchored to NOW for the live timers to keep
-  // ticking correctly going forward; only the accumulated *_time_ms fields
-  // carry over from the snapshot (already restored via Object.assign above).
   _lastTick = Date.now();
   _sectionLastTick = Date.now();
+  // Sync demo dropdown to the restored treatment.
+  const sel = document.getElementById('demo-treatment-select');
+  if (sel) sel.value = treatment;
   showScreen(flow[flowPos]);
 }
 
@@ -1273,6 +1275,20 @@ function showScreen(idx) {
   }
 
   if (idx === 10) buildRecallOptions();
+
+  // In demo mode, the treatment dropdown is only unlocked on the active
+  // consent screen (screen 0 for Phase 1, screen 4 for Phase 2).
+  // Everywhere else it's disabled and visually greyed out, so you can still
+  // read which treatment was assigned but can't accidentally change it mid-flow.
+  if (APP_DEMO_MODE) {
+    const sel = document.getElementById('demo-treatment-select');
+    if (sel) {
+      const onConsent = (idx === 0 || idx === 4);
+      sel.disabled = !onConsent;
+      sel.style.opacity = onConsent ? '1' : '0.5';
+      sel.style.cursor  = onConsent ? 'pointer' : 'not-allowed';
+    }
+  }
 
   if (idx === 12) {
     document.getElementById('screen12-demo-btn-row').style.display = (APP_DEMO_MODE === 2) ? 'flex' : 'none';
