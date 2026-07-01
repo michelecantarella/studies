@@ -580,24 +580,12 @@
 
 
   <!-- ===================== SCREEN 2: ELICITATION (T1/T2/T3) ===================== -->
-  <!-- ===================== SCREEN 11: PRE-ELICITATION / PRE-RE-ELICITATION DEBRIEF ===================== -->
-  <div class="screen" id="screen-11">
-    <h1>What makes rewards fair?</h1>
-    <div class="card">
-      <p>People taking part in studies often receive rewards based on their <strong>performance</strong>. Are these rewards <strong>fair</strong>? We would like to hear your opinion.</p>
-      <p style="margin-top:8px">In the next section, we will ask you to tell us <strong>how rewards should be distributed</strong> across participants in a study.</p>
-    </div>
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="nextScreen()">Continue →</button>
-    </div>
-  </div>
-
   <div class="screen" id="screen-2">
-    <h1>How should rewards be distributed?</h1>
+    <h1>Before we start: How should rewards be distributed?</h1>
     <div class="card">
-      <p>We'd like to know your view on how people taking part in studies should be <strong>rewarded for their performance</strong>.</p>
+      <p>We'd like to know your view on how people taking part in this study should be <strong>rewarded for their performance</strong>.</p>
       <p style="margin-top:8px">The chart below shows a group of <strong>10 people</strong>, ranked from best to worst performer, sharing a <strong>$20 bonus</strong>. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the best performer takes everything</strong>.</p>
-      <p style="margin-top:8px"><strong>There are no right or wrong answers.</strong> We are interested in what you think is fair, in general.</p>
+      <p style="margin-top:8px"><strong>There are no right or wrong answers</strong>, and your response now will not affect the distribution of rewards. We are interested in what you think is fair.</p>
     </div>
     <div class="card">
       <div class="card-title">Bonus by performance rank</div>
@@ -677,11 +665,12 @@
 
   <!-- ===================== SCREEN 5: RE-ELICITATION (T3 only — before task) ===================== -->
   <div class="screen" id="screen-5">
-    <h1>Before we start: what makes rewards fair?</h1>
+    <h1>Before we start: How should rewards be distributed?</h1>
     <div class="card">
-      <p>People taking part in this study will receive rewards based on their <strong>performance</strong>. Are these rewards <strong>fair</strong>? We would like to hear your opinion.</p>
-      <p style="margin-top:8px">In the next section, before you begin the task, we will ask you to tell us <strong>how rewards should be distributed</strong> across participants in the study.</p>
-      <p style="margin-top:8px">Your earlier choice is shown in <strong>orange</strong> below. You may keep it or change it.</p>
+      <p>We'd like to know your view on how people taking part in this study should be rewarded for their performance.</p>
+      <p style="margin-top:8px">The chart below shows a group of 10 people, ranked from best to worst performer, sharing a $20 bonus. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end everyone is paid the same, at the other the best performer takes everything.</p>
+      <p style="margin-top:8px">There are no right or wrong answers, and your response now will not affect the distribution of rewards. We are interested in what you think is fair.</p>
+      <p style="margin-top:8px; color:var(--muted); font-size:13px;">Your earlier choice is shown in <strong>orange</strong> below. You may keep it or change it.</p>
     </div>
     <div class="card">
       <div class="card-title">Bonus by performance rank</div>
@@ -1070,22 +1059,27 @@ let elicitMoved   = false;
 let reelicitMoved = false;
 
 // Screen IDs
+// NOTE: SCREENS is positionally indexed — SCREENS[idx] must equal 'screen-'+idx
+// for every idx used elsewhere in the code (showScreen(12), showScreen(13), etc).
+// 'screen-11' is kept as a placeholder even though that HTML element no longer
+// exists (its content was merged into screens 2 and 5) — removing it would
+// shift every subsequent index and break screens 12-15. It is simply never
+// referenced by any flow, so document.getElementById('screen-11') is never called.
 const SCREENS = ['screen-0','screen-1','screen-2','screen-3','screen-4',
                  'screen-5','screen-6','screen-7','screen-8','screen-9','screen-10',
                  'screen-11','screen-12','screen-13','screen-14','screen-15'];
 
-// Flows (10=emoji recall, 11=pre-elicitation/re-elicitation debrief,
-// 12=end of Phase 1, 13=pre-task debrief):
+// Flows (10=emoji recall, 12=end of Phase 1, 13=pre-task debrief):
 // C:  0,3,12,4,10,13,6,7,8,9
-// T1: 0,11,2,3,12,4,10,13,6,7,8,9
-// T2: 0,11,2,3,12,4,10,13,6,7,8,9
-// T3: 0,11,2,3,12,4,10,13,11,5,6,7,8,9
+// T1: 0,2,3,12,4,10,13,6,7,8,9
+// T2: 0,2,3,12,4,10,13,6,7,8,9
+// T3: 0,2,3,12,4,10,13,5,6,7,8,9
 function getFullFlow() {
   if (treatment === 'C')  return [0,3,12,4,10,13,6,7,8,9];
-  if (treatment === 'T1') return [0,11,2,3,12,4,10,13,6,7,8,9];
-  if (treatment === 'T2') return [0,11,2,3,12,4,10,13,6,7,8,9];
-  if (treatment === 'T3') return [0,11,2,3,12,4,10,13,11,5,6,7,8,9];
-  return [0,11,2,3,12,4,10,13,6,7,8,9];
+  if (treatment === 'T1') return [0,2,3,12,4,10,13,6,7,8,9];
+  if (treatment === 'T2') return [0,2,3,12,4,10,13,6,7,8,9];
+  if (treatment === 'T3') return [0,2,3,12,4,10,13,5,6,7,8,9];
+  return [0,2,3,12,4,10,13,6,7,8,9];
 }
 
 // Returns the slice of the full flow relevant to a given phase.
@@ -2030,6 +2024,10 @@ async function lookupPriorResponse(pid) {
     if (!resp.ok) return null;
     const json = await resp.json();
     if (!json.found) return null;
+    let memSeq = null;
+    if (json.memory_sequence) {
+      try { memSeq = JSON.parse(json.memory_sequence); } catch (e) { memSeq = null; }
+    }
     return {
       treatment: json.treatment || null,
       phase1_complete: !!json.phase1_complete,
@@ -2037,7 +2035,8 @@ async function lookupPriorResponse(pid) {
       resume_phase: json.resume_phase || null,
       resume_snapshot: json.resume_snapshot || null,
       elicitation_pref: json.elicitation_pref != null ? json.elicitation_pref : null,
-      reelicitation_pref: json.reelicitation_pref != null ? json.reelicitation_pref : null
+      reelicitation_pref: json.reelicitation_pref != null ? json.reelicitation_pref : null,
+      memory_sequence: memSeq   // the actual array shown in Phase 1, or null
     };
   } catch (e) {
     console.warn('[Study] Backend lookup failed — defaulting as a new Phase 1 participant.', e);
@@ -2183,6 +2182,14 @@ async function bootstrapAppInner_() {
       if (!isNaN(ep)) { sStar = ep; sStarSet = true; }
     }
     restoreFromSnapshot(prior.resume_snapshot);
+    // Safety net: force MEMORY_SEQUENCE to match what was actually shown in
+    // Phase 1, in case the snapshot itself carries a stale/incorrect value
+    // (e.g. saved before this fix). The recall task must quiz on the emojis
+    // the participant genuinely saw, never a freshly-regenerated sequence.
+    if (phase === 'phase2' && prior.memory_sequence) {
+      MEMORY_SEQUENCE = prior.memory_sequence;
+      DATA_LOG.memory_sequence = prior.memory_sequence.slice();
+    }
     return;
   }
 
@@ -2210,11 +2217,20 @@ async function bootstrapAppInner_() {
 
   // For Phase 2: restore sStar (elicitation preference from Phase 1) so the
   // T2 recall overlay and T3 re-elicitation anchor are populated correctly.
-  // Must happen AFTER setTreatment which resets sStar to 0.
+  // Also restore MEMORY_SEQUENCE — setTreatment() always generates a fresh
+  // random one, but Phase 2's recall task must quiz on the exact sequence
+  // shown in Phase 1, not a new one. Both must happen AFTER setTreatment,
+  // which resets/regenerates them.
   if (phase === 'phase2' && prior) {
     const ep = Number(prior.elicitation_pref);
     if (!isNaN(ep) && prior.elicitation_pref !== null && prior.elicitation_pref !== '') {
       sStar = ep; sStarSet = true;
+    }
+    if (prior.memory_sequence) {
+      MEMORY_SEQUENCE = prior.memory_sequence;
+      DATA_LOG.memory_sequence = prior.memory_sequence.slice();
+    } else {
+      console.warn('[Study] No Phase 1 memory sequence found for this participant — recall task will use a freshly-generated sequence, which the participant never actually saw.');
     }
   }
 }
