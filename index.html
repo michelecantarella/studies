@@ -1,0 +1,2196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Tax Compliance Experiment</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f2eb;
+    --surface: #ffffff;
+    --border: #d4cfc4;
+    --text: #1a1a18;
+    --muted: #6b6760;
+    --accent: #1a3a5c;
+    --accent-light: #e8eef4;
+    --orange: #c45c1a;
+    --orange-light: #fdf0e8;
+    --blue: #1a4a7a;
+    --blue-light: #e8f0f8;
+    --red: #8b1a1a;
+    --green: #1a5c2a;
+    --bar-gray: #b0aa9e;
+    --bar-blue: rgba(26, 74, 122, 0.55);
+    --bar-orange: rgba(196, 92, 26, 0.7);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  /* ---- HEADER ---- */
+  .header {
+    width: 100%;
+    background: var(--accent);
+    color: white;
+    padding: 12px 40px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    letter-spacing: 0.05em;
+  }
+  .header .logo { font-weight: 600; font-size: 14px; }
+  .step-indicator { display: flex; gap: 8px; align-items: center; }
+  .step-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: rgba(255,255,255,0.3);
+    transition: background 0.3s;
+  }
+  .step-dot.active { background: white; }
+  .step-dot.done { background: rgba(255,255,255,0.7); }
+
+  /* ---- CONTAINER ---- */
+  .container {
+    width: 100%;
+    max-width: 860px;
+    padding: 40px 24px 80px;
+  }
+
+  /* ---- SCREEN (each page of the experiment) ---- */
+  .screen { display: none; animation: fadeIn 0.4s ease; }
+  .screen.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+
+  /* ---- TYPOGRAPHY ---- */
+  h1 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 6px;
+    letter-spacing: -0.02em;
+  }
+  h2 {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    font-weight: 500;
+    color: var(--accent);
+    margin-bottom: 16px;
+    letter-spacing: -0.01em;
+  }
+  .subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-bottom: 32px;
+    font-family: 'IBM Plex Mono', monospace;
+    letter-spacing: 0.03em;
+  }
+  p { font-size: 14px; line-height: 1.7; color: var(--text); margin-bottom: 12px; }
+
+  /* ---- CARD ---- */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 28px 32px;
+    margin-bottom: 20px;
+  }
+  .card-title {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  /* ---- CONSENT ---- */
+  .consent-summary {
+    background: var(--accent-light);
+    border: 1px solid #c0ccd8;
+    border-radius: 2px;
+    padding: 14px 20px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #2a3a4a;
+    line-height: 1.6;
+  }
+  details.consent-details {
+    border: 1px solid #c0ccd8;
+    border-radius: 2px;
+    margin-bottom: 20px;
+    background: var(--accent-light);
+  }
+  details.consent-details summary {
+    padding: 14px 20px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--accent);
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  details.consent-details summary::-webkit-details-marker { display: none; }
+  details.consent-details summary::after {
+    content: '▾';
+    font-size: 14px;
+    transition: transform 0.2s;
+  }
+  details.consent-details[open] summary::after { transform: rotate(180deg); }
+  details.consent-details .consent-body {
+    padding: 0 20px 20px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #2a3a4a;
+    border-top: 1px solid #c0ccd8;
+  }
+  details.consent-details .consent-body p {
+    font-size: 13px;
+    color: #2a3a4a;
+    margin-top: 12px;
+  }
+
+  /* ---- BUTTONS ---- */
+  .btn {
+    display: inline-block;
+    padding: 12px 32px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    border: none;
+    border-radius: 2px;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+  }
+  .btn-primary:hover { background: #0f2a45; }
+  .btn-secondary {
+    background: transparent;
+    color: var(--muted);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+  .btn-row { display: flex; gap: 12px; margin-top: 24px; align-items: center; }
+
+  /* ---- PROGRESS BAR ---- */
+  .progress-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-bottom: 32px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.5s ease;
+  }
+
+  /* ---- HISTOGRAM ---- */
+  .histogram-container {
+    position: relative;
+    margin: 20px 0;
+  }
+  canvas { display: block; }
+
+  /* ---- SLIDER ---- */
+  .slider-section { margin: 20px 0; }
+  .slider-label {
+    display: flex;
+    justify-content: space-between;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    margin-bottom: 6px;
+  }
+  .slider-value {
+    font-size: 20px;
+    font-weight: 600;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--accent);
+    text-align: center;
+    margin-bottom: 10px;
+  }
+  input[type=range] {
+    width: 100%;
+    -webkit-appearance: none;
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    outline: none;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: var(--accent);
+    cursor: pointer;
+    border: 3px solid white;
+    box-shadow: 0 0 0 1px var(--accent);
+    transition: transform 0.15s;
+  }
+  input[type=range]::-webkit-slider-thumb:hover { transform: scale(1.2); }
+
+  /* ---- LEGEND ---- */
+  .legend {
+    display: flex;
+    gap: 20px;
+    font-size: 12px;
+    font-family: 'IBM Plex Mono', monospace;
+    color: var(--muted);
+    margin-top: 8px;
+    flex-wrap: wrap;
+  }
+  .legend-item { display: flex; align-items: center; gap: 6px; }
+  .legend-swatch {
+    width: 14px; height: 14px;
+    border-radius: 2px;
+    border: 1px solid rgba(0,0,0,0.15);
+  }
+
+  /* ---- STAT BOX ---- */
+  .stat-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px;
+    margin: 16px 0;
+  }
+  .stat-box {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 14px 16px;
+    text-align: center;
+  }
+  .stat-value {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--accent);
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  /* ---- YOU BADGE ---- */
+  .you-badge {
+    display: inline-block;
+    background: var(--red);
+    color: white;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 2px;
+    letter-spacing: 0.05em;
+  }
+
+  /* ---- RADIO / INPUT ---- */
+  .input-group { margin-bottom: 20px; }
+  .input-group label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .input-group input[type=number] {
+    width: 120px;
+    padding: 10px 14px;
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 16px;
+    background: var(--bg);
+    color: var(--text);
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .input-group input[type=number]:focus { border-color: var(--accent); }
+
+  /* ---- RECALL ---- */
+  .memory-seq {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 48px;
+    letter-spacing: 0.3em;
+    color: var(--accent);
+    text-align: center;
+    padding: 28px;
+    background: var(--accent-light);
+    border: 1px solid #c0ccd8;
+    border-radius: 2px;
+    margin: 20px 0;
+  }
+
+  /* ---- RECALL: slots + palette ---- */
+  .recall-slots {
+    display: flex;
+    justify-content: center;
+    gap: 14px;
+    margin: 18px 0 8px;
+  }
+  .recall-slot {
+    width: 72px; height: 72px;
+    border: 2px dashed var(--border);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px;
+    background: var(--bg);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .recall-slot.filled { border-style: solid; border-color: var(--accent); background: var(--accent-light); }
+  .recall-palette {
+    display: grid;
+    grid-template-columns: repeat(10, 1fr);
+    gap: 8px;
+    margin-top: 14px;
+  }
+  .recall-emoji {
+    aspect-ratio: 1;
+    font-size: 26px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.12s;
+  }
+  .recall-emoji:hover { border-color: var(--accent); background: var(--accent-light); transform: scale(1.08); }
+  .recall-emoji.used { opacity: 0.3; pointer-events: none; }
+
+  /* ---- TREATMENT TAG ---- */
+  .treatment-tag {
+    display: inline-block;
+    background: var(--orange-light);
+    border: 1px solid #e0c0a0;
+    color: var(--orange);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 10px;
+    border-radius: 2px;
+    letter-spacing: 0.08em;
+    margin-bottom: 12px;
+  }
+
+  /* ---- ANCHOR BOX ---- */
+  .anchor-box {
+    background: var(--orange-light);
+    border: 1px solid #e0c0a0;
+    border-left: 3px solid var(--orange);
+    padding: 16px 20px;
+    border-radius: 2px;
+    margin: 16px 0;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .anchor-rate {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--orange);
+  }
+
+  /* ---- TASK ---- */
+  .task-instr {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+    text-align: center;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .grid-outer { display: flex; justify-content: center; margin: 8px 0; overflow-x: auto; }
+  .grid-box { border: 1px solid var(--border); padding: 10px; background: var(--surface); display: inline-block; }
+  .grow-el { display: flex; gap: 4px; margin-bottom: 4px; }
+  .grow-el:last-child { margin-bottom: 0; }
+  .ecell {
+    width: 34px; height: 34px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 19px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    border-radius: 3px;
+    cursor: default;
+    line-height: 1;
+    user-select: none;
+    transition: background 0.08s, border-color 0.08s;
+  }
+  .ecell.ph { color: #ccc; font-size: 12px; }
+  .ecell.live { cursor: pointer; background: var(--surface); }
+  .ecell.live::before { content: attr(data-e); }
+  .ecell.live:hover { border-color: var(--accent); }
+  .ecell.selected { background: rgba(26,74,122,0.85); border-color: var(--accent); }
+  @keyframes wrongFlash {
+    0%, 100% { background: rgba(196,26,26,0.9); border-color: #c41a1a; }
+    50% { background: rgba(196,26,26,0.3); border-color: #c41a1a; }
+  }
+  .ecell.wrong-flash { animation: wrongFlash 0.18s ease-in-out 3; }
+  @keyframes freebieFlash {
+    0%, 100% { background: rgba(26,135,84,0.9); border-color: #1a8754; }
+    50% { background: rgba(26,135,84,0.3); border-color: #1a8754; }
+  }
+  .ecell.freebie-flash { animation: freebieFlash 0.18s ease-in-out 3; }
+  @keyframes revealFlash {
+    0% { background: rgba(26,74,122,0.5); border-color: var(--accent); }
+    100% { background: var(--surface); border-color: var(--border); }
+  }
+  .ecell.reveal-flash { animation: revealFlash 0.25s ease-out; }
+  .task-progress {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+    text-align: center;
+  }
+
+  /* ---- GIVING SECTION ---- */
+  .giving-slider input[type=range]::-webkit-slider-thumb {
+    background: var(--blue);
+    box-shadow: 0 0 0 1px var(--blue);
+  }
+  .giving-value { color: var(--blue); }
+
+  /* ---- OUTCOME ---- */
+  .outcome-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .outcome-card {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 2px;
+    padding: 20px;
+  }
+  .outcome-card.positive { border-color: var(--green); background: #f0f8f2; }
+  .outcome-card.negative { border-color: var(--red); background: #fdf0f0; }
+
+  /* ---- NAV BAR ---- */
+  .nav { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
+  .nav-info { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); }
+
+  /* ---- SEPARATOR ---- */
+  .sep { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* ---- SWITCHER (treatment selector for demo) ---- */
+  .demo-switcher {
+    display: none;
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    background: var(--accent);
+    color: white;
+    border-radius: 2px;
+    padding: 12px 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    z-index: 100;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  }
+  .demo-switcher select {
+    background: white;
+    color: var(--accent);
+    border: none;
+    padding: 4px 8px;
+    border-radius: 2px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    margin-top: 6px;
+    width: 100%;
+    cursor: pointer;
+  }
+  .demo-switcher .demo-label { font-weight: 600; letter-spacing: 0.08em; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+
+<!-- BOOT LOADING OVERLAY — blocks all interaction until bootstrapApp() has
+     fully resolved (backend lookup for resume/already-completed/treatment).
+     Visible by default; bootstrapApp() hides it once it's safe to interact. -->
+<div id="boot-loading-overlay" style="position:fixed; inset:0; z-index:9999; background:var(--bg); display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px;">
+  <div style="width:36px; height:36px; border:3px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:bootSpin 0.8s linear infinite;"></div>
+  <div style="font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">Checking your study status, please wait…</div>
+</div>
+<style>@keyframes bootSpin { to { transform: rotate(360deg); } }</style>
+
+<!-- HEADER -->
+<div class="header">
+  <div class="logo" id="header-title">Survey Study</div>
+  <div class="step-indicator" id="stepDots"></div>
+</div>
+
+<div class="container">
+  <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+
+  <!-- ===================== SCREEN 0: CONSENT STUDY 1 ===================== -->
+  <div class="screen active" id="screen-0">
+    <h1>Welcome</h1>
+    <div class="consent-summary">
+      <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the button below and continuing with this study, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
+      <br>
+      <p>This study consists of a short survey about your preferences. It will take a few minutes to complete and will grant you a fixed payment upon completion. This study is a research project of the IMT School for Advanced Studies Lucca.</p>
+    </div>
+    <details class="consent-details">
+      <summary>Consent form</summary>
+      <div class="consent-body">
+        <p>The data collected will be used for research purposes only. Any responses you provide will be completely anonymous, as no identifying information will be collected during the study. Prolific will allow us to link your choices to your gender, age, and other demographics, but we will receive no identifying information about you, and we will not be able to link this information to your name.</p>
+        <p>If you give us your permission by completing and submitting the survey, we plan to discuss/publish the results in an academic forum. The study data, which does not contain any personal information, may be shared with cooperation partners for collaborative analysis and made publicly accessible via research databases or scientific publications. Please note that once study data are publicly accessible, their further distribution by others cannot be ruled out and falls beyond the area of influence or responsibility of the IMT School for Advanced Studies Lucca. This study is conducted in accordance with the laws D. Lgs. 196/2003 and UE GDPR 679/2016 on data protection. The experimental protocol and the management of the study data has been approved by the Joint Ethical Committee of the Universities "Scuola Superiore Sant'Anna", "Scuola Normale Superiore", and "IMT Scuola Alti Studi Lucca" (N: n. 36/2023).</p>
+        <p>You can reach out to Michele Cantarella (<strong>michele.cantarella@imtlucca.it</strong>) if you have any questions related to this study or if you wish your response to be deleted.</p>
+        <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
+      </div>
+    </details>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">I consent →</button>
+      <button class="btn btn-secondary" onclick="alert('You will be redirected to Prolific.')">I do not consent</button>
+    </div>
+  </div>
+
+
+  <!-- ===================== SCREEN 2: ELICITATION (T1/T2/T3) ===================== -->
+  <!-- ===================== SCREEN 11: PRE-ELICITATION / PRE-RE-ELICITATION DEBRIEF ===================== -->
+  <div class="screen" id="screen-11">
+    <h1>What makes rewards fair?</h1>
+    <div class="card">
+      <p>People taking part in studies often receive rewards based on their <strong>performance</strong>. Are these rewards <strong>fair</strong>? We would like to hear your opinion.</p>
+      <p style="margin-top:8px">In the next section, we will ask you to tell us <strong>how rewards should be distributed</strong> across participants in a study.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <div class="screen" id="screen-2">
+    <h1>How should rewards be distributed?</h1>
+    <div class="card">
+      <p>We'd like to know your view on how people taking part in studies should be <strong>rewarded for their performance</strong>.</p>
+      <p style="margin-top:8px">The chart below shows a group of <strong>10 people</strong>, ranked from best to worst performer, sharing a <strong>$20 bonus</strong>. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the best performer takes everything</strong>.</p>
+      <p style="margin-top:8px"><strong>There are no right or wrong answers.</strong> We are interested in what you think is fair, in general.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Bonus by performance rank</div>
+      <canvas id="elicit-canvas" width="760" height="240"></canvas>
+      <div class="legend" style="margin-top:8px">
+        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your chosen split</div>
+        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split ($2.00 each)</div>
+      </div>
+      <hr class="sep">
+      <div class="slider-section">
+        <div class="slider-value">Reward for performance: <span id="elicit-tau-val">0</span>%</div>
+        <div class="slider-label"><span>Everyone equal</span><span>Winner takes all</span></div>
+        <input type="range" min="0" max="100" value="0" id="elicit-slider" oninput="updateElicitHistogram()">
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-value" id="elicit-bottom">$2.00</div><div class="stat-label">Worst performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="elicit-mid">$2.00</div><div class="stat-label">Performer #5 gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="elicit-top">$2.00</div><div class="stat-label">Best performer gets</div></div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="elicit-confirm-btn" onclick="saveElicitationAndNext()" style="opacity:0.4;cursor:not-allowed;">Confirm preference →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 3: MEMORY PROBE (all) ===================== -->
+  <div class="screen" id="screen-3">
+    <h1>One More Question</h1>
+    <div class="card">
+      <div class="card-title">Instructions</div>
+      <p>We will show you a sequence of three emojis. We may ask you to recall it in a future study. No monetary reward is attached to this task — it is simply intended to measure memory ability.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Your sequence</div>
+      <div class="memory-seq" id="memory-sequence">🎲 🎷 🎯</div>
+      <p style="color:var(--muted); font-size:13px; text-align:center;">Please take a moment to memorise this sequence of emojis.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">I have memorised it →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 12: END OF PHASE 1 ===================== -->
+  <div class="screen" id="screen-12">
+    <h1>Thank You</h1>
+    <div class="card">
+      <p>Thank you for completing <strong>this part of the study</strong>.</p>
+      <p style="margin-top:8px">You may now close this page. We will invite you to <strong>the second part of the study</strong> separately.</p>
+    </div>
+    <div class="btn-row" id="screen12-demo-btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">Continue to Part 2 (demo) →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 4: CONSENT STUDY 2 (all) ===================== -->
+  <div class="screen" id="screen-4">
+    <h1>Welcome</h1>
+    <div class="consent-summary">
+      <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the button below and continuing with this study, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
+      <br>
+      <p>This study consists of a real-effort task, allowing you to earn an additional bonus payment based on your choices. A short questionnaire is included before the experiment. This study is a research project of the IMT School for Advanced Studies Lucca.</p>
+    </div>
+    <details class="consent-details">
+      <summary>Consent form</summary>
+      <div class="consent-body">
+        <p>The data collected will be used for research purposes only. Any responses you provide will be completely anonymous, as no identifying information will be collected during the study. Prolific will allow us to link your choices to your gender, age, and other demographics, but we will receive no identifying information about you, and we will not be able to link this information to your name.</p>
+        <p>If you give us your permission by completing and submitting the survey, we plan to discuss/publish the results in an academic forum. The study data, which does not contain any personal information, may be shared with cooperation partners for collaborative analysis and made publicly accessible via research databases or scientific publications. Please note that once study data are publicly accessible, their further distribution by others cannot be ruled out and falls beyond the area of influence or responsibility of the IMT School for Advanced Studies Lucca. This study is conducted in accordance with the laws D. Lgs. 196/2003 and UE GDPR 679/2016 on data protection. The experimental protocol and the management of the study data has been approved by the Joint Ethical Committee of the Universities "Scuola Superiore Sant'Anna", "Scuola Normale Superiore", and "IMT Scuola Alti Studi Lucca" (N: n. 36/2023).</p>
+        <p>You can reach out to Michele Cantarella (<strong>michele.cantarella@imtlucca.it</strong>) if you have any questions related to this study or if you wish your response to be deleted.</p>
+        <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
+      </div>
+    </details>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">I consent →</button>
+      <button class="btn btn-secondary" onclick="alert('You will be redirected to Prolific.')">I do not consent</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 5: RE-ELICITATION (T3 only — before task) ===================== -->
+  <div class="screen" id="screen-5">
+    <h1>How should rewards be distributed?</h1>
+    <div class="anchor-box" style="display:block; margin-bottom:20px">
+      In a <strong>previous study</strong>, you told us how you think people in studies like this should share a bonus based on their performance. Your earlier choice is shown in <strong>orange</strong> below. Before today's task, please tell us again — you may keep it or change it.
+    </div>
+    <div class="card">
+      <div class="card-title">Bonus by performance rank</div>
+      <canvas id="reelicit-canvas" width="760" height="240"></canvas>
+      <div class="legend" style="margin-top:8px">
+        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your updated choice</div>
+        <div class="legend-item"><span style="color:#c45c1a; font-size:15px; font-weight:900;">▸</span>&nbsp; Your previous choice</div>
+        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split ($2.00 each)</div>
+      </div>
+      <hr class="sep">
+      <div class="slider-section">
+        <div class="slider-value">Reward for performance: <span id="reelicit-tau-val">0</span>%</div>
+        <div class="slider-label"><span>Everyone equal</span><span>Winner takes all</span></div>
+        <input type="range" min="0" max="100" value="0" id="reelicit-slider" oninput="updateReelicitHistogram()">
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-value" id="reelicit-bottom">$2.00</div><div class="stat-label">Worst performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="reelicit-mid">$2.00</div><div class="stat-label">Performer #5 gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="reelicit-top">$2.00</div><div class="stat-label">Best performer gets</div></div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="reelicit-confirm-btn" onclick="saveReelicitAndNext()" style="opacity:0.4;cursor:not-allowed;">Confirm →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 13: PRE-TASK DEBRIEF ===================== -->
+  <div class="screen" id="screen-13">
+    <h1>Before You Begin</h1>
+    <div class="card">
+      <p>You will now take part in a simple task, where you will be asked to <strong>find and click on a target emoji</strong> inside a grid.</p>
+      <p style="margin-top:8px">We have matched you with 9 other people taking part in this study, making a <strong>group of 10</strong>. You will all be taking part in the same task. You will receive a reward based on <strong>your performance in the task, relative to other people in your group</strong>.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 14: ALREADY COMPLETED (standalone, not part of any flow) ===================== -->
+  <div class="screen" id="screen-14">
+    <h1>Thank You</h1>
+    <div class="card">
+      <p>We have already received your response for <strong id="already-completed-which">this part of the study</strong>.</p>
+      <p style="margin-top:8px">You may safely close this page. If you believe this is an error, please contact the research team via Prolific.</p>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 15: PHASE 2 WITHOUT PHASE 1 ERROR ===================== -->
+  <div class="screen" id="screen-15">
+    <h1>Something went wrong</h1>
+    <div class="card">
+      <p>We couldn't find a record of you completing <strong>Part 1</strong> of this study.</p>
+      <p style="margin-top:8px">Part 2 can only be completed after Part 1. If you believe this is an error, please contact the research team via Prolific and include your Prolific ID.</p>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 6: REAL EFFORT TASK (all) ===================== -->
+  <div class="screen" id="screen-6">
+    <h1>Task</h1>
+    <div class="card">
+      <div class="card-title">Instructions</div>
+      <p>A 15×15 grid of emojis will fill in below. Find and select every cell showing the target emoji <span id="task-target-display" style="font-size:20px;">❓</span>, then press <strong>Submit</strong>.</p>
+      <p style="color:var(--muted); font-size:13px; margin-top:8px;">Some emojis may be given to you for free along the way.</p>
+    </div>
+    <div class="card">
+      <div class="task-instr">Find all: <span id="task-target-display2" style="font-size:24px;">❓</span> &nbsp;·&nbsp; <span id="task-remaining">0</span> remaining</div>
+      <div class="grid-outer">
+        <div class="grid-box" id="task-grid"></div>
+      </div>
+      <div style="display:flex; justify-content:center; margin-top:14px;">
+        <button class="btn btn-primary" id="task-submit-btn" disabled style="opacity:0.4; cursor:not-allowed;" onclick="submitGridTask()">Submit</button>
+      </div>
+      <div id="task-feedback" style="text-align:center; font-family:'IBM Plex Mono',monospace; font-size:13px; margin-top:10px; min-height:18px;"></div>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 7: RANK REVEAL (all) ===================== -->
+  <div class="screen" id="screen-7">
+    <h1>Your Rank</h1>
+    <div class="card">
+      <div class="card-title">Your rank</div>
+      <p>Your rank within your group of 10 people is:</p>
+      <div style="text-align:center; margin:20px 0;">
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:48px; font-weight:600; color:var(--accent);" id="reveal-rank-num">#5</div>
+        <div style="font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace;" id="reveal-rank-desc">5th out of 10</div>
+      </div>
+      <p>You have earned: <strong id="reveal-earned" style="color:var(--accent);">$2.00</strong></p>
+      <p style="margin-top:8px">In the next section, you will have the opportunity to <strong>re-distribute</strong> these rewards across participants in your group.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">Proceed to redistribution →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 8: REDISTRIBUTION DECISION (all) ===================== -->
+  <div class="screen" id="screen-8">
+    <h1>How should rewards be distributed?</h1>
+    <div class="card">
+      <div class="card-title">Your decision</div>
+      <p>You now have the opportunity to <strong>re-distribute</strong> your group's rewards based on each participant's performance.</p>
+      <p style="margin-top:8px">The chart below shows your group of <strong>10 people</strong>, ranked from best to worst performer, sharing a <strong>$20 bonus</strong>. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the best performer takes everything</strong>.</p>
+      <div class="anchor-box" style="display:block; margin:12px 0;">
+        At the end, <strong>one group member's choice is picked at random and applied to everyone</strong>, so this may be the decision that sets your own bonus. Choose carefully.
+      </div>
+      <div id="giving-preamble" style="margin-top:8px"></div>
+      <canvas id="giving-canvas" width="760" height="240"></canvas>
+      <div class="legend" style="margin-top:8px">
+        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your chosen split</div>
+        <div class="legend-item" id="anchor-legend-item" style="display:none"><span style="color:#c45c1a; font-size:15px; font-weight:900;">▸</span>&nbsp; <span id="anchor-legend-label">Your preferred distribution</span></div>
+        <div class="legend-item"><span style="color:var(--red); font-size:15px; font-weight:900;">▸</span>&nbsp; You</div>
+        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split</div>
+      </div>
+      <hr class="sep">
+      <div class="slider-section giving-slider">
+        <div class="slider-value giving-value">Reward for performance: <span id="giving-val">0</span>% → you get $<span id="giving-keep">2.00</span></div>
+        <div class="slider-label"><span>Everyone equal</span><span>Winner takes all</span></div>
+        <input type="range" min="0" max="100" value="0" id="giving-slider" oninput="updateGivingHistogram()">
+      </div>
+      <div class="stat-row">
+        <div class="stat-box"><div class="stat-value" id="giving-bottom">$2.00</div><div class="stat-label">Worst performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="giving-your-post">$2.00</div><div class="stat-label">Your bonus under your split</div></div>
+        <div class="stat-box"><div class="stat-value" id="giving-top">$2.00</div><div class="stat-label">Best performer gets</div></div>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="submitDecision()">Confirm decision →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 9: OUTCOME ===================== -->
+  <div class="screen" id="screen-9">
+    <h1>Thank You</h1>
+    <div class="card">
+      <div class="card-title">Your results</div>
+      <div class="outcome-grid">
+        <div class="outcome-card"><div class="stat-label">Your performance rank</div><div class="stat-value" style="margin-top:6px" id="out-rank">#5</div></div>
+        <div class="outcome-card"><div class="stat-label">Your final payment (under your split)</div><div class="stat-value" style="margin-top:6px" id="final-payment">$2.00</div></div>
+        <div class="outcome-card"><div class="stat-label">Reward for performance you chose</div><div class="stat-value" style="margin-top:6px" id="out-giving">—</div></div>
+      </div>
+      <p style="color:var(--muted); font-size:13px; margin-top:16px;">Thank you for your participation. Your responses have been recorded. Your bonus payment will be processed once everyone in your group of 10 has completed the study — at that point, <strong>one participant's chosen split is selected at random and applied to the whole group</strong>. Please return to Prolific to confirm your participation.</p>
+    </div>
+  </div>
+  <!-- ===================== SCREEN 10: EMOJI RECALL (part 2, all) ===================== -->
+  <div class="screen" id="screen-10">
+    <h1>Do you remember?</h1>
+    <div class="card">
+      <div class="card-title">Memory check</div>
+      <p>In a previous study, we showed you a sequence of <strong>three emojis</strong> and asked you to remember it. Please reconstruct it below by clicking three emojis <strong>in the correct order</strong>. There is no reward attached — just do your best.</p>
+    </div>
+    <div class="card">
+      <div class="card-title">Your reconstructed sequence</div>
+      <div id="recall-slots" class="recall-slots"></div>
+      <div style="text-align:center; margin:8px 0 18px;">
+        <button class="btn btn-secondary" id="recall-clear-btn" onclick="clearRecall()" style="padding:6px 18px; font-size:11px; margin-right:8px;">Clear</button>
+        <button class="btn btn-secondary" id="recall-dontknow-btn" onclick="submitDontRemember()" style="padding:6px 18px; font-size:11px;">I don't remember</button>
+      </div>
+      <div class="card-title">Click emojis to build your answer</div>
+      <div id="recall-palette" class="recall-palette"></div>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="recall-next-btn" style="opacity:0.4;cursor:not-allowed;" onclick="submitRecall()">Continue →</button>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<!-- DEMO SWITCHER -->
+<div class="demo-switcher" id="demo-switcher-panel">
+  <div class="demo-label">⚙ DEMO MODE</div>
+  <div style="margin:4px 0 2px; font-size:10px; opacity:0.8;">Phase</div>
+  <select id="demo-phase-select" onchange="demoPhaseChanged_(this.value)" style="width:100%; margin-bottom:4px;">
+    <option value="full" selected>Full (both phases)</option>
+    <option value="phase1">Phase 1 only</option>
+    <option value="phase2">Phase 2 only</option>
+  </select>
+  <div style="margin:4px 0 2px; font-size:10px; opacity:0.8;">Treatment</div>
+  <select id="demo-treatment-select" onchange="demoTreatmentChanged_(this.value)" style="width:100%;">
+    <option value="C">Control (C)</option>
+    <option value="T1" selected>T1 – Elicitation only</option>
+    <option value="T2">T2 – Recall anchor</option>
+    <option value="T3">T3 – Re-elicitation</option>
+  </select>
+  <button onclick="debugSkipTask()" style="margin-top:8px; width:100%; background:#fff7cc; color:#7a6000; border:1px solid #e6c800; padding:5px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">⏭ Skip task</button>
+  <button onclick="console.log(exportData());" style="margin-top:4px; width:100%; background:white; color:var(--accent); border:none; padding:5px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">📋 Log data</button>
+</div>
+
+<script>
+// ============================================================
+// DATA-LOGGING LAYER
+// All choices, scores, timings and interaction traces are recorded here.
+// DATA_LOG is a single serializable object that can be JSON-stringified and
+// transferred between Step 1 (survey) and Step 2 (experiment), e.g. via the
+// Prolific participant ID as the key.
+// ============================================================
+const DATA_LOG = {
+  prolific_pid: null,           // from URL param PROLIFIC_PID
+  study_id: null,                // from URL param STUDY_ID
+  session_id: null,              // from URL param SESSION_ID
+  app_phase: null,                // 'phase1' | 'phase2' | 'full' (demo)
+  demo_mode: null,
+  treatment: null,
+  session_start: Date.now(),
+  session_start_iso: new Date().toISOString(),
+  last_updated_iso: null,
+  // survey (step 1)
+  elicitation_pref: null,      // slider 0..100
+  elicitation_start_value: null,
+  elicitation_time_ms: 0,      // time spent on the elicitation screen specifically
+  memory_sequence: null,       // emojis shown
+  // experiment (step 2)
+  reelicitation_pref: null,    // T3 only
+  reelicitation_start_value: null,
+  reelicitation_time_ms: 0,    // time spent on the re-elicitation screen specifically
+  you_rank: null,
+  baseline_tau_pct: null,        // a priori baseline split (0-100) used for the "earned" amount at reveal
+  initial_earning: null,         // dollar amount shown at the rank-reveal screen
+  task_n_correct: null,          // target emojis required (function of rank, a priori)
+  task_freebie_count: null,      // pre-selected target cells (natural endowment, a priori)
+  task_freebie_proportion: null, // share of target cells pre-selected
+  task_submit_attempts: null,    // number of submit clicks (incl. failed ones)
+  task_extra_selected: null,     // non-target cells selected at successful submission
+  task_time_ms: null,           // time spent on the task screen
+  recall_answer: null,         // reconstructed emoji array
+  recall_score: null,          // 0..6
+  recall_score_norm: null,     // 0..1
+  giving_pref: null,           // slider 0..100
+  giving_start_value: null,
+  giving_time_ms: 0,           // time spent on the redistribution screen specifically
+  final_payoff: null,
+  phase1_completed_at_iso: null,
+  phase2_completed_at_iso: null,
+  // interaction summary (ms), split by study
+  survey_total_time_ms: 0,        // total time spent in Step 1 (survey)
+  survey_active_time_ms: 0,       // time in Step 1 with recent mouse/keyboard/click activity
+  survey_idle_time_ms: 0,         // total - active, Step 1
+  experiment_total_time_ms: 0,    // total time spent in Step 2 (experiment)
+  experiment_active_time_ms: 0,   // time in Step 2 with recent mouse/keyboard/click activity
+  experiment_idle_time_ms: 0,     // total - active, Step 2
+  slider_events: []            // [field, value, t]
+};
+
+function logEvent(field, value) { DATA_LOG[field] = value; }
+function logSlider(field, value) {
+  DATA_LOG.slider_events.push([field, value, Date.now() - DATA_LOG.session_start]);
+}
+function exportData() {
+  _flushTime();
+  DATA_LOG.survey_idle_time_ms     = Math.max(0, DATA_LOG.survey_total_time_ms - DATA_LOG.survey_active_time_ms);
+  DATA_LOG.experiment_idle_time_ms = Math.max(0, DATA_LOG.experiment_total_time_ms - DATA_LOG.experiment_active_time_ms);
+  DATA_LOG.last_updated_iso = new Date().toISOString();
+  return JSON.stringify(DATA_LOG);
+}
+
+// Time tracking, split between survey (Step 1) and experiment (Step 2).
+// Study-2 status is tracked via _lastKnownInStudy2, which reflects POSITION in
+// the flow array (whether we are at/after the Step-2 consent screen), not the
+// screen's static id — necessary because some screens (e.g. the debrief screen)
+// are reused in both Step 1 and Step 2 contexts.
+//
+// "Active" time counts any recent mouse movement, click, keypress, or slider
+// drag — not just raw mousemove — so someone reading a slider value or typing
+// in the recall task still counts as engaged, not idle.
+const ACTIVE_GAP = 500;   // a gap longer than this since the last activity counts as idle
+let _lastTick = Date.now();
+let _lastActivity = null;
+let _lastKnownInStudy2 = false;
+
+// Per-section timers (elicitation / re-elicitation / redistribution): which
+// DATA_LOG field is currently accruing time, ticked alongside the main clock.
+let _activeSectionField = null;
+let _sectionLastTick = Date.now();
+
+function _flushTime() {
+  const now = Date.now();
+  const dt = now - _lastTick;
+  if (dt > 0) {
+    if (_lastKnownInStudy2) DATA_LOG.experiment_total_time_ms += dt;
+    else                    DATA_LOG.survey_total_time_ms += dt;
+  }
+  _lastTick = now;
+
+  if (_activeSectionField) {
+    const sdt = now - _sectionLastTick;
+    if (sdt > 0) DATA_LOG[_activeSectionField] += sdt;
+  }
+  _sectionLastTick = now;
+}
+
+function startSectionTimer(field) {
+  _flushTime();
+  _activeSectionField = field;
+  _sectionLastTick = Date.now();
+}
+function stopSectionTimer() {
+  _flushTime();
+  _activeSectionField = null;
+}
+
+function _registerActivity() {
+  const now = Date.now();
+  _flushTime(); // accrue total time up to now, in the correct bucket
+  if (_lastActivity !== null) {
+    const dt = now - _lastActivity;
+    if (dt <= ACTIVE_GAP) {
+      if (_lastKnownInStudy2) DATA_LOG.experiment_active_time_ms += dt;
+      else                    DATA_LOG.survey_active_time_ms += dt;
+    }
+  }
+  _lastActivity = now;
+}
+['mousemove', 'mousedown', 'click', 'keydown', 'wheel', 'touchstart', 'touchmove']
+  .forEach(evt => document.addEventListener(evt, _registerActivity, { passive: true }));
+
+// ============================================================
+// DATA — 10 people ranked by performance (rank 1 = best ... rank 10 = worst)
+// ============================================================
+const N_GROUP = 10;
+const TOTAL_POT = 20.0;          // $20 split among 10 -> mean $2
+const MEAN_W = TOTAL_POT / N_GROUP;
+const RANKS = Array.from({length: N_GROUP}, (_, i) => i + 1); // 1..10
+
+// Reward model B + winner-take-all corner.
+//   Base: share for rank r proportional to performance^k, k = s*KMAX (convex).
+//   Over the top slice [SPLIT,1] the curve blends into true winner-take-all,
+//   so at s=1 the best performer gets the entire pot and everyone else gets $0.
+const POW_KMAX = 8;
+const WTA_SPLIT = 0.85;
+function powerPayoffs(s) {
+  const k = s * POW_KMAX;
+  const w = RANKS.map(r => Math.pow(N_GROUP - r + 1, k));
+  const wsum = w.reduce((a, b) => a + b, 0);
+  return w.map(wi => wi / wsum * TOTAL_POT);
+}
+function payoffsForSlider(s) {
+  if (s <= WTA_SPLIT) return powerPayoffs(s);
+  const t = (s - WTA_SPLIT) / (1 - WTA_SPLIT);
+  const base = powerPayoffs(WTA_SPLIT);
+  return base.map((v, i) => (1 - t) * v + t * (i === 0 ? TOTAL_POT : 0));
+}
+
+function giniOf(arr) {
+  const x = [...arr].sort((a, b) => a - b);
+  const n = x.length;
+  const sum = x.reduce((a, b) => a + b, 0);
+  if (sum === 0) return 0;
+  const num = x.reduce((s, v, i) => s + (i + 1) * v, 0);
+  return (2 * num / (n * sum)) - (n + 1) / n;
+}
+
+// Participant's own performance rank (1..10) — decided a priori (random for now;
+// in production this comes from a pre-set file, independent of in-session performance).
+let YOU_RANK = 1 + Math.floor(Math.random() * N_GROUP);
+function sampleRank() { return 1 + Math.floor(Math.random() * N_GROUP); }
+function ordinalWord(n) {
+  const s = ['th','st','nd','rd'], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
+
+// "Earned" amount shown at the rank-reveal screen: a baseline split, decided a
+// priori (random for now, file-based in production), applied to YOU_RANK —
+// entirely independent of the redistribution decision made afterwards.
+let BASELINE_TAU_PCT = Math.round(Math.random() * 100);
+let YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
+
+// Task parameters (TASK_N_CORRECT, TASK_FREEBIE_PROPORTION) are defined later,
+// alongside the grid-task implementation, since they depend on YOU_RANK.
+
+// Emoji memory probe: pick a random 3-emoji sequence at the start of each session
+// Basic, universally-rendered emoji only.
+const MEMORY_EMOJI_POOL = ['😀','😎','😍','🤔','😴','😡','👍','👎','❤️','⭐',
+                           '🔥','🌙','☀️','⚽','🍎','🍌','🐶','🐱','🚗','🎈'];
+let MEMORY_SEQUENCE = [];
+function generateMemorySequence() {
+  const pool = [...MEMORY_EMOJI_POOL];
+  const seq = [];
+  for (let i = 0; i < 3; i++) {
+    const idx = Math.floor(Math.random() * pool.length);
+    seq.push(pool.splice(idx, 1)[0]);
+  }
+  return seq;
+}
+
+// Random initial slider position (5..95) so the starting distribution varies each time
+function randomStart() { return 5 + Math.floor(Math.random() * 91); }
+
+let treatment  = 'T1';
+let sStar    = 0;   // preferred slider from survey elicitation
+let sStar2   = 0;   // preferred slider from re-elicitation (T3)
+let sStarSet  = false;
+let sStar2Set = false;
+let elicitMoved   = false;
+let reelicitMoved = false;
+
+// Screen IDs
+const SCREENS = ['screen-0','screen-1','screen-2','screen-3','screen-4',
+                 'screen-5','screen-6','screen-7','screen-8','screen-9','screen-10',
+                 'screen-11','screen-12','screen-13','screen-14','screen-15'];
+
+// Flows (10=emoji recall, 11=pre-elicitation/re-elicitation debrief,
+// 12=end of Phase 1, 13=pre-task debrief):
+// C:  0,3,12,4,10,13,6,7,8,9
+// T1: 0,11,2,3,12,4,10,13,6,7,8,9
+// T2: 0,11,2,3,12,4,10,13,6,7,8,9
+// T3: 0,11,2,3,12,4,10,13,11,5,6,7,8,9
+function getFullFlow() {
+  if (treatment === 'C')  return [0,3,12,4,10,13,6,7,8,9];
+  if (treatment === 'T1') return [0,11,2,3,12,4,10,13,6,7,8,9];
+  if (treatment === 'T2') return [0,11,2,3,12,4,10,13,6,7,8,9];
+  if (treatment === 'T3') return [0,11,2,3,12,4,10,13,11,5,6,7,8,9];
+  return [0,11,2,3,12,4,10,13,6,7,8,9];
+}
+
+// Returns the slice of the full flow relevant to a given phase.
+//   'full'   -> everything (demo mode: preview both phases end-to-end)
+//   'phase1' -> up to and including the end-of-Phase-1 screen (12)
+//   'phase2' -> from the Step-2 consent screen (4) onward
+// The split point is always the position of screen id 4 (Step-2 consent),
+// which appears exactly once in every treatment's full flow.
+function getPhaseFlow(phase) {
+  const full = getFullFlow();
+  if (phase === 'full' || !phase) return full;
+  const splitIdx = full.indexOf(4);
+  if (splitIdx < 0) return full;
+  return phase === 'phase1' ? full.slice(0, splitIdx) : full.slice(splitIdx);
+}
+
+let flow = getFullFlow();
+let flowPos = 0;
+let APP_PHASE = 'full';
+let APP_DEMO_MODE = true;
+
+function sampleRandomTreatment() {
+  const arr = ['C', 'T1', 'T2', 'T3'];
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
+// Demo mode state — set before any selects can fire
+let _demoPhase = 'full';
+
+function demoPhaseChanged_(phase) {
+  if (!APP_DEMO_MODE) return;
+  _demoPhase = phase;
+  const t = document.getElementById('demo-treatment-select').value;
+  setTreatment(t, phase);
+}
+
+function demoTreatmentChanged_(value) {
+  if (!APP_DEMO_MODE) {
+    console.warn('[Study] Ignored stray treatment-change event outside demo mode.');
+    return;
+  }
+  setTreatment(value, _demoPhase);
+}
+
+function setTreatment(t, phase) {
+  phase = phase || 'full';
+  APP_PHASE = phase;
+  treatment = t; sStar = 0; sStar2 = 0; sStarSet = false; sStar2Set = false;
+  elicitMoved = false; reelicitMoved = false;
+  YOU_RANK = sampleRank();
+  BASELINE_TAU_PCT = Math.round(Math.random() * 100);
+  YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
+  TASK_N_CORRECT = computeTaskNCorrect(YOU_RANK);
+  TASK_FREEBIE_PROPORTION = sampleTaskFreebieProportion();
+  MEMORY_SEQUENCE = generateMemorySequence();
+  // reset + log into data layer
+  DATA_LOG.treatment = t;
+  DATA_LOG.session_start = Date.now();
+  DATA_LOG.memory_sequence = MEMORY_SEQUENCE.slice();
+  DATA_LOG.you_rank = YOU_RANK;
+  DATA_LOG.baseline_tau_pct = BASELINE_TAU_PCT;
+  DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
+  flow = getPhaseFlow(phase); flowPos = 0;
+  showScreen(flow[0]);
+}
+
+// ============================================================
+// RESUME ON RELOAD
+// The backend (Google Sheet) is the SOURCE OF TRUTH for resume state, since a
+// participant may reload from a different browser/device than the one that
+// saved a local snapshot. Every screen transition pushes a lightweight
+// "progress" snapshot to the backend; bootstrapApp() always checks the
+// backend's lookup response first. localStorage is kept only as a same-device
+// fast path so a reload doesn't have to wait on a network round trip, but it
+// is never trusted over a backend record that's missing or marks the phase
+// complete. Disabled entirely in demo mode.
+// ============================================================
+function buildSnapshot_() {
+  return {
+    treatment, flow, flowPos, APP_PHASE,
+    YOU_RANK, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
+    TASK_N_CORRECT, TASK_FREEBIE_PROPORTION, MEMORY_SEQUENCE,
+    sStar, sStar2, sStarSet, sStar2Set,
+    data: DATA_LOG
+  };
+}
+
+function saveResumeState() {
+  if (APP_DEMO_MODE) return;
+  const snapshot = buildSnapshot_();
+  try {
+    const pid = DATA_LOG.prolific_pid || 'anon';
+    localStorage.setItem('taxstudy_resume_' + pid + '_' + APP_PHASE, JSON.stringify(snapshot));
+  } catch (e) { /* localStorage unavailable — backend copy still gets sent below */ }
+
+  // Best-effort heartbeat to the backend so resume works from any device.
+  // Never awaited by callers — must not block screen transitions.
+  if (backendConfigured_() && DATA_LOG.prolific_pid) {
+    postToBackend_({
+      action: 'progress',
+      pid: DATA_LOG.prolific_pid,
+      study_id: DATA_LOG.study_id,
+      session_id: DATA_LOG.session_id,
+      treatment: DATA_LOG.treatment,
+      phase: APP_PHASE,
+      data: DATA_LOG,
+      snapshot: snapshot
+    });
+  }
+}
+
+// Restores all session state from a snapshot object (same shape produced by
+// buildSnapshot_ / saved by the backend's "progress" action) and jumps to the
+// saved screen. Does not itself decide WHETHER to resume — callers check
+// phase-completion status first.
+function restoreFromSnapshot(s) {
+  treatment = s.treatment;
+  flow = s.flow;
+  flowPos = s.flowPos;
+  APP_PHASE = s.APP_PHASE;
+  YOU_RANK = s.YOU_RANK;
+  BASELINE_TAU_PCT = s.BASELINE_TAU_PCT;
+  YOU_INITIAL_EARNING = s.YOU_INITIAL_EARNING;
+  TASK_N_CORRECT = s.TASK_N_CORRECT;
+  TASK_FREEBIE_PROPORTION = s.TASK_FREEBIE_PROPORTION;
+  MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
+  sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
+  Object.assign(DATA_LOG, s.data);
+  // session_start must stay anchored to NOW for the live timers to keep
+  // ticking correctly going forward; only the accumulated *_time_ms fields
+  // carry over from the snapshot (already restored via Object.assign above).
+  _lastTick = Date.now();
+  _sectionLastTick = Date.now();
+  showScreen(flow[flowPos]);
+}
+
+function clearResumeState(phase) {
+  try {
+    const pid = DATA_LOG.prolific_pid || 'anon';
+    localStorage.removeItem('taxstudy_resume_' + pid + '_' + phase);
+  } catch (e) { /* ignore */ }
+}
+
+function showAlreadyCompletedScreen(which) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-14').classList.add('active');
+  document.getElementById('already-completed-which').textContent = which;
+  document.getElementById('progressFill').style.width = '100%';
+  document.getElementById('stepDots').innerHTML = '';
+}
+
+function showPhase2ErrorScreen() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-15').classList.add('active');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('stepDots').innerHTML = '';
+}
+
+// Study-2 status is determined by POSITION in the flow array relative to the
+// Step-2 consent screen (id 4), not by a screen's static id — some screens
+// (e.g. the debrief screen, id 11) are reused in both Step 1 and Step 2.
+let _currentScreenIdx = null;
+function showScreen(idx) {
+  _flushTime();           // close out time for the screen we're leaving (old bucket)
+  _currentScreenIdx = idx;
+  saveResumeState();      // persist progress before anything else can fail
+
+  // Section timers: elicitation (2), re-elicitation (5), redistribution (8).
+  // Stop whichever was running; start a fresh one only if we're entering one
+  // of those screens.
+  stopSectionTimer();
+  if (idx === 2) startSectionTimer('elicitation_time_ms');
+  if (idx === 5) startSectionTimer('reelicitation_time_ms');
+  if (idx === 8) startSectionTimer('giving_time_ms');
+
+  const study2Pos = flow.indexOf(4);
+  _lastKnownInStudy2 = study2Pos >= 0 && flowPos >= study2Pos;
+
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(SCREENS[idx]).classList.add('active');
+
+  document.getElementById('header-title').textContent =
+    _lastKnownInStudy2 ? 'Experiment Study' : 'Survey Study';
+
+  if (idx === 3) {
+    // show the emoji sequence to memorise
+    document.getElementById('memory-sequence').textContent = MEMORY_SEQUENCE.join('  ');
+  }
+
+  if (idx === 10) buildRecallOptions();
+
+  if (idx === 12) {
+    document.getElementById('screen12-demo-btn-row').style.display = APP_DEMO_MODE ? 'flex' : 'none';
+    submitPhase1Complete();
+  }
+
+  if (idx === 9) {
+    submitPhase2Complete();
+  }
+
+  if (idx === 2) {
+    elicitMoved = false;
+    const btn = document.getElementById('elicit-confirm-btn');
+    btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
+    btn.textContent = 'Confirm preference →';
+    const s0 = randomStart();
+    DATA_LOG.elicitation_start_value = s0;
+    document.getElementById('elicit-slider').value = s0;
+    document.getElementById('elicit-tau-val').textContent = s0;
+    drawElicitCanvas(s0 / 100);
+    updateElicitStats(s0 / 100);
+  }
+
+  if (idx === 5) {
+    // T3 re-elicitation — show previous preference in orange
+    reelicitMoved = false;
+    const btn = document.getElementById('reelicit-confirm-btn');
+    btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
+    btn.textContent = 'Confirm →';
+    const s0 = randomStart();
+    DATA_LOG.reelicitation_start_value = s0;
+    document.getElementById('reelicit-slider').value = s0;
+    document.getElementById('reelicit-tau-val').textContent = s0;
+    drawReelicitCanvas(s0 / 100);
+    updateReelicitStats(s0 / 100);
+  }
+
+  if (idx === 6) initGridTask();
+
+  if (idx === 7) {
+    // YOU_RANK and YOU_INITIAL_EARNING were already decided a priori, at
+    // session start — never re-rolled here.
+    document.getElementById('reveal-rank-num').textContent = '#' + YOU_RANK;
+    document.getElementById('reveal-rank-desc').textContent = ordinalWord(YOU_RANK) + ' out of 10';
+    document.getElementById('reveal-earned').textContent = '$' + YOU_INITIAL_EARNING.toFixed(2);
+  }
+
+  if (idx === 8) {
+    const preamble = document.getElementById('giving-preamble');
+    const anchorItem = document.getElementById('anchor-legend-item');
+    const anchorLabel = document.getElementById('anchor-legend-label');
+
+    let sOrange = null;
+    if (treatment === 'T2' && sStarSet) {
+      sOrange = sStar / 100;
+      preamble.innerHTML = `<div class="anchor-box">In a <strong>previous study</strong>, you told us how you think people taking part in studies like this <strong>should be rewarded for their performance</strong>. The orange overlay below shows <strong>the distribution you preferred</strong> at the time.</div>`;
+      anchorItem.style.display = 'flex';
+      anchorLabel.textContent = 'Your preferred distribution (from previous study)';
+    } else if (treatment === 'T3' && sStar2Set) {
+      sOrange = sStar2 / 100;
+      preamble.innerHTML = `<div class="anchor-box">At the <strong>beginning of this study</strong>, you re-expressed how you think performance <strong>should be rewarded</strong>. The orange overlay below shows <strong>the distribution you preferred</strong>.</div>`;
+      anchorItem.style.display = 'flex';
+      anchorLabel.textContent = 'Your preferred distribution (re-expressed today)';
+    } else {
+      preamble.innerHTML = '';
+      anchorItem.style.display = 'none';
+    }
+
+    // Start exactly where the "earned" amount on the previous screen left off —
+    // same a priori baseline split, not a fresh independent random draw.
+    const s0 = BASELINE_TAU_PCT;
+    DATA_LOG.giving_start_value = s0;
+    document.getElementById('giving-slider').value = s0;
+    document.getElementById('giving-val').textContent = s0;
+    const pay0 = payoffsForSlider(s0 / 100);
+    document.getElementById('giving-keep').textContent = pay0[YOU_RANK - 1].toFixed(2);
+    document.getElementById('giving-bottom').textContent = '$' + pay0[N_GROUP - 1].toFixed(2);
+    document.getElementById('giving-your-post').textContent = '$' + pay0[YOU_RANK - 1].toFixed(2);
+    document.getElementById('giving-top').textContent = '$' + pay0[0].toFixed(2);
+    setTimeout(() => drawGivingCanvas(s0 / 100, sOrange), 50);
+  }
+
+  updateProgress();
+}
+
+function nextScreen() {
+  flowPos++;
+  if (flowPos < flow.length) showScreen(flow[flowPos]);
+}
+
+function updateProgress() {
+  const study2StartIdx = flow.indexOf(4);
+  const inStudy2 = study2StartIdx >= 0 && flowPos >= study2StartIdx;
+
+  let localFlow, localPos;
+  if (inStudy2 && study2StartIdx >= 0) {
+    localFlow = flow.slice(study2StartIdx);
+    localPos  = flowPos - study2StartIdx;
+  } else {
+    localFlow = study2StartIdx > 0 ? flow.slice(0, study2StartIdx) : flow;
+    localPos  = flowPos;
+  }
+
+  const pct = localFlow.length > 1 ? (localPos / (localFlow.length - 1)) * 100 : 0;
+  document.getElementById('progressFill').style.width = pct + '%';
+
+  const dots = document.getElementById('stepDots');
+  dots.innerHTML = '';
+  localFlow.forEach((s, i) => {
+    const d = document.createElement('div');
+    d.className = 'step-dot' + (i === localPos ? ' active' : i < localPos ? ' done' : '');
+    dots.appendChild(d);
+  });
+}
+
+// ============================================================
+// CANVAS DRAWING — 10 people ranked by performance
+// ============================================================
+const PAD = { l: 48, r: 16, t: 28, b: 44 };
+
+// Draw the reward chart.
+//   sBlue   : slider value [0,1] for the chosen distribution (gray/blue bars). null = none.
+//   sOrange : slider value [0,1] for the preferred-distribution overlay. null = none.
+//   showYou : highlight the participant's own rank (YOU_RANK)
+function drawRewardChart(canvas, sBlue, sOrange, showYou) {
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+
+  const cw = W - PAD.l - PAD.r;
+  const ch = H - PAD.t - PAD.b;
+  const slotW = cw / N_GROUP;
+  const bw = slotW * 0.62;
+
+  // y-scale fixed so bars are comparable across slider positions: max possible payoff = TOTAL_POT
+  const yMax = TOTAL_POT;
+  const yScale = ch / yMax;
+
+  function xCenter(rankIdx) { return PAD.l + slotW * (rankIdx + 0.5); }
+  function toY(v) { return PAD.t + ch - v * yScale; }
+
+  const payBlue   = sBlue   !== null ? payoffsForSlider(sBlue)   : null;
+  const payOrange = sOrange !== null ? payoffsForSlider(sOrange) : null;
+
+  // --- bars ---
+  // x-slot mapping: worst performer (index 9) on the LEFT, best (index 0) on the RIGHT
+  function slotFor(i) { return (N_GROUP - 1) - i; }
+
+  for (let i = 0; i < N_GROUP; i++) {
+    const xc = xCenter(slotFor(i));
+    const x = xc - bw / 2;
+
+    // Orange overlay (preferred) drawn first, dashed outline
+    if (payOrange !== null) {
+      const v = payOrange[i];
+      ctx.save();
+      ctx.fillStyle = 'rgba(196,92,26,0.28)';
+      ctx.strokeStyle = 'rgba(196,92,26,0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 3]);
+      ctx.fillRect(x, toY(v), bw, v * yScale);
+      ctx.strokeRect(x, toY(v), bw, v * yScale);
+      ctx.restore();
+    }
+
+    // Blue/gray chosen distribution
+    if (payBlue !== null) {
+      const v = payBlue[i];
+      const isYou = showYou && (i + 1) === YOU_RANK;
+      ctx.fillStyle = isYou ? 'rgba(139,26,26,0.85)' : 'rgba(26,74,122,0.55)';
+      ctx.fillRect(x, toY(v), bw, v * yScale);
+    }
+  }
+
+  // --- value labels above each bar (the dollar amount that rank earns) ---
+  if (payBlue !== null) {
+    ctx.font = '9px IBM Plex Mono, monospace';
+    ctx.textAlign = 'center';
+    for (let i = 0; i < N_GROUP; i++) {
+      const xc = xCenter(slotFor(i));
+      const v = payBlue[i];
+      const isYou = showYou && (i + 1) === YOU_RANK;
+      ctx.fillStyle = isYou ? '#8b1a1a' : '#333';
+      const labelY = Math.max(PAD.t + 10, toY(v) - 5);
+      ctx.fillText('$' + v.toFixed(2), xc, labelY);
+    }
+    ctx.textAlign = 'left';
+  }
+
+  // --- YOU label (stacked above the value label) ---
+  if (showYou && payBlue !== null) {
+    const i = YOU_RANK - 1;
+    const xc = xCenter(slotFor(i));
+    const v = payBlue[i];
+    ctx.fillStyle = '#8b1a1a';
+    ctx.font = 'bold 9px IBM Plex Mono, monospace';
+    ctx.textAlign = 'center';
+    const youLabelY = Math.max(PAD.t, toY(v) - 16);
+    ctx.fillText('YOU', xc, youLabelY);
+    ctx.textAlign = 'left';
+  }
+
+  // --- x axis ---
+  ctx.strokeStyle = '#333'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t + ch); ctx.lineTo(PAD.l + cw, PAD.t + ch); ctx.stroke();
+
+  ctx.fillStyle = '#555'; ctx.font = '9px IBM Plex Mono, monospace'; ctx.textAlign = 'center';
+  for (let i = 0; i < N_GROUP; i++) {
+    ctx.fillText((i + 1), xCenter(slotFor(i)), PAD.t + ch + 14);
+  }
+  ctx.fillText('performance rank  (10 = worst  →  1 = best)', PAD.l + cw / 2, H - 4);
+  ctx.textAlign = 'left';
+
+  // --- y axis ---
+  ctx.strokeStyle = '#333';
+  ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, PAD.t + ch); ctx.stroke();
+  ctx.fillStyle = '#555'; ctx.font = '9px IBM Plex Mono, monospace';
+  [0, 5, 10, 15, 20].forEach(v => {
+    const y = toY(v);
+    ctx.beginPath(); ctx.moveTo(PAD.l - 4, y); ctx.lineTo(PAD.l, y); ctx.stroke();
+    ctx.textAlign = 'right'; ctx.fillText('$' + v, PAD.l - 6, y + 3); ctx.textAlign = 'left';
+  });
+  ctx.save();
+  ctx.translate(13, PAD.t + ch / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.textAlign = 'center';
+  ctx.fillText('bonus ($)', 0, 0);
+  ctx.restore();
+  ctx.textAlign = 'left';
+
+  // --- mean line ---
+  ctx.save();
+  ctx.strokeStyle = '#aaa'; ctx.setLineDash([4, 3]); ctx.lineWidth = 1;
+  const my = toY(MEAN_W);
+  ctx.beginPath(); ctx.moveTo(PAD.l, my); ctx.lineTo(PAD.l + cw, my); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle = '#999'; ctx.font = '9px IBM Plex Mono, monospace';
+  ctx.fillText('equal split $' + MEAN_W.toFixed(2), PAD.l + 4, my - 4);
+  ctx.restore();
+}
+
+// ---------- ELICITATION (survey, no YOU) ----------
+function drawElicitCanvas(s) {
+  drawRewardChart(document.getElementById('elicit-canvas'), s, null, false);
+}
+function updateElicitStats(s) {
+  const pay = payoffsForSlider(s);
+  document.getElementById('elicit-bottom').textContent = '$' + pay[N_GROUP - 1].toFixed(2);
+  document.getElementById('elicit-mid').textContent    = '$' + pay[4].toFixed(2);
+  document.getElementById('elicit-top').textContent    = '$' + pay[0].toFixed(2);
+}
+function updateElicitHistogram() {
+  const s = parseInt(document.getElementById('elicit-slider').value) / 100;
+  document.getElementById('elicit-tau-val').textContent = Math.round(s * 100);
+  logSlider('elicitation', Math.round(s*100));
+  updateElicitStats(s);
+  drawElicitCanvas(s);
+  elicitMoved = true;
+  const btn = document.getElementById('elicit-confirm-btn');
+  btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+}
+
+// ---------- RE-ELICITATION (T3, no YOU, shows previous preference in orange) ----------
+function drawReelicitCanvas(s) {
+  const sPrev = sStarSet ? sStar / 100 : null;
+  drawRewardChart(document.getElementById('reelicit-canvas'), s, sPrev, false);
+}
+function updateReelicitStats(s) {
+  const pay = payoffsForSlider(s);
+  document.getElementById('reelicit-bottom').textContent = '$' + pay[N_GROUP - 1].toFixed(2);
+  document.getElementById('reelicit-mid').textContent    = '$' + pay[4].toFixed(2);
+  document.getElementById('reelicit-top').textContent    = '$' + pay[0].toFixed(2);
+}
+function updateReelicitHistogram() {
+  const s = parseInt(document.getElementById('reelicit-slider').value) / 100;
+  document.getElementById('reelicit-tau-val').textContent = Math.round(s * 100);
+  logSlider('reelicitation', Math.round(s*100));
+  updateReelicitStats(s);
+  drawReelicitCanvas(s);
+  reelicitMoved = true;
+  const btn = document.getElementById('reelicit-confirm-btn');
+  btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+}
+
+// ---------- REDISTRIBUTION (experiment, YOU highlighted, preferred overlay by treatment) ----------
+function drawGivingCanvas(sBlue, sOrange) {
+  drawRewardChart(document.getElementById('giving-canvas'), sBlue, sOrange, true);
+}
+function updateGivingHistogram() {
+  const s = parseInt(document.getElementById('giving-slider').value) / 100;
+  const pay = payoffsForSlider(s);
+  document.getElementById('giving-val').textContent = Math.round(s * 100);
+  document.getElementById('giving-keep').textContent = pay[YOU_RANK - 1].toFixed(2);
+  document.getElementById('giving-bottom').textContent = '$' + pay[N_GROUP - 1].toFixed(2);
+  document.getElementById('giving-your-post').textContent = '$' + pay[YOU_RANK - 1].toFixed(2);
+  document.getElementById('giving-top').textContent = '$' + pay[0].toFixed(2);
+
+  let sOrange = null;
+  logSlider('giving', Math.round(s*100));
+  if (treatment === 'T2' && sStarSet)  sOrange = sStar / 100;
+  if (treatment === 'T3' && sStar2Set) sOrange = sStar2 / 100;
+  drawGivingCanvas(s, sOrange);
+}
+
+
+// ============================================================
+// TASK — 15×15 emoji-search grid, fills in progressively.
+// The number of target emojis required is a function of the participant's
+// (already, a priori, pre-decided) rank — never disclosed as such. A random
+// proportion of the target cells "spawn" already selected (freebies = natural
+// endowment, also decided a priori). Genuine search behaviour (clicks, time,
+// submit attempts) is recorded for research purposes only — it plays no role
+// in determining rank or reward.
+// ============================================================
+const TASK_EMOJIS = [
+  "😃","😁","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😗","😋",
+  "😝","🤪","😐","😑","😶","😏","😒","🙄","😬","😔","🤤","😴","😷","🤒","🤕",
+  "🤧","🥵","🥴","😵","🤯","🤠","🥳","🤓","🧐","😕","☹️","😮","😳","🥺","😨",
+  "😢","😭","😱","😖","😞","😓","😫","😤","😠","🤐","🤬","🥸","🤩","🫠","😎","🤑"
+];
+const GRID_ROWS = 15, GRID_COLS = 15, GRID_TOTAL = GRID_ROWS * GRID_COLS;
+const GRID_REVEAL_MS = 500; // per-cell reveal interval
+
+// Required correct count is a function of rank: lowest rank -> 1 or 2,
+// next -> 3 or 4, ... best rank -> 19 or 20. Decided a priori with YOU_RANK.
+function computeTaskNCorrect(rank) {
+  const position = (N_GROUP + 1) - rank; // 1 = lowest rank, 10 = best rank
+  const low = 2 * position - 1, high = 2 * position;
+  return Math.random() < 0.5 ? low : high;
+}
+let TASK_N_CORRECT = computeTaskNCorrect(YOU_RANK);
+
+// Freebie proportion: a random share (0–50%) of the target cells are pre-selected
+// the moment they appear, decided a priori (file-based in production).
+function sampleTaskFreebieProportion() { return Math.random() * 0.5; }
+let TASK_FREEBIE_PROPORTION = sampleTaskFreebieProportion();
+
+let taskTarget = '';
+let taskGridEmojis = [];      // length GRID_TOTAL
+let taskTargetPositions = new Set();
+let taskFreebieCount = 0;     // number of cells granted for free (not a fixed position set)
+let taskFreebiesGranted = false;
+let taskSelected = new Set(); // only ever contains correct (target) cells
+let taskRevealTimers = [];
+let taskStartTime = 0;
+let taskSubmitAttempts = 0;
+let taskGridFullyRevealed = false;
+const FAST_REVEAL_MS = 14; // catch-up speed if the grid hasn't finished revealing yet
+
+function buildGridTask() {
+  taskTarget = TASK_EMOJIS[Math.floor(Math.random() * TASK_EMOJIS.length)];
+  const nCorrect = TASK_N_CORRECT;
+  taskFreebieCount = Math.round(nCorrect * TASK_FREEBIE_PROPORTION);
+  taskFreebiesGranted = false;
+
+  // choose nCorrect distinct positions for the target emoji
+  const positions = Array.from({length: GRID_TOTAL}, (_, i) => i);
+  for (let i = positions.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [positions[i], positions[j]] = [positions[j], positions[i]];
+  }
+  taskTargetPositions = new Set(positions.slice(0, nCorrect));
+
+  taskGridEmojis = new Array(GRID_TOTAL);
+  for (let i = 0; i < GRID_TOTAL; i++) {
+    if (taskTargetPositions.has(i)) {
+      taskGridEmojis[i] = taskTarget;
+    } else {
+      let e;
+      do { e = TASK_EMOJIS[Math.floor(Math.random() * TASK_EMOJIS.length)]; } while (e === taskTarget);
+      taskGridEmojis[i] = e;
+    }
+  }
+}
+
+function getTaskCellEl(i) {
+  const r = Math.floor(i / GRID_COLS), c = i % GRID_COLS;
+  const row = document.getElementById('taskrow' + r);
+  return row ? row.children[c] : null;
+}
+
+function updateRemainingDisplay() {
+  const remaining = Math.max(0, TASK_N_CORRECT - taskSelected.size);
+  document.getElementById('task-remaining').textContent = remaining;
+}
+
+// Reveal a single cell: show its emoji, wire up its click handler, and
+// optionally give it a brief neutral flash (used for the fast catch-up reveal).
+function revealCellAt(i, flash) {
+  const cell = getTaskCellEl(i);
+  if (!cell) return;
+  cell.classList.remove('ph'); cell.classList.add('live');
+  cell.textContent = '';            // cleared — emoji rendered via CSS ::before
+  cell.dataset.e = taskGridEmojis[i]; // browser Ctrl+F doesn't search data attrs or CSS content
+  cell.onclick = () => {
+    if (taskTargetPositions.has(i)) {
+      if (taskSelected.has(i)) {
+        taskSelected.delete(i); cell.classList.remove('selected');
+      } else {
+        taskSelected.add(i); cell.classList.add('selected');
+        maybeGrantFreebies();
+      }
+      updateRemainingDisplay();
+    } else {
+      // wrong cell: flash red, never persists as selected
+      cell.classList.add('wrong-flash');
+      setTimeout(() => cell.classList.remove('wrong-flash'), 550);
+    }
+  };
+  if (flash) {
+    cell.classList.add('reveal-flash');
+    setTimeout(() => cell.classList.remove('reveal-flash'), 260);
+  }
+}
+
+// If the participant reaches the freebie threshold while the grid is still
+// mid-reveal, fast-forward the remaining (still-hidden) cells — flashing each
+// as it pops in — then proceed to the freebie grant once everything is visible.
+function fastForwardRemainingCells(onComplete) {
+  taskRevealTimers.forEach(t => clearTimeout(t));
+  taskRevealTimers = [];
+
+  const remainingIdx = [];
+  for (let i = 0; i < GRID_TOTAL; i++) {
+    const cell = getTaskCellEl(i);
+    if (cell && cell.classList.contains('ph')) remainingIdx.push(i);
+  }
+
+  let p = 0;
+  function step() {
+    if (p >= remainingIdx.length) {
+      taskGridFullyRevealed = true;
+      const submitBtn = document.getElementById('task-submit-btn');
+      submitBtn.disabled = false; submitBtn.style.opacity = '1'; submitBtn.style.cursor = 'pointer';
+      onComplete();
+      return;
+    }
+    revealCellAt(remainingIdx[p], true);
+    p++;
+    const t = setTimeout(step, FAST_REVEAL_MS);
+    taskRevealTimers.push(t);
+  }
+  step();
+}
+
+// Once the participant has genuinely found (TASK_N_CORRECT - taskFreebieCount)
+// target cells themselves, the remaining ones are granted for free — flashed
+// green first, then marked selected. If the grid hasn't fully revealed yet,
+// fast-forward the rest of the reveal first.
+function maybeGrantFreebies() {
+  if (taskFreebiesGranted || taskFreebieCount === 0) return;
+  const genuineNeeded = TASK_N_CORRECT - taskFreebieCount;
+  if (taskSelected.size < genuineNeeded) return;
+  taskFreebiesGranted = true;
+
+  function doGrant() {
+    const remaining = [...taskTargetPositions].filter(i => !taskSelected.has(i));
+    const feedback = document.getElementById('task-feedback');
+    feedback.textContent = remaining.length === 1
+      ? 'Your next emoji is on us!'
+      : `Your next ${remaining.length} emojis are on us!`;
+    feedback.style.color = 'var(--accent)';
+
+    remaining.forEach(i => {
+      const cell = getTaskCellEl(i);
+      if (cell) cell.classList.add('freebie-flash');
+    });
+    setTimeout(() => {
+      remaining.forEach(i => {
+        const cell = getTaskCellEl(i);
+        if (cell) { cell.classList.remove('freebie-flash'); cell.classList.add('selected'); }
+        taskSelected.add(i);
+      });
+      updateRemainingDisplay();
+    }, 550);
+  }
+
+  if (taskGridFullyRevealed) doGrant();
+  else fastForwardRemainingCells(doGrant);
+}
+
+function initGridTask() {
+  taskRevealTimers.forEach(t => clearTimeout(t));
+  taskRevealTimers = [];
+  taskSelected = new Set();
+  taskSubmitAttempts = 0;
+  taskStartTime = Date.now();
+  taskGridFullyRevealed = false;
+
+  buildGridTask();
+  document.getElementById('task-target-display').textContent = taskTarget;
+  document.getElementById('task-target-display2').textContent = taskTarget;
+  document.getElementById('task-feedback').textContent = '';
+  updateRemainingDisplay();
+  const submitBtn = document.getElementById('task-submit-btn');
+  submitBtn.disabled = true; submitBtn.style.opacity = '0.4'; submitBtn.style.cursor = 'not-allowed';
+
+  const gridEl = document.getElementById('task-grid');
+  gridEl.innerHTML = '';
+  for (let r = 0; r < GRID_ROWS; r++) {
+    const row = document.createElement('div');
+    row.className = 'grow-el'; row.id = 'taskrow' + r;
+    for (let c = 0; c < GRID_COLS; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'ecell ph'; cell.textContent = '·';
+      row.appendChild(cell);
+    }
+    gridEl.appendChild(row);
+  }
+
+  // progressive reveal, row by row, left to right
+  for (let i = 0; i < GRID_TOTAL; i++) {
+    const _i = i;
+    const t = setTimeout(() => {
+      revealCellAt(_i, false);
+      if (_i === GRID_TOTAL - 1) {
+        taskGridFullyRevealed = true;
+        submitBtn.disabled = false; submitBtn.style.opacity = '1'; submitBtn.style.cursor = 'pointer';
+      }
+    }, (_i + 1) * GRID_REVEAL_MS);
+    taskRevealTimers.push(t);
+  }
+}
+
+function submitGridTask() {
+  taskSubmitAttempts++;
+  const feedback = document.getElementById('task-feedback');
+  const missing = TASK_N_CORRECT - taskSelected.size;
+
+  if (missing > 0) {
+    feedback.textContent = missing + (missing === 1 ? ' emoji missing — keep searching' : ' emojis missing — keep searching');
+    feedback.style.color = 'var(--red)';
+    return;
+  }
+
+  feedback.textContent = 'All found!';
+  feedback.style.color = 'var(--green)';
+  DATA_LOG.task_n_correct = TASK_N_CORRECT;
+  DATA_LOG.task_freebie_count = taskFreebieCount;
+  DATA_LOG.task_freebie_proportion = TASK_FREEBIE_PROPORTION;
+  DATA_LOG.task_submit_attempts = taskSubmitAttempts;
+  DATA_LOG.task_extra_selected = 0;
+  DATA_LOG.task_time_ms = Date.now() - taskStartTime;
+  document.getElementById('task-submit-btn').disabled = true;
+  setTimeout(nextScreen, 450);
+}
+
+// DEBUG: force-complete the grid task from wherever the participant is on it.
+function debugSkipTask() {
+  if (_currentScreenIdx !== 6) { alert('Not on the task screen.'); return; }
+  taskRevealTimers.forEach(t => clearTimeout(t));
+  taskGridFullyRevealed = true;
+  taskSelected = new Set(taskTargetPositions);
+  updateRemainingDisplay();
+  DATA_LOG.task_n_correct = TASK_N_CORRECT;
+  DATA_LOG.task_freebie_count = taskFreebieCount;
+  DATA_LOG.task_freebie_proportion = TASK_FREEBIE_PROPORTION;
+  DATA_LOG.task_submit_attempts = taskSubmitAttempts;
+  DATA_LOG.task_extra_selected = 0;
+  DATA_LOG.task_time_ms = Date.now() - taskStartTime;
+  nextScreen();
+}
+
+// ============================================================
+// SAVE PREFERENCES
+// ============================================================
+function saveElicitationAndNext() {
+  if (!elicitMoved) return;
+  sStar = parseInt(document.getElementById('elicit-slider').value);
+  sStarSet = true;
+  DATA_LOG.elicitation_pref = sStar;
+  nextScreen();
+}
+function saveReelicitAndNext() {
+  if (!reelicitMoved) return;
+  sStar2 = parseInt(document.getElementById('reelicit-slider').value);
+  sStar2Set = true;
+  DATA_LOG.reelicitation_pref = sStar2;
+  nextScreen();
+}
+
+// Tutorial canvas (screen 1) — a static graded example, no YOU
+function drawTutorialCanvas() {
+  const c = document.getElementById('tutorial-canvas');
+  if (c) drawRewardChart(c, 0.5, null, false);
+}
+
+// ============================================================
+// SUBMISSION
+// ============================================================
+// ============================================================
+// EMOJI RECALL (part 2) — click to reconstruct the sequence
+// ============================================================
+let recallAnswer = [];        // emojis chosen, in order
+let recallPalette = [];       // the shuffled palette shown
+
+function buildRecallOptions() {
+  recallAnswer = [];
+  // palette: the 3 correct emojis + distractors, shuffled (10 total)
+  const distractors = MEMORY_EMOJI_POOL.filter(e => !MEMORY_SEQUENCE.includes(e));
+  for (let i = distractors.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
+  }
+  recallPalette = [...MEMORY_SEQUENCE, ...distractors.slice(0, 7)];
+  for (let i = recallPalette.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [recallPalette[i], recallPalette[j]] = [recallPalette[j], recallPalette[i]];
+  }
+  renderRecall();
+}
+
+function renderRecall() {
+  // slots
+  const slots = document.getElementById('recall-slots');
+  slots.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const d = document.createElement('div');
+    d.className = 'recall-slot' + (recallAnswer[i] ? ' filled' : '');
+    d.textContent = recallAnswer[i] || '';
+    d.onclick = () => { if (recallAnswer[i]) { recallAnswer.splice(i, 1); renderRecall(); } };
+    slots.appendChild(d);
+  }
+  // palette
+  const pal = document.getElementById('recall-palette');
+  pal.innerHTML = '';
+  recallPalette.forEach(em => {
+    const b = document.createElement('div');
+    const usedCount = recallAnswer.filter(a => a === em).length;
+    b.className = 'recall-emoji' + (usedCount > 0 ? ' used' : '');
+    b.textContent = em;
+    b.onclick = () => {
+      if (recallAnswer.length < 3 && usedCount === 0) {
+        recallAnswer.push(em);
+        renderRecall();
+      }
+    };
+    pal.appendChild(b);
+  });
+  // unlock continue only when all 3 slots filled
+  const btn = document.getElementById('recall-next-btn');
+  if (recallAnswer.length === 3) { btn.style.opacity = '1'; btn.style.cursor = 'pointer'; }
+  else { btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed'; }
+}
+
+function clearRecall() { recallAnswer = []; renderRecall(); }
+
+// Scoring: +1 if an emoji is present in the true sequence (set membership),
+// +1 extra if it is in the correct position. Max 6, normalised /6.
+function scoreRecall(answer, truth) {
+  let score = 0;
+  for (let i = 0; i < 3; i++) {
+    if (truth.includes(answer[i])) score += 1;       // present anywhere
+    if (answer[i] === truth[i])   score += 1;        // correct position
+  }
+  return score;
+}
+
+function submitRecall() {
+  if (recallAnswer.length !== 3) return;
+  const score = scoreRecall(recallAnswer, MEMORY_SEQUENCE);
+  DATA_LOG.recall_answer = recallAnswer.slice();
+  DATA_LOG.recall_score = score;
+  DATA_LOG.recall_score_norm = score / 6;
+  nextScreen();
+}
+
+function submitDontRemember() {
+  DATA_LOG.recall_answer = null;     // explicitly marks "don't remember"
+  DATA_LOG.recall_score = 0;
+  DATA_LOG.recall_score_norm = 0;
+  nextScreen();
+}
+
+function submitDecision() {
+  const s = parseInt(document.getElementById('giving-slider').value) / 100;
+  const pay = payoffsForSlider(s);
+  const yours = pay[YOU_RANK - 1];
+  DATA_LOG.giving_pref = Math.round(s * 100);
+  DATA_LOG.final_payoff = yours;
+  document.getElementById('out-rank').textContent = '#' + YOU_RANK;
+  document.getElementById('out-giving').textContent = Math.round(s * 100) + '%';
+  document.getElementById('final-payment').textContent = '$' + yours.toFixed(2);
+  nextScreen();
+}
+
+// ============================================================
+// INIT — production bootstrap (URL params, phase/treatment assignment, demo mode)
+// ============================================================
+
+// Study IDs that route directly to a given phase, as set up on Prolific.
+const STUDY_ID_PHASE1 = '6a4254b1946dcd0009ab1ea3';
+const STUDY_ID_PHASE2 = '6a4254fe8105ec33679c63c2';
+// Human-readable aliases accepted in the URL as STUDY_ID= values.
+const STUDY_ID_ALIASES_PHASE1 = [STUDY_ID_PHASE1, 'phase1', 'survey', 'step1'];
+const STUDY_ID_ALIASES_PHASE2 = [STUDY_ID_PHASE2, 'phase2', 'experiment', 'step2'];
+
+// ---- Backend integration (Google Apps Script web app) -----------------
+// Paste the deployed web app URL here (Deploy > New deployment > Web app,
+// "Execute as: Me", "Who has access: Anyone"). It will look like:
+//   https://script.google.com/macros/s/AKfycb.../exec
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyuBcsASrViaXnMAscbQmjU4Dt-1KtCuN0uyOcf-D0Ez9TvUnBKbJj0AnOujr6mmSgC/exec';
+
+function backendConfigured_() {
+  return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
+}
+
+// Looks up whether this Prolific ID already has a record, and if so, what
+// treatment they were assigned and whether Phase 1 is complete. Returns null
+// on any failure (network error, backend not configured yet, etc.) so the
+// app can fall back to treating the participant as new.
+async function lookupPriorResponse(pid) {
+  if (!pid || !backendConfigured_()) return null;
+  try {
+    const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
+    const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    if (!json.found) return null;
+    return {
+      treatment: json.treatment || null,
+      phase1_complete: !!json.phase1_complete,
+      phase2_complete: !!json.phase2_complete,
+      resume_phase: json.resume_phase || null,
+      resume_snapshot: json.resume_snapshot || null,
+      elicitation_pref: json.elicitation_pref != null ? json.elicitation_pref : null,
+      reelicitation_pref: json.reelicitation_pref != null ? json.reelicitation_pref : null
+    };
+  } catch (e) {
+    console.warn('[Study] Backend lookup failed — defaulting as a new Phase 1 participant.', e);
+    return null;
+  }
+}
+
+// Fire-and-forget style POST, but awaited so callers can choose to wait for
+// confirmation before advancing. Never throws — logs and resolves false on
+// failure so a backend hiccup never blocks the participant's progress.
+async function postToBackend_(payload) {
+  if (!backendConfigured_()) {
+    console.warn('[Study] BACKEND_URL not configured — skipping submission.', payload);
+    return false;
+  }
+  try {
+    const resp = await fetch(BACKEND_URL, {
+      method: 'POST',
+      // text/plain avoids a CORS preflight against Apps Script's doPost
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    const json = await resp.json();
+    if (!json.ok) console.warn('[Study] Backend reported an error on submission.', json);
+    return !!json.ok;
+  } catch (e) {
+    console.error('[Study] Failed to submit to backend.', e);
+    return false;
+  }
+}
+
+async function submitPhase1Complete() {
+  if (APP_DEMO_MODE) return;
+  DATA_LOG.phase1_completed_at_iso = new Date().toISOString();
+  exportData(); // flush timers and idle calc into DATA_LOG before sending
+  const ok = await postToBackend_({
+    action: 'phase1_complete',
+    pid: DATA_LOG.prolific_pid,
+    study_id: DATA_LOG.study_id,
+    session_id: DATA_LOG.session_id,
+    treatment: DATA_LOG.treatment,
+    data: DATA_LOG
+  });
+  if (ok) clearResumeState('phase1');
+  return ok;
+}
+
+async function submitPhase2Complete() {
+  if (APP_DEMO_MODE) return;
+  DATA_LOG.phase2_completed_at_iso = new Date().toISOString();
+  exportData();
+  const ok = await postToBackend_({
+    action: 'phase2_complete',
+    pid: DATA_LOG.prolific_pid,
+    treatment: DATA_LOG.treatment,
+    data: DATA_LOG
+  });
+  if (ok) clearResumeState('phase2');
+  return ok;
+}
+
+function hideBootOverlay_() {
+  const el = document.getElementById('boot-loading-overlay');
+  if (el) el.style.display = 'none';
+}
+
+async function bootstrapApp() {
+  try {
+    await bootstrapAppInner_();
+  } finally {
+    hideBootOverlay_();
+  }
+}
+
+async function bootstrapAppInner_() {
+  const params = new URLSearchParams(window.location.search);
+  const pid       = params.get('PROLIFIC_PID');
+  const studyId   = params.get('STUDY_ID');
+  const sessionId = params.get('SESSION_ID');
+  const demoParam = (params.get('demomode') || '').toLowerCase();
+  const isDemo    = demoParam === '1' || demoParam === 'true' || demoParam === 'yes';
+
+  APP_DEMO_MODE = isDemo;
+  DATA_LOG.prolific_pid = pid || null;
+  DATA_LOG.study_id     = studyId || null;
+  DATA_LOG.session_id   = sessionId || null;
+  DATA_LOG.demo_mode    = isDemo;
+
+  if (isDemo) {
+    // Full preview — show panel, initialise with T1/full.
+    // APP_DEMO_MODE must be true BEFORE the selects' onchange guards check it.
+    const panel = document.getElementById('demo-switcher-panel');
+    panel.style.display = 'block';
+    panel.querySelectorAll('select, button').forEach(el => { el.disabled = false; });
+    _demoPhase = 'full';
+    DATA_LOG.app_phase = 'full';
+    setTreatment('T1', 'full');
+    return;
+  }
+
+  // Production: disable everything in the demo panel unconditionally.
+  const demoPanel = document.getElementById('demo-switcher-panel');
+  demoPanel.style.display = 'none';
+  demoPanel.querySelectorAll('select, button').forEach(el => { el.disabled = true; });
+
+  // Single backend lookup — overlay stays up (blocking all clicks) for the
+  // entire duration of this await, preventing any race with the consent button.
+  const prior = await lookupPriorResponse(pid);
+
+  let phase;
+  if (STUDY_ID_ALIASES_PHASE1.includes(studyId)) {
+    phase = 'phase1';
+  } else if (STUDY_ID_ALIASES_PHASE2.includes(studyId)) {
+    phase = 'phase2';
+  } else {
+    phase = (prior && prior.phase1_complete) ? 'phase2' : 'phase1';
+  }
+
+  DATA_LOG.app_phase = phase;
+
+  // Already completed this phase → block, don't let them redo it.
+  if (phase === 'phase1' && prior && prior.phase1_complete) {
+    showAlreadyCompletedScreen('Part 1 of this study');
+    return;
+  }
+  if (phase === 'phase2' && prior && prior.phase2_complete) {
+    showAlreadyCompletedScreen('Part 2 of this study');
+    return;
+  }
+
+  // Phase 2 requires a completed Phase 1 record.
+  if (phase === 'phase2' && (!prior || !prior.phase1_complete)) {
+    showPhase2ErrorScreen();
+    return;
+  }
+
+  // Restore in-progress session from the backend snapshot (works cross-device).
+  if (prior && prior.resume_phase === phase && prior.resume_snapshot) {
+    console.log('[Study] Resuming from backend snapshot.');
+    // If this is a Phase 2 resume, also make sure sStar is set from Phase 1
+    // data so T2/T3 overlays work correctly even after a cross-device reload.
+    if (phase === 'phase2' && prior.elicitation_pref !== null && prior.elicitation_pref !== '') {
+      const ep = Number(prior.elicitation_pref);
+      if (!isNaN(ep)) { sStar = ep; sStarSet = true; }
+    }
+    restoreFromSnapshot(prior.resume_snapshot);
+    return;
+  }
+
+  // Local snapshot fallback (same device, backend heartbeat may not have arrived yet).
+  try {
+    const localKey = 'taxstudy_resume_' + (pid || 'anon') + '_' + phase;
+    const raw = localStorage.getItem(localKey);
+    if (raw) {
+      console.log('[Study] Resuming from local snapshot.');
+      restoreFromSnapshot(JSON.parse(raw));
+      return;
+    }
+  } catch (e) { /* ignore */ }
+
+  // Genuinely new for this phase.
+  let assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
+  if (!assignedTreatment) {
+    assignedTreatment = sampleRandomTreatment();
+    if (phase === 'phase2') {
+      console.warn('[Study] No Phase 1 treatment found — random fallback assigned.');
+    }
+  }
+
+  setTreatment(assignedTreatment, phase);
+
+  // For Phase 2: restore sStar (elicitation preference from Phase 1) so the
+  // T2 recall overlay and T3 re-elicitation anchor are populated correctly.
+  // Must happen AFTER setTreatment which resets sStar to 0.
+  if (phase === 'phase2' && prior) {
+    const ep = Number(prior.elicitation_pref);
+    if (!isNaN(ep) && prior.elicitation_pref !== null && prior.elicitation_pref !== '') {
+      sStar = ep; sStarSet = true;
+    }
+  }
+}
+
+window.onload = function() { bootstrapApp(); };
+</script>
+</body>
+</html>
