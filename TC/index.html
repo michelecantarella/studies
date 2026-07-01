@@ -574,7 +574,7 @@
     </details>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="nextScreen()">I consent →</button>
-      <button class="btn btn-secondary" onclick="alert('You will be redirected to Prolific.')">I do not consent</button>
+      <button class="btn btn-secondary" onclick="prolificRedirect('phase1_noconsent')">I do not consent</button>
     </div>
   </div>
 
@@ -671,7 +671,7 @@
     </details>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="nextScreen()">I consent →</button>
-      <button class="btn btn-secondary" onclick="alert('You will be redirected to Prolific.')">I do not consent</button>
+      <button class="btn btn-secondary" onclick="prolificRedirect('phase2_noconsent')">I do not consent</button>
     </div>
   </div>
 
@@ -849,12 +849,6 @@
 <!-- DEMO SWITCHER -->
 <div class="demo-switcher" id="demo-switcher-panel">
   <div class="demo-label">⚙ DEMO MODE</div>
-  <div style="margin:4px 0 2px; font-size:10px; opacity:0.8;">Phase</div>
-  <select id="demo-phase-select" onchange="demoPhaseChanged_(this.value)" style="width:100%; margin-bottom:4px;">
-    <option value="full" selected>Full (both phases)</option>
-    <option value="phase1">Phase 1 only</option>
-    <option value="phase2">Phase 2 only</option>
-  </select>
   <div style="margin:4px 0 2px; font-size:10px; opacity:0.8;">Treatment</div>
   <select id="demo-treatment-select" onchange="demoTreatmentChanged_(this.value)" style="width:100%;">
     <option value="C">Control (C)</option>
@@ -1122,22 +1116,12 @@ function sampleRandomTreatment() {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
-// Demo mode state — set before any selects can fire
-let _demoPhase = 'full';
-
-function demoPhaseChanged_(phase) {
-  if (!APP_DEMO_MODE) return;
-  _demoPhase = phase;
-  const t = document.getElementById('demo-treatment-select').value;
-  setTreatment(t, phase);
-}
-
 function demoTreatmentChanged_(value) {
   if (!APP_DEMO_MODE) {
     console.warn('[Study] Ignored stray treatment-change event outside demo mode.');
     return;
   }
-  setTreatment(value, _demoPhase);
+  setTreatment(value, APP_PHASE || 'full');
 }
 
 function setTreatment(t, phase) {
@@ -1159,6 +1143,10 @@ function setTreatment(t, phase) {
   DATA_LOG.baseline_tau_pct = BASELINE_TAU_PCT;
   DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
   flow = getPhaseFlow(phase); flowPos = 0;
+  // Keep the demo panel's treatment dropdown in sync with whatever treatment
+  // was actually assigned (which may differ from what was previously selected).
+  const sel = document.getElementById('demo-treatment-select');
+  if (sel) sel.value = t;
   showScreen(flow[0]);
 }
 
@@ -1289,10 +1277,12 @@ function showScreen(idx) {
   if (idx === 12) {
     document.getElementById('screen12-demo-btn-row').style.display = (APP_DEMO_MODE === 2) ? 'flex' : 'none';
     submitPhase1Complete();
+    prolificRedirect('phase1_complete');
   }
 
   if (idx === 9) {
     submitPhase2Complete();
+    prolificRedirect('phase2_complete');
   }
 
   if (idx === 2) {
@@ -1979,9 +1969,28 @@ function submitDecision() {
 // Study IDs that route directly to a given phase, as set up on Prolific.
 const STUDY_ID_PHASE1 = '6a4254b1946dcd0009ab1ea3';
 const STUDY_ID_PHASE2 = '6a4254fe8105ec33679c63c2';
-// Human-readable aliases accepted in the URL as STUDY_ID= values.
 const STUDY_ID_ALIASES_PHASE1 = [STUDY_ID_PHASE1, 'phase1', 'survey', 'step1'];
 const STUDY_ID_ALIASES_PHASE2 = [STUDY_ID_PHASE2, 'phase2', 'experiment', 'step2'];
+
+const PROLIFIC_CODES = {
+  phase1_complete:   'C1IT0IR2',
+  phase1_noconsent:  'CVYN8JOZ',
+  phase2_complete:   'CR6GIUN8',
+  phase2_noconsent:  'C1M6LYJC'
+};
+
+// Redirect to Prolific with the given completion code.
+// Only fires in production (demomode=0). In demomode=1/2, just logs to console.
+function prolificRedirect(codeKey) {
+  const code = PROLIFIC_CODES[codeKey];
+  if (!code) return;
+  if (APP_DEMO_MODE === 2) {
+    console.log('[Study] demomode=2 — would redirect to Prolific with code:', code, '(' + codeKey + ')');
+    return;
+  }
+  const url = 'https://app.prolific.com/submissions/complete?cc=' + code;
+  window.open(url, '_blank');
+}
 
 // ---- Backend integration (Google Apps Script web app) -----------------
 // Paste the deployed web app URL here (Deploy > New deployment > Web app,
@@ -2112,7 +2121,6 @@ async function bootstrapAppInner_() {
 
   if (demoMode === 2) {
     // Full demo: ignore STUDY_ID entirely, start Phase 1 fresh.
-    _demoPhase = 'full';
     DATA_LOG.app_phase = 'full';
     setTreatment('T1', 'full');
     return;
