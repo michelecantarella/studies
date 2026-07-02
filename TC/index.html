@@ -865,8 +865,14 @@
   <!-- ===================== SCREEN 10: EMOJI RECALL (part 2, all) ===================== -->
   <div class="screen" id="screen-10">
     <h1>Do you remember?</h1>
-    <div id="recall-diag-warning" style="display:none; background:#fff3cd; border:1px solid #e6c800; border-radius:4px; padding:12px 16px; margin-bottom:16px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#7a6000;">
-      ⚠ DIAGNOSTIC: The backend did not return this participant's actual Phase 1 memory sequence. The palette below is a freshly-generated substitute the participant never saw — this recall response is not answerable and should not be scored. This means the Apps Script deployment is likely out of date (its lookup response is missing the <code>memory_sequence</code> field). This banner only appears in demo mode.
+    <div id="recall-diag-panel" style="display:none; background:#fff3cd; border:1px solid #e6c800; border-radius:4px; padding:12px 16px; margin-bottom:16px; font-family:'IBM Plex Mono',monospace; font-size:11px; color:#7a6000; line-height:1.7;">
+      <strong>⚙ DIAGNOSTIC (demo mode only) — exact data pipeline for this participant:</strong><br>
+      pid queried: <span id="diag-pid"></span><br>
+      backend found record: <span id="diag-found"></span><br>
+      raw memory_sequence from backend (before parsing): <span id="diag-raw"></span><br>
+      parsed as array: <span id="diag-parsed"></span><br>
+      sequence actually used to build the palette below: <span id="diag-used"></span><br>
+      full palette shown below (10 tiles): <span id="diag-palette"></span>
     </div>
     <div class="card">
       <div class="card-title">Memory check</div>
@@ -1344,9 +1350,26 @@ function showScreen(idx) {
 
   if (idx === 10) {
     buildRecallOptions();
-    const warn = document.getElementById('recall-diag-warning');
-    if (warn) {
-      warn.style.display = (APP_DEMO_MODE && MEMORY_SEQUENCE_SOURCE === 'fallback') ? 'block' : 'none';
+    const diagPanel = document.getElementById('recall-diag-panel');
+    if (diagPanel) {
+      if (APP_DEMO_MODE) {
+        diagPanel.style.display = 'block';
+        document.getElementById('diag-pid').textContent = String(LAST_LOOKUP_DIAG.pid);
+        document.getElementById('diag-found').textContent = String(LAST_LOOKUP_DIAG.found)
+          + (LAST_LOOKUP_DIAG.parse_error ? ('  (parse error: ' + LAST_LOOKUP_DIAG.parse_error + ')') : '');
+        document.getElementById('diag-raw').textContent = LAST_LOOKUP_DIAG.raw_memory_sequence === null
+          ? '(null — backend returned no memory_sequence for this pid)'
+          : LAST_LOOKUP_DIAG.raw_memory_sequence;
+        document.getElementById('diag-parsed').textContent = JSON.stringify(
+          (LAST_LOOKUP_DIAG.raw_memory_sequence && !LAST_LOOKUP_DIAG.parse_error)
+            ? JSON.parse(LAST_LOOKUP_DIAG.raw_memory_sequence) : null
+        );
+        document.getElementById('diag-used').textContent = JSON.stringify(MEMORY_SEQUENCE)
+          + '  [source: ' + MEMORY_SEQUENCE_SOURCE + ']';
+        document.getElementById('diag-palette').textContent = JSON.stringify(recallPalette);
+      } else {
+        diagPanel.style.display = 'none';
+      }
     }
   }
 
@@ -1967,7 +1990,7 @@ function buildRecallOptions() {
   // in Phase 1, restored from the backend on Phase 2 load. The module-level
   // MEMORY_SEQUENCE is secondary and can be stale if the backend restore
   // hasn't happened yet or failed silently.
-  const trueSequence = (Array.isArray(DATA_LOG.memory_sequence) && DATA_LOG.memory_sequence.length === 3)
+  let trueSequence = (Array.isArray(DATA_LOG.memory_sequence) && DATA_LOG.memory_sequence.length === 3)
     ? DATA_LOG.memory_sequence
     : MEMORY_SEQUENCE;
 
@@ -1975,6 +1998,13 @@ function buildRecallOptions() {
     console.error('[Study] Cannot build recall options: no valid memory sequence found.');
     return;
   }
+
+  // Defensive Unicode normalization — guards against any code path handing
+  // this function a sequence whose emoji strings aren't in the same
+  // normalization form as MEMORY_EMOJI_POOL's literals (this can happen to a
+  // string after round-tripping through an external store). Without this,
+  // two visually-identical emoji could fail a strict === comparison below.
+  trueSequence = trueSequence.map(e => (typeof e === 'string' ? e.normalize('NFC') : e));
 
   // Sync MEMORY_SEQUENCE to the same source so scoring stays consistent.
   MEMORY_SEQUENCE = trueSequence;
@@ -2110,17 +2140,42 @@ function backendConfigured_() {
 // treatment they were assigned and whether Phase 1 is complete. Returns null
 // on any failure (network error, backend not configured yet, etc.) so the
 // app can fall back to treating the participant as new.
+// Raw diagnostic capture from the most recent backend lookup — surfaced
+// directly on the recall screen in demo mode (see showScreen idx===10),
+// so the actual data pipeline is visible on screen instead of requiring
+// devtools or cross-referencing separate screenshots.
+let LAST_LOOKUP_DIAG = { pid: null, found: null, raw_memory_sequence: null, parse_error: null };
+
 async function lookupPriorResponse(pid) {
   if (!pid || !backendConfigured_()) return null;
   try {
     const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
     const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
-    if (!resp.ok) return null;
+    if (!resp.ok) {
+      LAST_LOOKUP_DIAG = { pid, found: 'HTTP ' + resp.status, raw_memory_sequence: null, parse_error: null };
+      return null;
+    }
     const json = await resp.json();
+    LAST_LOOKUP_DIAG = {
+      pid,
+      found: json.found,
+      raw_memory_sequence: json.memory_sequence != null ? String(json.memory_sequence) : null,
+      parse_error: null
+    };
     if (!json.found) return null;
     let memSeq = null;
     if (json.memory_sequence) {
-      try { memSeq = JSON.parse(json.memory_sequence); } catch (e) { memSeq = null; }
+      try {
+        // Defensive Unicode normalization: if the value round-tripped through
+        // Google Sheets, some emoji sequences (variation selectors, ZWJ
+        // sequences) can come back in a different (but visually identical)
+        // normalization form, which would silently break exact-string
+        // matching against MEMORY_EMOJI_POOL further down the pipeline.
+        memSeq = JSON.parse(json.memory_sequence).map(e => (typeof e === 'string' ? e.normalize('NFC') : e));
+      } catch (e) {
+        memSeq = null;
+        LAST_LOOKUP_DIAG.parse_error = String(e);
+      }
     }
     return {
       treatment: json.treatment || null,
@@ -2133,6 +2188,7 @@ async function lookupPriorResponse(pid) {
       memory_sequence: memSeq   // the actual array shown in Phase 1, or null
     };
   } catch (e) {
+    LAST_LOOKUP_DIAG = { pid, found: 'ERROR', raw_memory_sequence: null, parse_error: String(e) };
     console.warn('[Study] Backend lookup failed — defaulting as a new Phase 1 participant.', e);
     return null;
   }
