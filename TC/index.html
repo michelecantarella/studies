@@ -635,6 +635,20 @@
       <p>Thank you for completing <strong>this part of the study</strong>.</p>
       <p style="margin-top:8px">You may now close this page. We will invite you to <strong>the second part of the study</strong> separately.</p>
     </div>
+    <div class="card" id="p1-save-status">
+      <div id="p1-saving-row" style="display:flex; align-items:center; gap:10px;">
+        <div style="width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:bootSpin 0.8s linear infinite; flex-shrink:0;"></div>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);">Confirming your responses were saved…</span>
+      </div>
+      <div id="p1-saved-row" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green);">✓ Your responses have been saved.</div>
+      <div id="p1-error-row" style="display:none;">
+        <p style="font-size:13px; color:var(--red); margin-bottom:8px;">We could not confirm your responses were saved. Nothing is lost yet — please try one of the options below.</p>
+        <p style="font-size:11px; color:var(--muted); margin-bottom:10px;">Reference code: <strong id="p1-error-code" style="font-family:'IBM Plex Mono',monospace;"></strong></p>
+        <button class="btn btn-secondary" onclick="completeStudyPhase(12)" style="margin-right:8px;">Try again</button>
+        <button class="btn btn-secondary" onclick="downloadDataBackup()">Download my responses</button>
+        <p style="font-size:12px; color:var(--text); margin-top:10px;"><strong>Please download your responses using the button above, then contact the research team via Prolific messaging</strong> and attach the downloaded file, along with the reference code shown above.</p>
+      </div>
+    </div>
     <div class="btn-row" id="screen12-demo-btn-row">
       <button class="btn btn-primary" onclick="nextScreen()">Continue to Part 2 (demo) →</button>
     </div>
@@ -811,6 +825,20 @@
         <div class="outcome-card"><div class="stat-label">Reward for performance you chose</div><div class="stat-value" style="margin-top:6px" id="out-giving">—</div></div>
       </div>
       <p style="color:var(--muted); font-size:13px; margin-top:16px;">Thank you for your participation. Your responses have been recorded. Your bonus payment will be processed once everyone in your group of 10 has completed the study — at that point, <strong>one participant's chosen split is selected at random and applied to the whole group</strong>. Please return to Prolific to confirm your participation.</p>
+    </div>
+    <div class="card" id="p2-save-status">
+      <div id="p2-saving-row" style="display:flex; align-items:center; gap:10px;">
+        <div style="width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:bootSpin 0.8s linear infinite; flex-shrink:0;"></div>
+        <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);">Confirming your responses were saved…</span>
+      </div>
+      <div id="p2-saved-row" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green);">✓ Your responses have been saved.</div>
+      <div id="p2-error-row" style="display:none;">
+        <p style="font-size:13px; color:var(--red); margin-bottom:8px;">We could not confirm your responses were saved. Nothing is lost yet — please try one of the options below.</p>
+        <p style="font-size:11px; color:var(--muted); margin-bottom:10px;">Reference code: <strong id="p2-error-code" style="font-family:'IBM Plex Mono',monospace;"></strong></p>
+        <button class="btn btn-secondary" onclick="completeStudyPhase(9)" style="margin-right:8px;">Try again</button>
+        <button class="btn btn-secondary" onclick="downloadDataBackup()">Download my responses</button>
+        <p style="font-size:12px; color:var(--text); margin-top:10px;"><strong>Please download your responses using the button above, then contact the research team via Prolific messaging</strong> and attach the downloaded file, along with the reference code shown above.</p>
+      </div>
     </div>
   </div>
   <!-- ===================== SCREEN 10: EMOJI RECALL (part 2, all) ===================== -->
@@ -1190,11 +1218,27 @@ function saveResumeState() {
   }
 }
 
+// Screens where there's nothing left to save / no point heartbeating.
+const TERMINAL_SCREEN_IDXS = [9, 12, 14, 15];
+
+// Extra safety net beyond per-screen saves: some screens can hold a
+// participant's attention for a long time with no screen transition at all
+// (the real-effort task, a slider they're deliberating over) — a heartbeat
+// only on transitions would leave a large gap unsaved if they close the tab
+// mid-screen. This periodic tick covers that gap without adding meaningful
+// load, since 'progress' heartbeats are cheap, idempotent upserts.
+setInterval(() => {
+  if (document.visibilityState !== 'visible') return;
+  if (!DATA_LOG.prolific_pid) return; // bootstrap hasn't run yet
+  if (TERMINAL_SCREEN_IDXS.includes(_currentScreenIdx)) return;
+  saveResumeState();
+}, 20000);
+
 // Restores all session state from a snapshot object (same shape produced by
 // buildSnapshot_ / saved by the backend's "progress" action) and jumps to the
 // saved screen. Does not itself decide WHETHER to resume — callers check
 // phase-completion status first.
-function restoreFromSnapshot(s) {
+function restoreFromSnapshot(s, priorOverride) {
   treatment = s.treatment;
   flow = s.flow;
   flowPos = s.flowPos;
@@ -1207,6 +1251,24 @@ function restoreFromSnapshot(s) {
   MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
   sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
   Object.assign(DATA_LOG, s.data);
+
+  // Apply authoritative Phase-1 data (true elicitation pref, true memory
+  // sequence) BEFORE showScreen renders anything below. This must happen
+  // here, not after this function returns — showScreen() can synchronously
+  // build screens (e.g. the recall palette) using whatever is in MEMORY_SEQUENCE
+  // / DATA_LOG right now, so patching those values after the fact is too late
+  // if the resumed screen is the recall screen itself.
+  if (priorOverride) {
+    if (priorOverride.memory_sequence) {
+      MEMORY_SEQUENCE = priorOverride.memory_sequence;
+      DATA_LOG.memory_sequence = priorOverride.memory_sequence.slice();
+    }
+    const ep = Number(priorOverride.elicitation_pref);
+    if (!isNaN(ep) && priorOverride.elicitation_pref !== null && priorOverride.elicitation_pref !== '') {
+      sStar = ep; sStarSet = true;
+    }
+  }
+
   _lastTick = Date.now();
   _sectionLastTick = Date.now();
   // Sync demo dropdown to the restored treatment.
@@ -1286,13 +1348,11 @@ function showScreen(idx) {
 
   if (idx === 12) {
     document.getElementById('screen12-demo-btn-row').style.display = (APP_DEMO_MODE === 2) ? 'flex' : 'none';
-    submitPhase1Complete();
-    prolificRedirect('phase1_complete');
+    completeStudyPhase(12);
   }
 
   if (idx === 9) {
-    submitPhase2Complete();
-    prolificRedirect('phase2_complete');
+    completeStudyPhase(9);
   }
 
   if (idx === 2) {
@@ -2063,26 +2123,35 @@ async function lookupPriorResponse(pid) {
 // Fire-and-forget style POST, but awaited so callers can choose to wait for
 // confirmation before advancing. Never throws — logs and resolves false on
 // failure so a backend hiccup never blocks the participant's progress.
-async function postToBackend_(payload) {
+// maxAttempts=1 for frequent, low-stakes calls (progress heartbeats — a
+// missed one is harmless, the next one covers it). Completion submissions
+// use a higher maxAttempts since they're rare and must not silently fail.
+async function postToBackend_(payload, maxAttempts) {
+  maxAttempts = maxAttempts || 1;
   if (!backendConfigured_()) {
     console.warn('[Study] BACKEND_URL not configured — skipping submission.', payload);
     return false;
   }
-  try {
-    const resp = await fetch(BACKEND_URL, {
-      method: 'POST',
-      // text/plain avoids a CORS preflight against Apps Script's doPost
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
-    });
-    const json = await resp.json();
-    if (!json.ok) console.warn('[Study] Backend reported an error on submission.', json);
-    return !!json.ok;
-  } catch (e) {
-    console.error('[Study] Failed to submit to backend.', e);
-    return false;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      const resp = await fetch(BACKEND_URL, {
+        method: 'POST',
+        // text/plain avoids a CORS preflight against Apps Script's doPost
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload)
+      });
+      const json = await resp.json();
+      if (json.ok) return true;
+      console.warn('[Study] Backend reported an error on submission (attempt ' + attempt + '/' + maxAttempts + ').', json);
+    } catch (e) {
+      console.error('[Study] Failed to submit to backend (attempt ' + attempt + '/' + maxAttempts + ').', e);
+    }
+    if (attempt < maxAttempts) await new Promise(r => setTimeout(r, 600 * attempt));
   }
+  return false;
 }
+
+const COMPLETION_SUBMIT_ATTEMPTS = 4;
 
 async function submitPhase1Complete() {
   DATA_LOG.phase1_completed_at_iso = new Date().toISOString();
@@ -2094,7 +2163,7 @@ async function submitPhase1Complete() {
     session_id: DATA_LOG.session_id,
     treatment: DATA_LOG.treatment,
     data: DATA_LOG
-  });
+  }, COMPLETION_SUBMIT_ATTEMPTS);
   if (ok) clearResumeState('phase1');
   return ok;
 }
@@ -2107,9 +2176,57 @@ async function submitPhase2Complete() {
     pid: DATA_LOG.prolific_pid,
     treatment: DATA_LOG.treatment,
     data: DATA_LOG
-  });
+  }, COMPLETION_SUBMIT_ATTEMPTS);
   if (ok) clearResumeState('phase2');
   return ok;
+}
+
+// Triggers a client-side download of the full DATA_LOG as a JSON file — the
+// manual escape hatch if the backend genuinely can't be reached after
+// several retries. Nothing about the participant's progress is lost even in
+// that case; this just makes sure a copy always leaves their machine.
+function downloadDataBackup() {
+  exportData();
+  const blob = new Blob([JSON.stringify(DATA_LOG, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const pid = DATA_LOG.prolific_pid || 'unknown';
+  a.href = url;
+  a.download = `study-backup-${pid}-${Date.now()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// Orchestrates a phase-completion submission with a visible confirmation
+// state on-screen: shows a spinner while attempting to save (with automatic
+// retries inside submitPhase1Complete/submitPhase2Complete), then either
+// confirms success and redirects to Prolific, or reveals an error state with
+// a manual retry button and a download-backup fallback. Safe to call
+// repeatedly (e.g. via the "Try again" button) — completion submissions are
+// idempotent upserts on the backend side.
+async function completeStudyPhase(targetIdx) {
+  const isP1 = (targetIdx === 12);
+  const savingRow = document.getElementById(isP1 ? 'p1-saving-row' : 'p2-saving-row');
+  const savedRow  = document.getElementById(isP1 ? 'p1-saved-row'  : 'p2-saved-row');
+  const errorRow  = document.getElementById(isP1 ? 'p1-error-row'  : 'p2-error-row');
+
+  savingRow.style.display = 'flex';
+  savedRow.style.display = 'none';
+  errorRow.style.display = 'none';
+
+  const ok = isP1 ? await submitPhase1Complete() : await submitPhase2Complete();
+
+  savingRow.style.display = 'none';
+  if (ok) {
+    savedRow.style.display = 'block';
+    prolificRedirect(isP1 ? 'phase1_complete' : 'phase2_complete');
+  } else {
+    const code = 'ERR-' + Date.now().toString(36).toUpperCase();
+    document.getElementById(isP1 ? 'p1-error-code' : 'p2-error-code').textContent = code;
+    errorRow.style.display = 'block';
+  }
 }
 
 function hideBootOverlay_() {
@@ -2191,21 +2308,7 @@ async function bootstrapAppInner_() {
   // Restore in-progress session from the backend snapshot (works cross-device).
   if (prior && prior.resume_phase === phase && prior.resume_snapshot) {
     console.log('[Study] Resuming from backend snapshot.');
-    // If this is a Phase 2 resume, also make sure sStar is set from Phase 1
-    // data so T2/T3 overlays work correctly even after a cross-device reload.
-    if (phase === 'phase2' && prior.elicitation_pref !== null && prior.elicitation_pref !== '') {
-      const ep = Number(prior.elicitation_pref);
-      if (!isNaN(ep)) { sStar = ep; sStarSet = true; }
-    }
-    restoreFromSnapshot(prior.resume_snapshot);
-    // Safety net: force MEMORY_SEQUENCE to match what was actually shown in
-    // Phase 1, in case the snapshot itself carries a stale/incorrect value
-    // (e.g. saved before this fix). The recall task must quiz on the emojis
-    // the participant genuinely saw, never a freshly-regenerated sequence.
-    if (phase === 'phase2' && prior.memory_sequence) {
-      MEMORY_SEQUENCE = prior.memory_sequence;
-      DATA_LOG.memory_sequence = prior.memory_sequence.slice();
-    }
+    restoreFromSnapshot(prior.resume_snapshot, phase === 'phase2' ? prior : null);
     return;
   }
 
