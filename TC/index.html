@@ -1884,13 +1884,29 @@ let recallPalette = [];       // the shuffled palette shown
 
 function buildRecallOptions() {
   recallAnswer = [];
-  // palette: the 3 correct emojis + distractors, shuffled (10 total)
-  const distractors = MEMORY_EMOJI_POOL.filter(e => !MEMORY_SEQUENCE.includes(e));
+
+  // Always read the sequence from DATA_LOG — this is the actual value logged
+  // in Phase 1, restored from the backend on Phase 2 load. The module-level
+  // MEMORY_SEQUENCE is secondary and can be stale if the backend restore
+  // hasn't happened yet or failed silently.
+  const trueSequence = (Array.isArray(DATA_LOG.memory_sequence) && DATA_LOG.memory_sequence.length === 3)
+    ? DATA_LOG.memory_sequence
+    : MEMORY_SEQUENCE;
+
+  if (!trueSequence || trueSequence.length !== 3) {
+    console.error('[Study] Cannot build recall options: no valid memory sequence found.');
+    return;
+  }
+
+  // Sync MEMORY_SEQUENCE to the same source so scoring stays consistent.
+  MEMORY_SEQUENCE = trueSequence;
+
+  const distractors = MEMORY_EMOJI_POOL.filter(e => !trueSequence.includes(e));
   for (let i = distractors.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [distractors[i], distractors[j]] = [distractors[j], distractors[i]];
   }
-  recallPalette = [...MEMORY_SEQUENCE, ...distractors.slice(0, 7)];
+  recallPalette = [...trueSequence, ...distractors.slice(0, 7)];
   for (let i = recallPalette.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [recallPalette[i], recallPalette[j]] = [recallPalette[j], recallPalette[i]];
