@@ -505,20 +505,23 @@
   /* ---- SEPARATOR ---- */
   .sep { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 
-  /* ---- SWITCHER (treatment selector for demo) ---- */
+  /* ---- SWITCHER (treatment selector for demo) ----
+     Deliberately in normal document flow (no position:fixed) — sits as a
+     full-width bar directly under .header, exactly like .header itself, so
+     it structurally cannot overlap page content no matter what screen or
+     viewport size is in play. JS toggles display between 'none' and 'flex'. */
   .demo-switcher {
     display: none;
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
+    width: 100%;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 14px;
     background: var(--accent);
     color: white;
-    border-radius: 2px;
-    padding: 12px 16px;
+    padding: 8px 40px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
-    z-index: 100;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
   }
   .demo-switcher select {
     background: white;
@@ -528,11 +531,10 @@
     border-radius: 2px;
     font-family: 'IBM Plex Mono', monospace;
     font-size: 11px;
-    margin-top: 6px;
-    width: 100%;
+    margin-left: 6px;
     cursor: pointer;
   }
-  .demo-switcher .demo-label { font-weight: 600; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .demo-switcher .demo-label { font-weight: 600; letter-spacing: 0.08em; }
 </style>
 </head>
 <body>
@@ -550,6 +552,25 @@
 <div class="header">
   <div class="logo" id="header-title">Survey Study</div>
   <div class="step-indicator" id="stepDots"></div>
+</div>
+
+<!-- DEMO SWITCHER — deliberately placed in normal document flow (not
+     position:fixed) so it can never overlap page content, exactly like the
+     header above it. A fixed/floating panel was previously covering
+     interactive elements (e.g. the last couple of recall-task tiles); an
+     in-flow bar makes that structurally impossible, not just unlikely. -->
+<div class="demo-switcher" id="demo-switcher-panel">
+  <span class="demo-label">⚙ DEMO MODE</span>
+  <label style="font-size:10px; opacity:0.85;">Treatment
+    <select id="demo-treatment-select" onchange="demoTreatmentChanged_(this.value)">
+      <option value="C">Control (C)</option>
+      <option value="T1" selected>T1 – Elicitation only</option>
+      <option value="T2">T2 – Recall anchor</option>
+      <option value="T3">T3 – Re-elicitation</option>
+    </select>
+  </label>
+  <button onclick="debugSkipTask()" style="background:#fff7cc; color:#7a6000; border:1px solid #e6c800; padding:5px 10px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">⏭ Skip task</button>
+  <button onclick="console.log(exportData());" style="background:white; color:var(--accent); border:none; padding:5px 10px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">📋 Log data</button>
 </div>
 
 <div class="container">
@@ -844,6 +865,9 @@
   <!-- ===================== SCREEN 10: EMOJI RECALL (part 2, all) ===================== -->
   <div class="screen" id="screen-10">
     <h1>Do you remember?</h1>
+    <div id="recall-diag-warning" style="display:none; background:#fff3cd; border:1px solid #e6c800; border-radius:4px; padding:12px 16px; margin-bottom:16px; font-family:'IBM Plex Mono',monospace; font-size:12px; color:#7a6000;">
+      ⚠ DIAGNOSTIC: The backend did not return this participant's actual Phase 1 memory sequence. The palette below is a freshly-generated substitute the participant never saw — this recall response is not answerable and should not be scored. This means the Apps Script deployment is likely out of date (its lookup response is missing the <code>memory_sequence</code> field). This banner only appears in demo mode.
+    </div>
     <div class="card">
       <div class="card-title">Memory check</div>
       <p>In a previous study, we showed you a sequence of <strong>three emojis</strong> and asked you to remember it. Please reconstruct it below by clicking three emojis <strong>in the correct order</strong>. There is no reward attached — just do your best.</p>
@@ -864,20 +888,6 @@
   </div>
 
 </div><!-- /container -->
-
-<!-- DEMO SWITCHER -->
-<div class="demo-switcher" id="demo-switcher-panel">
-  <div class="demo-label">⚙ DEMO MODE</div>
-  <div style="margin:4px 0 2px; font-size:10px; opacity:0.8;">Treatment</div>
-  <select id="demo-treatment-select" onchange="demoTreatmentChanged_(this.value)" style="width:100%;">
-    <option value="C">Control (C)</option>
-    <option value="T1" selected>T1 – Elicitation only</option>
-    <option value="T2">T2 – Recall anchor</option>
-    <option value="T3">T3 – Re-elicitation</option>
-  </select>
-  <button onclick="debugSkipTask()" style="margin-top:8px; width:100%; background:#fff7cc; color:#7a6000; border:1px solid #e6c800; padding:5px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">⏭ Skip task</button>
-  <button onclick="console.log(exportData());" style="margin-top:4px; width:100%; background:white; color:var(--accent); border:none; padding:5px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">📋 Log data</button>
-</div>
 
 <script>
 // ============================================================
@@ -1065,6 +1075,14 @@ let YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1]
 const MEMORY_EMOJI_POOL = ['😀','😎','😍','🤔','😴','😡','👍','👎','❤️','⭐',
                            '🔥','🌙','☀️','⚽','🍎','🍌','🐶','🐱','🚗','🎈'];
 let MEMORY_SEQUENCE = [];
+// Tracks whether, on Phase 2, the recall sequence was actually restored from
+// the participant's real Phase 1 backend record ('restored'), or had to fall
+// back to a freshly-generated one because no usable record was found
+// ('fallback'). Only meaningful during Phase 2 — always 'n/a' otherwise.
+// Surfaced as a visible on-screen warning (see showScreen idx===10) instead
+// of failing silently, so a backend/deployment problem is immediately
+// obvious on screen rather than requiring console/devtools inspection.
+let MEMORY_SEQUENCE_SOURCE = 'n/a';
 function generateMemorySequence() {
   const pool = [...MEMORY_EMOJI_POOL];
   const seq = [];
@@ -1146,8 +1164,15 @@ function demoTreatmentChanged_(value) {
     return;
   }
   setTreatment(value, APP_PHASE || 'full');
+  showScreen(flow[0]);
 }
 
+// NOTE: setTreatment() no longer calls showScreen() itself — the caller
+// decides when to render, which lets bootstrapAppInner_ apply Phase 2's
+// authoritative memory_sequence/elicitation_pref overrides at a single,
+// unconditional point BEFORE the very first screen paints, regardless of
+// which of the three possible startup paths (fresh / backend-snapshot /
+// local-snapshot resume) was taken. See bootstrapAppInner_ for that call.
 function setTreatment(t, phase) {
   phase = phase || 'full';
   APP_PHASE = phase;
@@ -1171,7 +1196,6 @@ function setTreatment(t, phase) {
   // was actually assigned (which may differ from what was previously selected).
   const sel = document.getElementById('demo-treatment-select');
   if (sel) sel.value = t;
-  showScreen(flow[0]);
 }
 
 // ============================================================
@@ -1238,7 +1262,14 @@ setInterval(() => {
 // buildSnapshot_ / saved by the backend's "progress" action) and jumps to the
 // saved screen. Does not itself decide WHETHER to resume — callers check
 // phase-completion status first.
-function restoreFromSnapshot(s, priorOverride) {
+// Hydrates all session state from a saved snapshot (backend or local). Does
+// NOT call showScreen() and does NOT apply Phase-2 overrides itself — see
+// bootstrapAppInner_, which is the single place that applies the
+// memory_sequence/elicitation_pref corrections and calls showScreen, no
+// matter which startup path was taken. Keeping this function "dumb" (pure
+// state hydration only) is what makes it impossible for a future new resume
+// path to accidentally skip the correction.
+function restoreFromSnapshot(s) {
   treatment = s.treatment;
   flow = s.flow;
   flowPos = s.flowPos;
@@ -1251,30 +1282,11 @@ function restoreFromSnapshot(s, priorOverride) {
   MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
   sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
   Object.assign(DATA_LOG, s.data);
-
-  // Apply authoritative Phase-1 data (true elicitation pref, true memory
-  // sequence) BEFORE showScreen renders anything below. This must happen
-  // here, not after this function returns — showScreen() can synchronously
-  // build screens (e.g. the recall palette) using whatever is in MEMORY_SEQUENCE
-  // / DATA_LOG right now, so patching those values after the fact is too late
-  // if the resumed screen is the recall screen itself.
-  if (priorOverride) {
-    if (priorOverride.memory_sequence) {
-      MEMORY_SEQUENCE = priorOverride.memory_sequence;
-      DATA_LOG.memory_sequence = priorOverride.memory_sequence.slice();
-    }
-    const ep = Number(priorOverride.elicitation_pref);
-    if (!isNaN(ep) && priorOverride.elicitation_pref !== null && priorOverride.elicitation_pref !== '') {
-      sStar = ep; sStarSet = true;
-    }
-  }
-
   _lastTick = Date.now();
   _sectionLastTick = Date.now();
   // Sync demo dropdown to the restored treatment.
   const sel = document.getElementById('demo-treatment-select');
   if (sel) sel.value = treatment;
-  showScreen(flow[flowPos]);
 }
 
 function clearResumeState(phase) {
@@ -1330,7 +1342,13 @@ function showScreen(idx) {
     document.getElementById('memory-sequence').textContent = MEMORY_SEQUENCE.join('  ');
   }
 
-  if (idx === 10) buildRecallOptions();
+  if (idx === 10) {
+    buildRecallOptions();
+    const warn = document.getElementById('recall-diag-warning');
+    if (warn) {
+      warn.style.display = (APP_DEMO_MODE && MEMORY_SEQUENCE_SOURCE === 'fallback') ? 'block' : 'none';
+    }
+  }
 
   // In demo mode, the treatment dropdown is only unlocked on the active
   // consent screen (screen 0 for Phase 1, screen 4 for Phase 2).
@@ -2260,7 +2278,7 @@ async function bootstrapAppInner_() {
   const showDemoPanel = demoMode >= 1;
   const demoPanel = document.getElementById('demo-switcher-panel');
   if (showDemoPanel) {
-    demoPanel.style.display = 'block';
+    demoPanel.style.display = 'flex';
     demoPanel.querySelectorAll('select, button').forEach(el => { el.disabled = false; });
   } else {
     demoPanel.style.display = 'none';
@@ -2271,6 +2289,7 @@ async function bootstrapAppInner_() {
     // Full demo: ignore STUDY_ID entirely, start Phase 1 fresh.
     DATA_LOG.app_phase = 'full';
     setTreatment('T1', 'full');
+    showScreen(flow[0]);
     return;
   }
 
@@ -2305,53 +2324,59 @@ async function bootstrapAppInner_() {
     return;
   }
 
-  // Restore in-progress session from the backend snapshot (works cross-device).
+  // Exactly one of these three paths determines the session state below.
+  // None of them call showScreen() themselves — see the single, unconditional
+  // call at the very end of this function, which is what guarantees the
+  // Phase-2 override always applies first, no matter which path ran.
   if (prior && prior.resume_phase === phase && prior.resume_snapshot) {
     console.log('[Study] Resuming from backend snapshot.');
-    restoreFromSnapshot(prior.resume_snapshot, phase === 'phase2' ? prior : null);
-    return;
+    restoreFromSnapshot(prior.resume_snapshot);
+  } else {
+    let restoredLocally = false;
+    try {
+      const localKey = 'taxstudy_resume_' + (pid || 'anon') + '_' + phase;
+      const raw = localStorage.getItem(localKey);
+      if (raw) {
+        console.log('[Study] Resuming from local snapshot.');
+        restoreFromSnapshot(JSON.parse(raw));
+        restoredLocally = true;
+      }
+    } catch (e) { /* ignore */ }
+
+    if (!restoredLocally) {
+      let assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
+      if (!assignedTreatment) {
+        assignedTreatment = sampleRandomTreatment();
+        if (phase === 'phase2') {
+          console.warn('[Study] No Phase 1 treatment found — random fallback assigned.');
+        }
+      }
+      setTreatment(assignedTreatment, phase);
+    }
   }
 
-  // Local snapshot fallback (same device, backend heartbeat may not have arrived yet).
-  try {
-    const localKey = 'taxstudy_resume_' + (pid || 'anon') + '_' + phase;
-    const raw = localStorage.getItem(localKey);
-    if (raw) {
-      console.log('[Study] Resuming from local snapshot.');
-      restoreFromSnapshot(JSON.parse(raw));
-      return;
-    }
-  } catch (e) { /* ignore */ }
-
-  // Genuinely new for this phase.
-  let assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
-  if (!assignedTreatment) {
-    assignedTreatment = sampleRandomTreatment();
-    if (phase === 'phase2') {
-      console.warn('[Study] No Phase 1 treatment found — random fallback assigned.');
-    }
-  }
-
-  setTreatment(assignedTreatment, phase);
-
-  // For Phase 2: restore sStar (elicitation preference from Phase 1) so the
-  // T2 recall overlay and T3 re-elicitation anchor are populated correctly.
-  // Also restore MEMORY_SEQUENCE — setTreatment() always generates a fresh
-  // random one, but Phase 2's recall task must quiz on the exact sequence
-  // shown in Phase 1, not a new one. Both must happen AFTER setTreatment,
-  // which resets/regenerates them.
+  // SINGLE, UNCONDITIONAL funnel point for Phase 2's authoritative data.
+  // Runs after every possible path above (backend-snapshot resume,
+  // local-snapshot resume, or a genuinely fresh session) and always BEFORE
+  // the one showScreen() call below — so the recall task and T2/T3 overlays
+  // can never render with stale or freshly-regenerated data, regardless of
+  // which path a given participant happened to take.
   if (phase === 'phase2' && prior) {
+    if (prior.memory_sequence) {
+      MEMORY_SEQUENCE = prior.memory_sequence;
+      DATA_LOG.memory_sequence = prior.memory_sequence.slice();
+      MEMORY_SEQUENCE_SOURCE = 'restored';
+    } else {
+      MEMORY_SEQUENCE_SOURCE = 'fallback';
+      console.warn('[MEMORY_SEQUENCE_FALLBACK] No Phase 1 memory sequence returned by the backend for this participant — the recall task will use a freshly-generated sequence the participant never actually saw. Check that the Apps Script deployment is up to date and that Phase 1 actually completed for this pid.');
+    }
     const ep = Number(prior.elicitation_pref);
     if (!isNaN(ep) && prior.elicitation_pref !== null && prior.elicitation_pref !== '') {
       sStar = ep; sStarSet = true;
     }
-    if (prior.memory_sequence) {
-      MEMORY_SEQUENCE = prior.memory_sequence;
-      DATA_LOG.memory_sequence = prior.memory_sequence.slice();
-    } else {
-      console.warn('[Study] No Phase 1 memory sequence found for this participant — recall task will use a freshly-generated sequence, which the participant never actually saw.');
-    }
   }
+
+  showScreen(flow[flowPos]);
 }
 
 window.onload = function() { bootstrapApp(); };
