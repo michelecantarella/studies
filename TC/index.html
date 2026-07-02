@@ -593,6 +593,7 @@
         <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
       </div>
     </details>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:10px;">⚠ Please allow pop-ups for this site — you'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="nextScreen()">I consent →</button>
       <button class="btn btn-secondary" onclick="prolificRedirect('phase1_noconsent')">I do not consent</button>
@@ -654,14 +655,14 @@
     <h1>Thank You</h1>
     <div class="card">
       <p>Thank you for completing <strong>this part of the study</strong>.</p>
-      <p style="margin-top:8px">You may now close this page. We will invite you to <strong>the second part of the study</strong> separately.</p>
+      <p style="margin-top:8px"><strong>Please wait to be redirected to Prolific</strong> to confirm your submission — this happens automatically in a new tab once your responses are saved. Once you see that page, you can close this one. We will invite you to <strong>the second part of the study</strong> separately.</p>
     </div>
     <div class="card" id="p1-save-status">
       <div id="p1-saving-row" style="display:flex; align-items:center; gap:10px;">
         <div style="width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:bootSpin 0.8s linear infinite; flex-shrink:0;"></div>
         <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);">Confirming your responses were saved…</span>
       </div>
-      <div id="p1-saved-row" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green);">✓ Your responses have been saved.</div>
+      <div id="p1-saved-row" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green);">✓ Your responses have been saved. Redirecting you to Prolific now — if nothing happens, your browser may have blocked the pop-up: <a href="#" onclick="prolificRedirect('phase1_complete'); return false;" style="color:var(--accent);">click here to continue</a>.</div>
       <div id="p1-error-row" style="display:none;">
         <p style="font-size:13px; color:var(--red); margin-bottom:8px;">We could not confirm your responses were saved. Nothing is lost yet — please try one of the options below.</p>
         <p style="font-size:11px; color:var(--muted); margin-bottom:10px;">Reference code: <strong id="p1-error-code" style="font-family:'IBM Plex Mono',monospace;"></strong></p>
@@ -692,6 +693,7 @@
         <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
       </div>
     </details>
+    <p style="font-size:12px; color:var(--muted); margin-bottom:10px;">⚠ Please allow pop-ups for this site — you'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="nextScreen()">I consent →</button>
       <button class="btn btn-secondary" onclick="prolificRedirect('phase2_noconsent')">I do not consent</button>
@@ -759,6 +761,18 @@
     <div class="card">
       <p>We couldn't find a record of you completing <strong>Part 1</strong> of this study.</p>
       <p style="margin-top:8px">Part 2 can only be completed after Part 1. If you believe this is an error, please contact the research team via Prolific and include your Prolific ID.</p>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 16: CONNECTION PROBLEM (backend unreachable, no safe fallback) ===================== -->
+  <div class="screen" id="screen-16">
+    <h1>Connection problem</h1>
+    <div class="card">
+      <p>We couldn't reach our server to check your study status. To make sure we never overwrite any progress you've already made, we won't continue automatically.</p>
+      <p style="margin-top:8px">Please check your internet connection and try again in a moment.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="retryBootstrap()">Try again →</button>
     </div>
   </div>
 
@@ -845,14 +859,14 @@
         <div class="outcome-card"><div class="stat-label">Your final payment (under your split)</div><div class="stat-value" style="margin-top:6px" id="final-payment">$2.00</div></div>
         <div class="outcome-card"><div class="stat-label">Reward for performance you chose</div><div class="stat-value" style="margin-top:6px" id="out-giving">—</div></div>
       </div>
-      <p style="color:var(--muted); font-size:13px; margin-top:16px;">Thank you for your participation. Your responses have been recorded. Your bonus payment will be processed once everyone in your group of 10 has completed the study — at that point, <strong>one participant's chosen split is selected at random and applied to the whole group</strong>. Please return to Prolific to confirm your participation.</p>
+      <p style="color:var(--muted); font-size:13px; margin-top:16px;">Thank you for your participation. Your responses have been recorded. Your bonus payment will be processed once everyone in your group of 10 has completed the study — at that point, <strong>one participant's chosen split is selected at random and applied to the whole group</strong>. <strong>Please wait to be redirected to Prolific</strong> to confirm your participation — this happens automatically in a new tab once your responses are saved. Once you see that page, you can close this one.</p>
     </div>
     <div class="card" id="p2-save-status">
       <div id="p2-saving-row" style="display:flex; align-items:center; gap:10px;">
         <div style="width:16px; height:16px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:bootSpin 0.8s linear infinite; flex-shrink:0;"></div>
         <span style="font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--muted);">Confirming your responses were saved…</span>
       </div>
-      <div id="p2-saved-row" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green);">✓ Your responses have been saved.</div>
+      <div id="p2-saved-row" style="display:none; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--green);">✓ Your responses have been saved. Redirecting you to Prolific now — if nothing happens, your browser may have blocked the pop-up: <a href="#" onclick="prolificRedirect('phase2_complete'); return false;" style="color:var(--accent);">click here to continue</a>.</div>
       <div id="p2-error-row" style="display:none;">
         <p style="font-size:13px; color:var(--red); margin-bottom:8px;">We could not confirm your responses were saved. Nothing is lost yet — please try one of the options below.</p>
         <p style="font-size:11px; color:var(--muted); margin-bottom:10px;">Reference code: <strong id="p2-error-code" style="font-family:'IBM Plex Mono',monospace;"></strong></p>
@@ -1225,11 +1239,25 @@ function buildSnapshot_() {
   };
 }
 
-function saveResumeState() {
+// Tracks the JSON of the last snapshot actually sent to the backend, so the
+// periodic heartbeat (see setInterval below) can skip itself when nothing
+// has changed since the last save — e.g. a participant reading a long
+// consent screen with no interaction. Real screen transitions (showScreen ->
+// saveResumeState(false)) NEVER dedupe — every "page clear" always saves,
+// unconditionally, regardless of this cache. Only the timer-driven safety
+// net is throttled, since that's the one firing repeatedly with no new
+// information in the idle case.
+let _lastSavedSnapshotJson = null;
+
+function saveResumeState(isHeartbeat) {
   const snapshot = buildSnapshot_();
+  const snapshotJson = JSON.stringify(snapshot);
+  if (isHeartbeat && snapshotJson === _lastSavedSnapshotJson) return; // nothing new — skip the network call entirely
+  _lastSavedSnapshotJson = snapshotJson;
+
   try {
     const pid = DATA_LOG.prolific_pid || 'anon';
-    localStorage.setItem('taxstudy_resume_' + pid + '_' + APP_PHASE, JSON.stringify(snapshot));
+    localStorage.setItem('taxstudy_resume_' + pid + '_' + APP_PHASE, snapshotJson);
   } catch (e) { /* ignore */ }
 
   // Best-effort heartbeat to the backend so resume works from any device.
@@ -1255,14 +1283,15 @@ const TERMINAL_SCREEN_IDXS = [9, 12, 14, 15];
 // participant's attention for a long time with no screen transition at all
 // (the real-effort task, a slider they're deliberating over) — a heartbeat
 // only on transitions would leave a large gap unsaved if they close the tab
-// mid-screen. This periodic tick covers that gap without adding meaningful
-// load, since 'progress' heartbeats are cheap, idempotent upserts.
+// mid-screen. This periodic tick covers that gap. isHeartbeat=true lets
+// saveResumeState skip the network call entirely when nothing has actually
+// changed since the last save (see _lastSavedSnapshotJson above).
 setInterval(() => {
   if (document.visibilityState !== 'visible') return;
   if (!DATA_LOG.prolific_pid) return; // bootstrap hasn't run yet
   if (TERMINAL_SCREEN_IDXS.includes(_currentScreenIdx)) return;
-  saveResumeState();
-}, 20000);
+  saveResumeState(true);
+}, 25000);
 
 // Restores all session state from a snapshot object (same shape produced by
 // buildSnapshot_ / saved by the backend's "progress" action) and jumps to the
@@ -1315,6 +1344,23 @@ function showPhase2ErrorScreen() {
   document.getElementById('screen-15').classList.add('active');
   document.getElementById('progressFill').style.width = '0%';
   document.getElementById('stepDots').innerHTML = '';
+}
+
+// Shown only when the backend could not be reached at all after retries AND
+// there was no local snapshot safe to resume from — i.e. we genuinely do
+// not know this participant's real state. Deliberately does NOT start a
+// fresh session; that's the whole point (see lookupPriorResponse).
+function showConnectionErrorScreen() {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById('screen-16').classList.add('active');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('stepDots').innerHTML = '';
+}
+
+function retryBootstrap() {
+  const overlay = document.getElementById('boot-loading-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  bootstrapApp();
 }
 
 // Study-2 status is determined by POSITION in the flow array relative to the
@@ -2130,68 +2176,94 @@ function prolificRedirect(codeKey) {
 // Paste the deployed web app URL here (Deploy > New deployment > Web app,
 // "Execute as: Me", "Who has access: Anyone"). It will look like:
 //   https://script.google.com/macros/s/AKfycb.../exec
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzFUc_WX5TFCbkRDNqD__DRYHUyXIagh5hCAwurd6l73k_pHpGxjVVHnZSjuZCMveEb/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwQpfiRruklbgnW4hyhk4kuHw6HhB4JUCmywwtm6mIUnWxXixn8vRI-w06z7oJpTWzG/exec';
 
 function backendConfigured_() {
   return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
 }
 
 // Looks up whether this Prolific ID already has a record, and if so, what
-// treatment they were assigned and whether Phase 1 is complete. Returns null
-// on any failure (network error, backend not configured yet, etc.) so the
-// app can fall back to treating the participant as new.
+// treatment they were assigned and whether Phase 1 is complete.
 // Raw diagnostic capture from the most recent backend lookup — surfaced
 // directly on the recall screen in demo mode (see showScreen idx===10),
 // so the actual data pipeline is visible on screen instead of requiring
 // devtools or cross-referencing separate screenshots.
 let LAST_LOOKUP_DIAG = { pid: null, found: null, raw_memory_sequence: null, parse_error: null };
 
-async function lookupPriorResponse(pid) {
-  if (!pid || !backendConfigured_()) return null;
-  try {
-    const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
-    const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
-    if (!resp.ok) {
-      LAST_LOOKUP_DIAG = { pid, found: 'HTTP ' + resp.status, raw_memory_sequence: null, parse_error: null };
-      return null;
-    }
-    const json = await resp.json();
-    LAST_LOOKUP_DIAG = {
-      pid,
-      found: json.found,
-      raw_memory_sequence: json.memory_sequence != null ? String(json.memory_sequence) : null,
-      parse_error: null
-    };
-    if (!json.found) return null;
-    let memSeq = null;
-    if (json.memory_sequence) {
-      try {
-        // Defensive Unicode normalization: if the value round-tripped through
-        // Google Sheets, some emoji sequences (variation selectors, ZWJ
-        // sequences) can come back in a different (but visually identical)
-        // normalization form, which would silently break exact-string
-        // matching against MEMORY_EMOJI_POOL further down the pipeline.
-        memSeq = JSON.parse(json.memory_sequence).map(e => (typeof e === 'string' ? e.normalize('NFC') : e));
-      } catch (e) {
-        memSeq = null;
-        LAST_LOOKUP_DIAG.parse_error = String(e);
-      }
-    }
-    return {
-      treatment: json.treatment || null,
-      phase1_complete: !!json.phase1_complete,
-      phase2_complete: !!json.phase2_complete,
-      resume_phase: json.resume_phase || null,
-      resume_snapshot: json.resume_snapshot || null,
-      elicitation_pref: json.elicitation_pref != null ? json.elicitation_pref : null,
-      reelicitation_pref: json.reelicitation_pref != null ? json.reelicitation_pref : null,
-      memory_sequence: memSeq   // the actual array shown in Phase 1, or null
-    };
-  } catch (e) {
-    LAST_LOOKUP_DIAG = { pid, found: 'ERROR', raw_memory_sequence: null, parse_error: String(e) };
-    console.warn('[Study] Backend lookup failed — defaulting as a new Phase 1 participant.', e);
-    return null;
+// Single attempt. Throws on any failure (network error, non-2xx, bad JSON)
+// so the retrying wrapper below can distinguish "backend confirmed no
+// record" (a legitimate, safe null) from "we don't actually know" (a
+// failure that must NEVER be treated the same as a confirmed null).
+async function lookupPriorResponseAttempt_(pid) {
+  const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
+  const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+  if (!resp.ok) {
+    LAST_LOOKUP_DIAG = { pid, found: 'HTTP ' + resp.status, raw_memory_sequence: null, parse_error: null };
+    throw new Error('HTTP ' + resp.status);
   }
+  const json = await resp.json();
+  LAST_LOOKUP_DIAG = {
+    pid,
+    found: json.found,
+    raw_memory_sequence: json.memory_sequence != null ? String(json.memory_sequence) : null,
+    parse_error: null
+  };
+  if (!json.found) return null; // confirmed by the backend: genuinely no record yet — safe
+  let memSeq = null;
+  if (json.memory_sequence) {
+    try {
+      // Defensive Unicode normalization: if the value round-tripped through
+      // Google Sheets, some emoji sequences (variation selectors, ZWJ
+      // sequences) can come back in a different (but visually identical)
+      // normalization form, which would silently break exact-string
+      // matching against MEMORY_EMOJI_POOL further down the pipeline.
+      memSeq = JSON.parse(json.memory_sequence).map(e => (typeof e === 'string' ? e.normalize('NFC') : e));
+    } catch (e) {
+      memSeq = null;
+      LAST_LOOKUP_DIAG.parse_error = String(e);
+    }
+  }
+  return {
+    treatment: json.treatment || null,
+    phase1_complete: !!json.phase1_complete,
+    phase2_complete: !!json.phase2_complete,
+    resume_phase: json.resume_phase || null,
+    resume_snapshot: json.resume_snapshot || null,
+    elicitation_pref: json.elicitation_pref != null ? json.elicitation_pref : null,
+    reelicitation_pref: json.reelicitation_pref != null ? json.reelicitation_pref : null,
+    memory_sequence: memSeq   // the actual array shown in Phase 1, or null
+  };
+}
+
+// Retries transient failures (slow/warming-up deployment, dropped request,
+// bad JSON) before giving up. Returns { ok, prior }:
+//   ok=true,  prior=null|{...}  — a CONFIRMED answer from the backend.
+//                                  prior may legitimately be null (genuinely
+//                                  new pid) — that's safe to act on.
+//   ok=false, prior=null        — the backend could not be reached at all
+//                                  after retries. The caller must NEVER
+//                                  treat this the same as "confirmed new" —
+//                                  doing so is exactly what risks silently
+//                                  overwriting a real completed response
+//                                  with a freshly-generated one. See
+//                                  bootstrapAppInner_ for how this is used.
+const LOOKUP_MAX_ATTEMPTS = 3;
+async function lookupPriorResponse(pid) {
+  if (!pid || !backendConfigured_()) return { ok: true, prior: null };
+  let lastErr = null;
+  for (let attempt = 1; attempt <= LOOKUP_MAX_ATTEMPTS; attempt++) {
+    try {
+      const prior = await lookupPriorResponseAttempt_(pid);
+      return { ok: true, prior };
+    } catch (e) {
+      lastErr = e;
+      console.warn('[Study] Backend lookup attempt ' + attempt + '/' + LOOKUP_MAX_ATTEMPTS + ' failed.', e);
+      if (attempt < LOOKUP_MAX_ATTEMPTS) await new Promise(r => setTimeout(r, 700 * attempt));
+    }
+  }
+  LAST_LOOKUP_DIAG = { pid, found: 'ERROR', raw_memory_sequence: null, parse_error: String(lastErr) };
+  console.error('[Study] Backend lookup failed after ' + LOOKUP_MAX_ATTEMPTS + ' attempts — refusing to proceed as a new participant.', lastErr);
+  return { ok: false, prior: null };
 }
 
 // Fire-and-forget style POST, but awaited so callers can choose to wait for
@@ -2303,6 +2375,24 @@ async function completeStudyPhase(targetIdx) {
   }
 }
 
+// Attempts to resume from a same-device localStorage snapshot for the given
+// pid+phase. Safe by construction: it only ever restores real prior state
+// that this browser itself saved, never fabricates anything. Used both in
+// the normal resume path and as the fallback when the backend lookup fails
+// outright (see bootstrapAppInner_).
+function tryResumeFromLocalSnapshot_(pid, phase) {
+  try {
+    const localKey = 'taxstudy_resume_' + (pid || 'anon') + '_' + phase;
+    const raw = localStorage.getItem(localKey);
+    if (raw) {
+      console.log('[Study] Resuming from local snapshot (' + phase + ').');
+      restoreFromSnapshot(JSON.parse(raw));
+      return true;
+    }
+  } catch (e) { /* ignore */ }
+  return false;
+}
+
 function hideBootOverlay_() {
   const el = document.getElementById('boot-loading-overlay');
   if (el) el.style.display = 'none';
@@ -2349,9 +2439,35 @@ async function bootstrapAppInner_() {
     return;
   }
 
-  // Single backend lookup — overlay stays up (blocking all clicks) for the
-  // entire duration of this await, preventing any race with the consent button.
-  const prior = await lookupPriorResponse(pid);
+  // Single backend lookup (now internally retried, see lookupPriorResponse)
+  // — overlay stays up (blocking all clicks) for the entire duration of this
+  // await, preventing any race with the consent button.
+  const lookupResult = await lookupPriorResponse(pid);
+  const prior = lookupResult.prior;
+
+  // GUARD: if the backend could not be reached at all after retries, we do
+  // NOT know this participant's real state — in particular we don't know if
+  // they already have a completed Phase 1 (or Phase 2) response. Silently
+  // proceeding as if they were new is exactly what can overwrite a real
+  // completed record with freshly-generated data. So: try a same-device
+  // local snapshot first (safe — resumes real prior state, invents nothing),
+  // and only if that's unavailable too, stop and ask the participant to
+  // retry rather than guessing.
+  if (!lookupResult.ok) {
+    const candidatePhases = STUDY_ID_ALIASES_PHASE2.includes(studyId) ? ['phase2', 'phase1']
+                           : STUDY_ID_ALIASES_PHASE1.includes(studyId) ? ['phase1', 'phase2']
+                           : ['phase1', 'phase2'];
+    let resumed = false;
+    for (const ph of candidatePhases) {
+      if (tryResumeFromLocalSnapshot_(pid, ph)) { resumed = true; break; }
+    }
+    if (resumed) {
+      showScreen(flow[flowPos]);
+      return;
+    }
+    showConnectionErrorScreen();
+    return;
+  }
 
   let phase;
   if (STUDY_ID_ALIASES_PHASE1.includes(studyId)) {
@@ -2388,16 +2504,7 @@ async function bootstrapAppInner_() {
     console.log('[Study] Resuming from backend snapshot.');
     restoreFromSnapshot(prior.resume_snapshot);
   } else {
-    let restoredLocally = false;
-    try {
-      const localKey = 'taxstudy_resume_' + (pid || 'anon') + '_' + phase;
-      const raw = localStorage.getItem(localKey);
-      if (raw) {
-        console.log('[Study] Resuming from local snapshot.');
-        restoreFromSnapshot(JSON.parse(raw));
-        restoredLocally = true;
-      }
-    } catch (e) { /* ignore */ }
+    const restoredLocally = tryResumeFromLocalSnapshot_(pid, phase);
 
     if (!restoredLocally) {
       let assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
