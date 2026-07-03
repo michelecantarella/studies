@@ -764,11 +764,11 @@
     </div>
   </div>
 
-  <!-- ===================== SCREEN 16: CONNECTION PROBLEM (backend unreachable, no safe fallback) ===================== -->
+  <!-- ===================== SCREEN 16: CONNECTION / DATA-INTEGRITY PROBLEM (no safe fallback) ===================== -->
   <div class="screen" id="screen-16">
-    <h1>Connection problem</h1>
+    <h1>Something needs a second try</h1>
     <div class="card">
-      <p>We couldn't reach our server to check your study status. To make sure we never overwrite any progress you've already made, we won't continue automatically.</p>
+      <p id="screen16-message">We couldn't reach our server to check your study status. To make sure we never overwrite any progress you've already made, we won't continue automatically.</p>
       <p style="margin-top:8px">Please check your internet connection and try again in a moment.</p>
     </div>
     <div class="btn-row">
@@ -1183,6 +1183,18 @@ function demoTreatmentChanged_(value) {
     console.warn('[Study] Ignored stray treatment-change event outside demo mode.');
     return;
   }
+  // Phase 2 must ALWAYS inherit its treatment from Phase 1 — it can never
+  // be reassigned, not even in demo mode. This guard exists specifically
+  // because a <select>'s value can be restored by browser autofill/bfcache
+  // on reload or back-navigation, independent of anything the participant
+  // does, which would otherwise silently fire this handler and corrupt a
+  // real assignment. Any stray event here is reverted, not acted on.
+  if (APP_PHASE === 'phase2') {
+    console.warn('[Study] Ignored treatment-change event during Phase 2 — treatment must be inherited, never reassigned. Reverting dropdown to the actual assigned treatment (' + treatment + ').');
+    const sel = document.getElementById('demo-treatment-select');
+    if (sel) sel.value = treatment;
+    return;
+  }
   setTreatment(value, APP_PHASE || 'full');
   showScreen(flow[0]);
 }
@@ -1346,13 +1358,17 @@ function showPhase2ErrorScreen() {
   document.getElementById('stepDots').innerHTML = '';
 }
 
-// Shown only when the backend could not be reached at all after retries AND
-// there was no local snapshot safe to resume from — i.e. we genuinely do
-// not know this participant's real state. Deliberately does NOT start a
-// fresh session; that's the whole point (see lookupPriorResponse).
-function showConnectionErrorScreen() {
+// Shown when we cannot safely proceed: either the backend was unreachable
+// after retries with no local snapshot to fall back on, or the backend
+// responded but the data was inconsistent in a way we must not guess past
+// (e.g. Phase 1 marked complete with no treatment returned). Deliberately
+// does NOT start a fresh session in either case — that's the whole point.
+const DEFAULT_CONNECTION_ERROR_MSG = "We couldn't reach our server to check your study status. To make sure we never overwrite any progress you've already made, we won't continue automatically.";
+function showConnectionErrorScreen(message) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   document.getElementById('screen-16').classList.add('active');
+  const msgEl = document.getElementById('screen16-message');
+  if (msgEl) msgEl.textContent = message || DEFAULT_CONNECTION_ERROR_MSG;
   document.getElementById('progressFill').style.width = '0%';
   document.getElementById('stepDots').innerHTML = '';
 }
@@ -1419,14 +1435,16 @@ function showScreen(idx) {
     }
   }
 
-  // In demo mode, the treatment dropdown is only unlocked on the active
-  // consent screen (screen 0 for Phase 1, screen 4 for Phase 2).
-  // Everywhere else it's disabled and visually greyed out, so you can still
-  // read which treatment was assigned but can't accidentally change it mid-flow.
+  // In demo mode, the treatment dropdown is only unlocked at the very start
+  // (screen 0, before Phase 1 begins). It's deliberately locked at screen 4
+  // (Phase 2 consent) too, even though that used to be an unlock point —
+  // Phase 2 must always INHERIT its treatment from Phase 1, never let it be
+  // reassigned, so there is no point in the flow after screen 0 where
+  // changing it is ever a legitimate action (see demoTreatmentChanged_).
   if (APP_DEMO_MODE) {
     const sel = document.getElementById('demo-treatment-select');
     if (sel) {
-      const onConsent = (idx === 0 || idx === 4);
+      const onConsent = (idx === 0);
       sel.disabled = !onConsent;
       sel.style.opacity = onConsent ? '1' : '0.5';
       sel.style.cursor  = onConsent ? 'pointer' : 'not-allowed';
@@ -2190,13 +2208,31 @@ function backendConfigured_() {
 // devtools or cross-referencing separate screenshots.
 let LAST_LOOKUP_DIAG = { pid: null, found: null, raw_memory_sequence: null, parse_error: null };
 
-// Single attempt. Throws on any failure (network error, non-2xx, bad JSON)
-// so the retrying wrapper below can distinguish "backend confirmed no
-// record" (a legitimate, safe null) from "we don't actually know" (a
+// Wraps fetch() with a hard timeout via AbortController. Without this, a
+// slow/hung request (common right after a fresh Apps Script deployment,
+// which needs a warm-up window) can sit for a very long time — much longer
+// than a browser's own default — before the retry logic even gets a chance
+// to try again. Bounding each attempt makes total wait time predictable:
+// worst case is roughly ATTEMPTS × TIMEOUT_MS, not "however long the network
+// feels like."
+async function fetchWithTimeout_(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, Object.assign({}, options, { signal: controller.signal }));
+  } finally {
+    clearTimeout(timer);
+  }
+}
+const LOOKUP_TIMEOUT_MS = 8000;
+
+// Single attempt. Throws on any failure (network error, non-2xx, bad JSON,
+// timeout) so the retrying wrapper below can distinguish "backend confirmed
+// no record" (a legitimate, safe null) from "we don't actually know" (a
 // failure that must NEVER be treated the same as a confirmed null).
 async function lookupPriorResponseAttempt_(pid) {
   const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
-  const resp = await fetch(url, { method: 'GET', cache: 'no-store' });
+  const resp = await fetchWithTimeout_(url, { method: 'GET', cache: 'no-store' }, LOOKUP_TIMEOUT_MS);
   if (!resp.ok) {
     LAST_LOOKUP_DIAG = { pid, found: 'HTTP ' + resp.status, raw_memory_sequence: null, parse_error: null };
     throw new Error('HTTP ' + resp.status);
@@ -2280,12 +2316,12 @@ async function postToBackend_(payload, maxAttempts) {
   }
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
-      const resp = await fetch(BACKEND_URL, {
+      const resp = await fetchWithTimeout_(BACKEND_URL, {
         method: 'POST',
         // text/plain avoids a CORS preflight against Apps Script's doPost
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify(payload)
-      });
+      }, 10000);
       const json = await resp.json();
       if (json.ok) return true;
       console.warn('[Study] Backend reported an error on submission (attempt ' + attempt + '/' + maxAttempts + ').', json);
@@ -2507,14 +2543,29 @@ async function bootstrapAppInner_() {
     const restoredLocally = tryResumeFromLocalSnapshot_(pid, phase);
 
     if (!restoredLocally) {
-      let assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
+      const assignedTreatment = (prior && prior.treatment) ? prior.treatment : null;
+
       if (!assignedTreatment) {
-        assignedTreatment = sampleRandomTreatment();
         if (phase === 'phase2') {
-          console.warn('[Study] No Phase 1 treatment found — random fallback assigned.');
+          // CRITICAL: Phase 2 must NEVER fabricate a treatment. A missing
+          // treatment here means Phase 1 is marked complete but the
+          // backend didn't hand back the arm that was actually assigned —
+          // that's a data-integrity failure (stale/incomplete write, a
+          // lookup that hit the row mid-write, etc.), not a "just pick
+          // one" situation. Randomly assigning here is exactly what
+          // silently corrupted a participant's condition before. Hard
+          // stop and let the participant/researcher retry instead.
+          console.error('[Study] Phase 1 is marked complete but no treatment was returned by the backend — refusing to fabricate one for Phase 2.');
+          showConnectionErrorScreen('We could not confirm which study condition you were assigned in Part 1. To make sure you\'re not recorded under the wrong condition, we\'ve stopped here rather than guess — please try again in a moment.');
+          return;
         }
+        // Phase 1, genuinely new participant: random assignment is correct
+        // and intended here — this is the only place a new treatment
+        // should ever be sampled.
+        setTreatment(sampleRandomTreatment(), phase);
+      } else {
+        setTreatment(assignedTreatment, phase);
       }
-      setTreatment(assignedTreatment, phase);
     }
   }
 
