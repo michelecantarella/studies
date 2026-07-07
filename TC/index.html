@@ -569,31 +569,6 @@
     margin-bottom: 10px;
   }
   .grid-outer { display: flex; justify-content: center; margin: 8px 0; overflow-x: auto; }
-  .grid-box { border: 1px solid var(--border); padding: 10px; background: var(--surface); display: inline-block; }
-  .grow-el { display: flex; gap: 4px; margin-bottom: 4px; }
-  .grow-el:last-child { margin-bottom: 0; }
-  .ecell {
-    width: 34px; height: 34px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: 19px;
-    border: 1px solid var(--border);
-    background: var(--bg);
-    border-radius: 3px;
-    cursor: default;
-    line-height: 1;
-    user-select: none;
-    transition: background 0.08s, border-color 0.08s;
-  }
-  .ecell.ph { color: #ccc; font-size: 12px; }
-  .ecell.live { cursor: pointer; background: var(--surface); }
-  .ecell.live::before { content: attr(data-e); }
-  .ecell.live:hover { border-color: var(--accent); }
-  .ecell.selected { background: rgba(26,74,122,0.85); border-color: var(--accent); }
-  @keyframes wrongFlash {
-    0%, 100% { background: rgba(196,26,26,0.9); border-color: #c41a1a; }
-    50% { background: rgba(196,26,26,0.3); border-color: #c41a1a; }
-  }
-  .ecell.wrong-flash { animation: wrongFlash 0.18s ease-in-out 3; }
   .task-progress {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 13px;
@@ -740,7 +715,7 @@
 
   <!-- ===================== SCREEN 2: ELICITATION (all — general opinion, deliberately NOT about the participant's own upcoming task) ===================== -->
   <div class="screen" id="screen-2">
-    <h1 id="elicit-h1">How should rewards be distributed?</h1>
+    <h1 id="elicit-h1">How should luck-based rewards be distributed?</h1>
     <div class="card" id="elicit-card-body">
       <!-- filled dynamically from phase1Cond by JS (see showScreen idx===2) -->
     </div>
@@ -936,7 +911,7 @@
     <div class="card">
       <div class="task-instr" id="task-status-row" style="display:none;">Find: <span id="task-target-display2" style="font-size:24px;">❓</span> &nbsp;·&nbsp; Found: <span id="task-found-count">0</span> &nbsp;·&nbsp; <span id="task-countdown">0:45</span></div>
       <div class="grid-outer">
-        <div class="grid-box" id="task-grid"></div>
+        <canvas id="task-canvas" width="586" height="586" style="border:1px solid var(--border); background:var(--surface); border-radius:2px; touch-action:manipulation;"></canvas>
       </div>
       <div style="display:flex; justify-content:center; margin-top:14px;" id="task-ready-row">
         <button class="btn btn-primary" id="task-ready-btn" onclick="startTaskCountdown()">Ready →</button>
@@ -971,7 +946,7 @@
 
   <!-- ===================== SCREEN 8: REDISTRIBUTION DECISION (all — framed by phase3Cond) ===================== -->
   <div class="screen" id="screen-8">
-    <h1>How should rewards be distributed?</h1>
+    <h1 id="giving-h1">How should rewards be distributed?</h1>
     <div class="card">
       <div class="card-title">Your decision</div>
       <div id="giving-card-body-text">
@@ -1722,6 +1697,10 @@ function showScreen(idx) {
     document.getElementById('elicit-nopref-msg').textContent = '';
     document.getElementById('elicit-nopref-btn').style.display = '';
 
+    document.getElementById('elicit-h1').textContent = phase1Cond === 'C'
+      ? 'How should luck-based rewards be distributed?'
+      : 'How should performance-based rewards be distributed?';
+
     // Condition-dependent body text (phase1Cond). Deliberately phrased as a
     // GENERAL opinion question ("people taking part in studies", not "in
     // this study" and not "for this task") — this elicitation is meant to
@@ -1850,6 +1829,9 @@ function showScreen(idx) {
   }
 
   if (idx === 8) {
+    document.getElementById('giving-h1').textContent = phase3Cond === 'C'
+      ? 'How should luck-based rewards be distributed?'
+      : 'How should performance-based rewards be distributed?';
     const bodyText = document.getElementById('giving-card-body-text');
     const preamble = document.getElementById('giving-preamble');
     const anchorItem = document.getElementById('anchor-legend-item');
@@ -2229,10 +2211,99 @@ function buildGridTask() {
   }
 }
 
-function getTaskCellEl(i) {
+// ============================================================
+// CANVAS-BASED GRID RENDERING
+// The grid is drawn on a single <canvas>, not DOM elements. This is
+// deliberate: canvas pixels have no text or accessibility representation
+// at all, so browser Find-in-page (Ctrl+F) cannot match them under any
+// circumstance — unlike the previous DOM+CSS-content approach, which
+// relied on browsers not searching ::before generated content. That
+// assumption doesn't hold reliably across all browsers/versions, which is
+// why it was replaced.
+// ============================================================
+const CELL_SIZE = 34, CELL_GAP = 4, GRID_PAD = 10;
+const CANVAS_SIZE = GRID_PAD * 2 + GRID_COLS * CELL_SIZE + (GRID_COLS - 1) * CELL_GAP;
+
+let taskCanvasCtx = null;
+let taskRevealedCount = 0; // how many cells (in reveal order 0..GRID_TOTAL) are currently drawn as visible
+
+function cellRect_(i) {
   const r = Math.floor(i / GRID_COLS), c = i % GRID_COLS;
-  const row = document.getElementById('taskrow' + r);
-  return row ? row.children[c] : null;
+  return { x: GRID_PAD + c * (CELL_SIZE + CELL_GAP), y: GRID_PAD + r * (CELL_SIZE + CELL_GAP) };
+}
+
+function roundRectPath_(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+// state: 'hidden' | 'live' | 'selected' | 'wrong'
+function drawCell_(i, state) {
+  if (!taskCanvasCtx) return;
+  const { x, y } = cellRect_(i);
+  const ctx = taskCanvasCtx;
+  ctx.clearRect(x - 1, y - 1, CELL_SIZE + 2, CELL_SIZE + 2);
+  let bg = '#f5f2eb', border = '#d4cfc4'; // --bg / --border defaults (hidden/live)
+  if (state === 'selected') { bg = 'rgba(26,74,122,0.85)'; border = '#1a3a5c'; }
+  else if (state === 'wrong') { bg = 'rgba(196,26,26,0.9)'; border = '#c41a1a'; }
+  else if (state === 'live') { bg = '#ffffff'; border = '#d4cfc4'; }
+  ctx.fillStyle = bg;
+  ctx.strokeStyle = border;
+  ctx.lineWidth = 1;
+  roundRectPath_(ctx, x, y, CELL_SIZE, CELL_SIZE, 3);
+  ctx.fill(); ctx.stroke();
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  if (state === 'hidden') {
+    ctx.font = '12px IBM Plex Mono, monospace';
+    ctx.fillStyle = '#cccccc';
+    ctx.fillText('·', x + CELL_SIZE / 2, y + CELL_SIZE / 2 + 1);
+  } else {
+    ctx.font = '19px IBM Plex Mono, monospace';
+    ctx.fillStyle = '#000000';
+    ctx.fillText(taskGridEmojis[i], x + CELL_SIZE / 2, y + CELL_SIZE / 2 + 1);
+  }
+}
+
+function drawFullGridHidden_() {
+  if (!taskCanvasCtx) return;
+  taskCanvasCtx.clearRect(0, 0, CANVAS_SIZE, CANVAS_SIZE);
+  for (let i = 0; i < GRID_TOTAL; i++) drawCell_(i, 'hidden');
+}
+
+function onTaskCanvasClick_(evt) {
+  const canvas = document.getElementById('task-canvas');
+  const rect = canvas.getBoundingClientRect();
+  // Canvas backing size (586x586) may render at a different CSS size on
+  // narrow viewports — scale click coordinates accordingly.
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (evt.clientX - rect.left) * scaleX;
+  const y = (evt.clientY - rect.top) * scaleY;
+  const col = Math.floor((x - GRID_PAD) / (CELL_SIZE + CELL_GAP));
+  const row = Math.floor((y - GRID_PAD) / (CELL_SIZE + CELL_GAP));
+  if (row < 0 || row >= GRID_ROWS || col < 0 || col >= GRID_COLS) return;
+  const i = row * GRID_COLS + col;
+  if (i >= taskRevealedCount) return; // not revealed yet — no-op
+  const { x: cx, y: cy } = cellRect_(i);
+  if (x < cx || x > cx + CELL_SIZE || y < cy || y > cy + CELL_SIZE) return; // click landed in the gap, not a cell
+
+  if (taskTargetPositions.has(i)) {
+    if (taskSelected.has(i)) { taskSelected.delete(i); drawCell_(i, 'live'); }
+    else { taskSelected.add(i); drawCell_(i, 'selected'); }
+    updateFoundDisplay();
+  } else {
+    // wrong cell: flash red, never persists as selected — recorded anyway
+    taskWrongClicks++;
+    drawCell_(i, 'wrong');
+    setTimeout(() => drawCell_(i, taskSelected.has(i) ? 'selected' : 'live'), 180);
+  }
 }
 
 function updateFoundDisplay() {
@@ -2246,33 +2317,10 @@ function formatCountdown(ms) {
   return m + ':' + String(s).padStart(2, '0');
 }
 
-// Reveal a single cell: show its emoji and wire up its click handler.
-function revealCellAt(i) {
-  const cell = getTaskCellEl(i);
-  if (!cell) return;
-  cell.classList.remove('ph'); cell.classList.add('live');
-  cell.textContent = '';            // cleared — emoji rendered via CSS ::before
-  cell.dataset.e = taskGridEmojis[i]; // browser Ctrl+F doesn't search data attrs or CSS content
-  cell.onclick = () => {
-    if (taskTargetPositions.has(i)) {
-      if (taskSelected.has(i)) {
-        taskSelected.delete(i); cell.classList.remove('selected');
-      } else {
-        taskSelected.add(i); cell.classList.add('selected');
-      }
-      updateFoundDisplay();
-    } else {
-      // wrong cell: flash red, never persists as selected — recorded anyway
-      taskWrongClicks++;
-      cell.classList.add('wrong-flash');
-      setTimeout(() => cell.classList.remove('wrong-flash'), 550);
-    }
-  };
-}
-
-// Builds the grid DOM with every cell as an unrevealed placeholder ("·").
-// Called on screen entry — the grid is visibly empty while the participant
-// reads the instructions, and stays that way until "Ready" is pressed.
+// Sets up the canvas and draws every cell as an unrevealed placeholder
+// ("·"). Called on screen entry — the grid is visibly empty while the
+// participant reads the instructions, and stays that way until "Ready" is
+// pressed.
 function initGridTask() {
   taskRevealTimers.forEach(t => clearTimeout(t));
   taskRevealTimers = [];
@@ -2281,6 +2329,7 @@ function initGridTask() {
   taskWrongClicks = 0;
   taskStartTime = 0;
   taskGridFullyRevealed = false;
+  taskRevealedCount = 0;
 
   buildGridTask();
   document.getElementById('task-target-display').textContent = taskTarget;
@@ -2291,18 +2340,10 @@ function initGridTask() {
   document.getElementById('task-status-row').style.display = 'none';
   document.getElementById('task-ready-row').style.display = 'flex';
 
-  const gridEl = document.getElementById('task-grid');
-  gridEl.innerHTML = '';
-  for (let r = 0; r < GRID_ROWS; r++) {
-    const row = document.createElement('div');
-    row.className = 'grow-el'; row.id = 'taskrow' + r;
-    for (let c = 0; c < GRID_COLS; c++) {
-      const cell = document.createElement('div');
-      cell.className = 'ecell ph'; cell.textContent = '·';
-      row.appendChild(cell);
-    }
-    gridEl.appendChild(row);
-  }
+  const canvas = document.getElementById('task-canvas');
+  taskCanvasCtx = canvas.getContext('2d');
+  canvas.onclick = onTaskCanvasClick_; // reassigned (not added) each entry — never stacks duplicate handlers
+  drawFullGridHidden_();
   // Deliberately NOT scheduling the reveal or countdown here — see
   // startTaskCountdown(), fired only by the "Ready" button.
 }
@@ -2313,7 +2354,8 @@ function scheduleGridReveal() {
   for (let i = 0; i < GRID_TOTAL; i++) {
     const _i = i;
     const t = setTimeout(() => {
-      revealCellAt(_i);
+      taskRevealedCount = _i + 1;
+      drawCell_(_i, taskSelected.has(_i) ? 'selected' : 'live');
       if (_i === GRID_TOTAL - 1) taskGridFullyRevealed = true;
     }, (_i + 1) * GRID_REVEAL_MS);
     taskRevealTimers.push(t);
@@ -2371,7 +2413,9 @@ function debugSkipTask() {
   taskRevealTimers = [];
   if (!taskStartTime) taskStartTime = Date.now(); // Ready was never pressed — start the clock now so task_time_ms is sane
   taskGridFullyRevealed = true;
+  taskRevealedCount = GRID_TOTAL;
   taskSelected = new Set(taskTargetPositions); // pretend everything was found
+  for (let i = 0; i < GRID_TOTAL; i++) drawCell_(i, taskSelected.has(i) ? 'selected' : 'live');
   updateFoundDisplay();
   DATA_LOG.task_n_targets = TASK_N_TARGETS;
   DATA_LOG.task_found_count = taskSelected.size;
@@ -2576,7 +2620,7 @@ function prolificRedirect(codeKey) {
 // Paste the deployed web app URL here (Deploy > New deployment > Web app,
 // "Execute as: Me", "Who has access: Anyone"). It will look like:
 //   https://script.google.com/macros/s/AKfycb.../exec
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwp_xTMK5HE9rR67ENhRpJw0lv8-zdrYpHde0izCtzupayyg-1CRvYSXA6iYfpB_uZN/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyIxGTt9Z2Nv4Z1BzOOYtfKOS--yXTR_ANOV-ke0ULsSDVQ9jw9Y9s64CI1J_ewtYgA/exec';
 
 function backendConfigured_() {
   return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
