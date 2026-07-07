@@ -6,7 +6,143 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<title>Tax Compliance Experiment</title>
+<title>TC Study</title>
+<!--
+  ====================================================================
+  DEV NOTE — BACKEND TODO (treatment redesign, frontend-only pass)
+  ====================================================================
+  This pass only touches index.html. The backend (Apps Script /
+  Google Sheet) still reflects the OLD C/T1/T2/T3 design and needs the
+  following once we finalise the new one:
+
+  1. `treatment` now stores a 3-letter ADDITIVE arm string (CCC / CCT /
+     CTT / TTT), not C/T1/T2/T3. Any backend logic, exports, or
+     analysis scripts keyed on the old labels will break silently
+     (wrong condition, not an error) if not updated.
+
+  2. New DATA_LOG fields to add to HEADER / P1_FIELDS / P2_FIELDS:
+       phase1_condition  ('C' or 'T') -> P1_FIELDS, written at phase1_complete
+       phase2_condition  ('C' or 'T') -> P2_FIELDS, written at phase2_complete
+       phase3_condition  ('C' or 'T') -> P2_FIELDS, written at phase2_complete
+       elicitation_nopref_clicks        (int)     -> P1_FIELDS
+       elicitation_nopref_clicked_ever  (bool)    -> P1_FIELDS
+       reelicitation_nopref_clicks      (int)     -> P2_FIELDS
+       reelicitation_nopref_clicked_ever(bool)    -> P2_FIELDS
+       giving_nopref_clicks             (int)     -> P2_FIELDS
+       giving_nopref_clicked_ever       (bool)    -> P2_FIELDS
+       recall_no_memory_of_task         (bool)    -> P2_FIELDS
+     (recall_no_memory_of_task distinguishes "I don't remember memorizing
+     these [at all]" from the pre-existing "I don't remember [the
+     sequence]" button — two different participant experiences that were
+     briefly conflated into one button and needed to be split back apart.)
+     (The nopref fields record clicks on the "I don't have a preference"
+     button on screens 2/5/8. That button is a nudge, not a real opt-out —
+     it never skips the screen or leaves *_pref unset — but every click is
+     real participant behavior and needs to be recorded, not discarded.)
+     (phase1/2/3_condition are redundant with `treatment` but kept as
+     separate columns since they're the actual per-phase IV used in
+     analysis — same principle as keeping Δτ as its own control column
+     rather than re-deriving it from other fields every time.)
+
+  3. Group size / pot — DONE in this pass (frontend only):
+       N_GROUP 10 -> 5, TOTAL_POT $20 -> $5. All copy, chart axes, and
+       y-axis tick marks updated to match. Reward math itself (payoffsForSlider,
+       giniOf, etc.) needed no changes — it was already parameterized by
+       N_GROUP/TOTAL_POT, not hardcoded to 10/$20.
+
+  4. Rank assignment — CLUSTER-LOCK SYSTEM — DONE (backend implemented,
+     see apps_script_backend_v4.gs):
+     - Implements exactly the spec Michele confirmed: ~20 (parameterized,
+       CLUSTER_SIZE-independent) concurrent clusters of 5 slots each,
+       manually throttled by Michele so only ~1 new entrant per available
+       cluster at a time; a cluster LOCKS the moment a participant is
+       assigned into it and stays locked until they complete Phase 2 or
+       time out after 1 hour; timeouts freeze that slot's number
+       permanently via NEW columns (rank_fixed/rank_fixed_value) — the
+       original cluster_slot is never touched or deleted, per Michele's
+       explicit instruction.
+     - Cluster assignment is triggered by the existing `lookup` GET call
+       the frontend already makes unconditionally at Phase 2 start — no
+       new frontend request was needed. It's idempotent: a pid that
+       already has a cluster_id/cluster_slot just gets it echoed back,
+       never reassigned.
+     - actual_rank (the pairing/tournament instrumental variable) is
+       computed automatically once a cluster's 5 slots are ALL resolved
+       (completed or fixed) — verified against Michele's worked example
+       (fixed=3 -> groups {1,2} and {4,5}, better real performer within
+       each group gets the numerically better slot number). It is
+       DELIBERATELY never returned by the lookup endpoint — it only ever
+       lives in the Sheet, exactly per the architecture decision below.
+     - New columns: cluster_id, cluster_slot, entered_phase2_at_iso,
+       rank_fixed, rank_fixed_value, actual_rank. None of these are
+       written through the P1_FIELDS/P2_FIELDS DATA_LOG mapping — they're
+       backend-internal, touched only by the cluster-assignment functions.
+     - FRONTEND WIRING: lookupPriorResponseAttempt_ now parses
+       `assigned_rank` from the lookup response; the Phase-2 funnel point
+       in bootstrapAppInner_ overrides YOU_RANK with it (production only —
+       demo mode stays fully random, permanently, via getAssignedRank_())
+       and recomputes everything downstream (YOU_INITIAL_EARNING,
+       TASK_N_TARGETS) since those may have been set provisionally before
+       the authoritative value arrived.
+     - CLUSTER_SIZE is a manually-synced constant in the backend file
+       (must match frontend's N_GROUP by hand — no shared config between
+       the two files).
+
+  5. Task redesign — DONE in this pass (frontend only):
+       - Grid fills fast (GRID_REVEAL_MS = 8ms/cell, ~1.8s total for 225
+         cells) instead of the old 500ms/cell slow build.
+       - Grid starts genuinely empty (all placeholder cells) while the
+         participant reads instructions; nothing reveals until they press
+         "Ready". Pressing Ready starts BOTH the reveal and the 45s clock
+         at once.
+       - Fixed 45-second window, no early/manual submission (Submit
+         button removed entirely), auto-submits when the clock hits 0.
+       - Live counter counts UP ("Found: N"), not down — there's no
+         disclosed quota to complete, per Michele's instruction not to
+         indicate how many are left to find.
+       - Freebie mechanic fully removed: TASK_FREEBIE_PROPORTION,
+         taskFreebieCount, maybeGrantFreebies(), fastForwardRemainingCells(),
+         the freebie-flash CSS animation, and the "some emojis may be
+         given to you for free" instruction text are all gone.
+       - Target density (TASK_N_TARGETS, renamed from TASK_N_CORRECT) is
+         still the 2/4/8/16/32-by-assigned-rank mapping, kept as
+         specified — Michele confirmed the ceiling effect at the top of
+         the distribution (ranks 1/2 likely both maxing out target-finding
+         within 45s) is intentional, not a bug to fix.
+       - DATA_LOG fields renamed/changed: task_n_correct -> task_n_targets;
+         task_freebie_count/task_freebie_proportion/task_submit_attempts/
+         task_extra_selected REMOVED (no longer meaningful — there's no
+         submit button and wrong clicks never persist, so "extra selected"
+         can't happen); task_found_count and task_wrong_clicks ADDED as the
+         real behavioral data driving the actual-rank instrumental
+         variable. Backend HEADER/P2_FIELDS need matching updates.
+       - Wrong-click UX (red flash, auto-deselect, never persists) is
+         UNCHANGED — kept exactly as before per Michele's note.
+
+  6. Actual rank vs. assigned rank — architecture decision (confirmed):
+     actual rank is a BACKEND-ONLY, post-hoc instrumental variable, computed
+     once enough of a cluster has resolved (via the pairing rule in note 4)
+     from each participant's task_found_count. It is NEVER shown live to
+     participants and never changes what the live flow displays — the
+     rank-reveal/redistribution screens (7/8) continue to show ASSIGNED
+     rank exactly as they do today. This was necessary because, per
+     Michele's cluster-lock spec (note 4), cluster slots fill one
+     participant at a time — an early participant in a cluster finishes
+     the task well before later participants even start, so their real
+     opponent's count simply doesn't exist yet at their own completion
+     time. Actual-rank computation therefore has to happen asynchronously,
+     backend-side, after the fact — it cannot be computed or shown in the
+     live single-session flow. Payment/redistribution stays exactly as
+     currently implemented (synchronous, based on assigned rank).
+
+  Reminder: none of the reward MATH changed in this pass (payoffsForSlider,
+  giniOf, etc.) — only the task's fill/timing/scoring mechanics and screen
+  text/labels/flow.
+  ====================================================================
+-->
+
+
+
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -458,16 +594,6 @@
     50% { background: rgba(196,26,26,0.3); border-color: #c41a1a; }
   }
   .ecell.wrong-flash { animation: wrongFlash 0.18s ease-in-out 3; }
-  @keyframes freebieFlash {
-    0%, 100% { background: rgba(26,135,84,0.9); border-color: #1a8754; }
-    50% { background: rgba(26,135,84,0.3); border-color: #1a8754; }
-  }
-  .ecell.freebie-flash { animation: freebieFlash 0.18s ease-in-out 3; }
-  @keyframes revealFlash {
-    0% { background: rgba(26,74,122,0.5); border-color: var(--accent); }
-    100% { background: var(--surface); border-color: var(--border); }
-  }
-  .ecell.reveal-flash { animation: revealFlash 0.25s ease-out; }
   .task-progress {
     font-family: 'IBM Plex Mono', monospace;
     font-size: 13px;
@@ -561,12 +687,12 @@
      in-flow bar makes that structurally impossible, not just unlikely. -->
 <div class="demo-switcher" id="demo-switcher-panel">
   <span class="demo-label">⚙ DEMO MODE</span>
-  <label style="font-size:10px; opacity:0.85;">Treatment
+  <label style="font-size:10px; opacity:0.85;">Arm (phase1-phase2-phase3, additive)
     <select id="demo-treatment-select" onchange="demoTreatmentChanged_(this.value)">
-      <option value="C">Control (C)</option>
-      <option value="T1" selected>T1 – Elicitation only</option>
-      <option value="T2">T2 – Recall anchor</option>
-      <option value="T3">T3 – Re-elicitation</option>
+      <option value="CCC" selected>CCC – all luck-framed</option>
+      <option value="CCT">CCT – performance only at redistribution</option>
+      <option value="CTT">CTT – performance from re-elicitation on</option>
+      <option value="TTT">TTT – all performance-framed</option>
     </select>
   </label>
   <button onclick="debugSkipTask()" style="background:#fff7cc; color:#7a6000; border:1px solid #e6c800; padding:5px 10px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px; cursor:pointer;">⏭ Skip task</button>
@@ -601,36 +727,47 @@
   </div>
 
 
-  <!-- ===================== SCREEN 2: ELICITATION (T1/T2/T3) ===================== -->
+  <!-- ===================== SCREEN 11: INTRO TO ELICITATION (all — general, NOT tied to the participant's own task) ===================== -->
+  <div class="screen" id="screen-11">
+    <h1 id="elicit-intro-h1">Are luck-based rewards fair?</h1>
+    <div class="card" id="elicit-intro-body">
+      <!-- filled dynamically from phase1Cond by JS (see showScreen idx===11) -->
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 2: ELICITATION (all — general opinion, deliberately NOT about the participant's own upcoming task) ===================== -->
   <div class="screen" id="screen-2">
-    <h1>Before we start: How should rewards be distributed?</h1>
-    <div class="card">
-      <p>We'd like to know your view on how people taking part in this study should be <strong>rewarded for their performance</strong>.</p>
-      <p style="margin-top:8px">The chart below shows a group of <strong>10 people</strong>, ranked from best to worst performer, sharing a <strong>$20 bonus</strong>. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the best performer takes everything</strong>.</p>
-      <p style="margin-top:8px"><strong>There are no right or wrong answers</strong>, and your response now will not affect the distribution of rewards. We are interested in what you think is fair.</p>
+    <h1 id="elicit-h1">How should rewards be distributed?</h1>
+    <div class="card" id="elicit-card-body">
+      <!-- filled dynamically from phase1Cond by JS (see showScreen idx===2) -->
     </div>
     <div class="card">
-      <div class="card-title">Bonus by performance rank</div>
+      <div class="card-title">Bonus by reward rank</div>
       <canvas id="elicit-canvas" width="760" height="240"></canvas>
       <div class="legend" style="margin-top:8px">
-        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your chosen split</div>
-        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split ($2.00 each)</div>
+        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your chosen split<span id="elicit-legend-cond"></span></div>
+        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split ($1.00 each)</div>
       </div>
       <hr class="sep">
       <div class="slider-section">
-        <div class="slider-value">Reward for performance: <span id="elicit-tau-val">0</span>%</div>
-        <div class="slider-label"><span>Everyone equal</span><span>Winner takes all</span></div>
+        <div class="slider-value">Reward for <span id="elicit-reward-word">performance</span>: <span id="elicit-tau-val">0</span>%</div>
+        <div class="slider-label"><span>Everyone equal</span><span id="elicit-slider-right-label">Winner takes all</span></div>
         <input type="range" min="0" max="100" value="0" id="elicit-slider" oninput="updateElicitHistogram()">
       </div>
       <div class="stat-row">
-        <div class="stat-box"><div class="stat-value" id="elicit-bottom">$2.00</div><div class="stat-label">Worst performer gets</div></div>
-        <div class="stat-box"><div class="stat-value" id="elicit-mid">$2.00</div><div class="stat-label">Performer #5 gets</div></div>
-        <div class="stat-box"><div class="stat-value" id="elicit-top">$2.00</div><div class="stat-label">Best performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="elicit-bottom">$2.00</div><div class="stat-label" id="elicit-bottom-label">Least-paid person gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="elicit-mid">$2.00</div><div class="stat-label">Middle person gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="elicit-top">$2.00</div><div class="stat-label" id="elicit-top-label">Most-paid person gets</div></div>
       </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" id="elicit-confirm-btn" onclick="saveElicitationAndNext()" style="opacity:0.4;cursor:not-allowed;">Confirm preference →</button>
+      <button class="btn btn-secondary" id="elicit-nopref-btn" onclick="noPreferenceNudge_('elicit')" style="padding:12px 18px; font-size:12px;">I don't have a preference</button>
     </div>
+    <p id="elicit-nopref-msg" style="font-size:12px; color:var(--muted); margin-top:8px; min-height:16px;"></p>
   </div>
 
   <!-- ===================== SCREEN 3: MEMORY PROBE (all) ===================== -->
@@ -700,46 +837,59 @@
     </div>
   </div>
 
-  <!-- ===================== SCREEN 5: RE-ELICITATION (T3 only — before task) ===================== -->
-  <div class="screen" id="screen-5">
-    <h1>Before we start: How should rewards be distributed?</h1>
+  <!-- ===================== SCREEN 17: MATCHED (all, condition-agnostic, before re-elicitation) ===================== -->
+  <div class="screen" id="screen-17">
+    <h1>You've Been Matched</h1>
     <div class="card">
-      <p>We'd like to know your view on how people taking part in this study should be rewarded for their performance.</p>
-      <p style="margin-top:8px">The chart below shows a group of 10 people, ranked from best to worst performer, sharing a $20 bonus. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end everyone is paid the same, at the other the best performer takes everything.</p>
-      <p style="margin-top:8px">There are no right or wrong answers, and your response now will not affect the distribution of rewards. We are interested in what you think is fair.</p>
-      <p style="margin-top:8px; color:var(--muted); font-size:13px;">Your earlier choice is shown in <strong>orange</strong> below. You may keep it or change it.</p>
+      <p>You've been matched with a group of other participants taking part in this study.</p>
+      <p style="margin-top:8px">Together, you'll each complete a short task, and a <strong>shared bonus pool will be distributed across the group</strong> once everyone has finished.</p>
+    </div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="nextScreen()">Continue →</button>
+    </div>
+  </div>
+
+  <!-- ===================== SCREEN 5: RE-ELICITATION (all — shown before the task, framed by phase2Cond) ===================== -->
+  <div class="screen" id="screen-5">
+    <h1 id="reelicit-h1">How should luck-based rewards be distributed?</h1>
+    <div class="card" id="reelicit-card-body">
+      <!-- filled dynamically from phase2Cond by JS (see showScreen idx===5) -->
     </div>
     <div class="card">
-      <div class="card-title">Bonus by performance rank</div>
+      <div class="card-title">Bonus by reward rank</div>
+      <div id="reelicit-preamble" style="margin-bottom:8px"></div>
       <canvas id="reelicit-canvas" width="760" height="240"></canvas>
       <div class="legend" style="margin-top:8px">
-        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your updated choice</div>
-        <div class="legend-item"><span style="color:#c45c1a; font-size:15px; font-weight:900;">▸</span>&nbsp; Your previous choice</div>
-        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split ($2.00 each)</div>
+        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; <span id="reelicit-legend-label">Present preference</span><span id="reelicit-legend-cond"></span></div>
+        <div class="legend-item"><span style="color:#c45c1a; font-size:15px; font-weight:900;">▸</span>&nbsp; <span id="reelicit-legend-prev-label">Past preference</span><span id="reelicit-legend-prev-cond"></span></div>
+        <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split ($1.00 each)</div>
       </div>
       <hr class="sep">
       <div class="slider-section">
-        <div class="slider-value">Reward for performance: <span id="reelicit-tau-val">0</span>%</div>
-        <div class="slider-label"><span>Everyone equal</span><span>Winner takes all</span></div>
+        <div class="slider-value">Reward for <span id="reelicit-reward-word">performance</span>: <span id="reelicit-tau-val">0</span>%</div>
+        <div class="slider-label"><span>Everyone equal</span><span id="reelicit-slider-right-label">Winner takes all</span></div>
         <input type="range" min="0" max="100" value="0" id="reelicit-slider" oninput="updateReelicitHistogram()">
       </div>
       <div class="stat-row">
-        <div class="stat-box"><div class="stat-value" id="reelicit-bottom">$2.00</div><div class="stat-label">Worst performer gets</div></div>
-        <div class="stat-box"><div class="stat-value" id="reelicit-mid">$2.00</div><div class="stat-label">Performer #5 gets</div></div>
-        <div class="stat-box"><div class="stat-value" id="reelicit-top">$2.00</div><div class="stat-label">Best performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="reelicit-bottom">$2.00</div><div class="stat-label" id="reelicit-bottom-label">Least-paid person gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="reelicit-mid">$2.00</div><div class="stat-label">Middle person gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="reelicit-top">$2.00</div><div class="stat-label" id="reelicit-top-label">Most-paid person gets</div></div>
       </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" id="reelicit-confirm-btn" onclick="saveReelicitAndNext()" style="opacity:0.4;cursor:not-allowed;">Confirm →</button>
+      <button class="btn btn-secondary" id="reelicit-nopref-btn" onclick="noPreferenceNudge_('reelicit')" style="padding:12px 18px; font-size:12px;">I don't have a preference</button>
     </div>
+    <p id="reelicit-nopref-msg" style="font-size:12px; color:var(--muted); margin-top:8px; min-height:16px;"></p>
   </div>
 
-  <!-- ===================== SCREEN 13: PRE-TASK DEBRIEF ===================== -->
+  <!-- ===================== SCREEN 13: PRE-TASK DEBRIEF (all — shown right before the task, framed by phase3Cond) ===================== -->
   <div class="screen" id="screen-13">
     <h1>Before You Begin</h1>
     <div class="card">
       <p>You will now take part in a simple task, where you will be asked to <strong>find and click on a target emoji</strong> inside a grid.</p>
-      <p style="margin-top:8px">We have matched you with 9 other people taking part in this study, making a <strong>group of 10</strong>. You will all be taking part in the same task. You will receive a reward based on <strong>your performance in the task, relative to other people in your group</strong>.</p>
+      <p style="margin-top:8px">We have matched you with 4 other people taking part in this study, making a <strong>group of 5</strong>. You will all be taking part in the same task.</p>
+      <div id="predebrief-reward-box" style="margin-top:12px"></div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="nextScreen()">Continue →</button>
@@ -781,72 +931,80 @@
     <h1>Task</h1>
     <div class="card">
       <div class="card-title">Instructions</div>
-      <p>A 15×15 grid of emojis will fill in below. Find and select every cell showing the target emoji <span id="task-target-display" style="font-size:20px;">❓</span>, then press <strong>Submit</strong>.</p>
-      <p style="color:var(--muted); font-size:13px; margin-top:8px;">Some emojis may be given to you for free along the way.</p>
+      <p>Click as many <span id="task-target-display" style="font-size:20px;">❓</span> as you can find. You'll have <strong>45 seconds</strong> once you press <strong>Ready</strong> below the grid. Make sure to find as many as possible before the timer ends.</p>
     </div>
     <div class="card">
-      <div class="task-instr">Find all: <span id="task-target-display2" style="font-size:24px;">❓</span> &nbsp;·&nbsp; <span id="task-remaining">0</span> remaining</div>
+      <div class="task-instr" id="task-status-row" style="display:none;">Find: <span id="task-target-display2" style="font-size:24px;">❓</span> &nbsp;·&nbsp; Found: <span id="task-found-count">0</span> &nbsp;·&nbsp; <span id="task-countdown">0:45</span></div>
       <div class="grid-outer">
         <div class="grid-box" id="task-grid"></div>
       </div>
-      <div style="display:flex; justify-content:center; margin-top:14px;">
-        <button class="btn btn-primary" id="task-submit-btn" disabled style="opacity:0.4; cursor:not-allowed;" onclick="submitGridTask()">Submit</button>
+      <div style="display:flex; justify-content:center; margin-top:14px;" id="task-ready-row">
+        <button class="btn btn-primary" id="task-ready-btn" onclick="startTaskCountdown()">Ready →</button>
       </div>
       <div id="task-feedback" style="text-align:center; font-family:'IBM Plex Mono',monospace; font-size:13px; margin-top:10px; min-height:18px;"></div>
     </div>
   </div>
 
-  <!-- ===================== SCREEN 7: RANK REVEAL (all) ===================== -->
+  <!-- ===================== SCREEN 7: RANK REVEAL (all — framed by phase3Cond) ===================== -->
   <div class="screen" id="screen-7">
     <h1>Your Rank</h1>
     <div class="card">
       <div class="card-title">Your rank</div>
-      <p>Your rank within your group of 10 people is:</p>
-      <div style="text-align:center; margin:20px 0;">
-        <div style="font-family:'IBM Plex Mono',monospace; font-size:48px; font-weight:600; color:var(--accent);" id="reveal-rank-num">#5</div>
-        <div style="font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace;" id="reveal-rank-desc">5th out of 10</div>
+      <div id="rank-reveal-calculating" style="text-align:center; padding:20px 0; font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--muted);">Task submitted — calculating your reward…</div>
+      <div id="rank-reveal-content" style="display:none;">
+        <p id="reveal-intro">Your rank within your group of 5 people is:</p>
+        <div style="text-align:center; margin:20px 0;">
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:48px; font-weight:600; color:var(--accent);" id="reveal-rank-num">#5</div>
+          <div style="font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace;" id="reveal-rank-desc">5th out of 5</div>
+        </div>
+        <div style="text-align:center; margin:20px 0;">
+          <div style="font-family:'IBM Plex Mono',monospace; font-size:48px; font-weight:600; color:var(--accent);" id="reveal-earned">$2.00</div>
+          <div style="font-size:13px; color:var(--muted); font-family:'IBM Plex Mono',monospace;">your reward</div>
+        </div>
+        <p style="margin-top:8px" id="reveal-outro">In the next section, you will have the opportunity to <strong>re-distribute</strong> these rewards across participants in your group.</p>
       </div>
-      <p>You have earned: <strong id="reveal-earned" style="color:var(--accent);">$2.00</strong></p>
-      <p style="margin-top:8px">In the next section, you will have the opportunity to <strong>re-distribute</strong> these rewards across participants in your group.</p>
     </div>
-    <div class="btn-row">
+    <div class="btn-row" id="rank-reveal-btn-row" style="display:none;">
       <button class="btn btn-primary" onclick="nextScreen()">Proceed to redistribution →</button>
     </div>
   </div>
 
-  <!-- ===================== SCREEN 8: REDISTRIBUTION DECISION (all) ===================== -->
+  <!-- ===================== SCREEN 8: REDISTRIBUTION DECISION (all — framed by phase3Cond) ===================== -->
   <div class="screen" id="screen-8">
     <h1>How should rewards be distributed?</h1>
     <div class="card">
       <div class="card-title">Your decision</div>
-      <p>You now have the opportunity to <strong>re-distribute</strong> your group's rewards based on each participant's performance.</p>
-      <p style="margin-top:8px">The chart below shows your group of <strong>10 people</strong>, ranked from best to worst performer, sharing a <strong>$20 bonus</strong>. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the best performer takes everything</strong>.</p>
+      <div id="giving-card-body-text">
+        <!-- filled dynamically from phase3Cond by JS (see showScreen idx===8) -->
+      </div>
       <div class="anchor-box" style="display:block; margin:12px 0;">
         At the end, <strong>one group member's choice is picked at random and applied to everyone</strong>, so this may be the decision that sets your own bonus. Choose carefully.
       </div>
       <div id="giving-preamble" style="margin-top:8px"></div>
       <canvas id="giving-canvas" width="760" height="240"></canvas>
       <div class="legend" style="margin-top:8px">
-        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your chosen split</div>
+        <div class="legend-item"><span style="color:rgba(26,74,122,0.9); font-size:15px; font-weight:900;">▸</span>&nbsp; Your chosen split<span id="giving-legend-cond"></span></div>
         <div class="legend-item" id="anchor-legend-item" style="display:none"><span style="color:#c45c1a; font-size:15px; font-weight:900;">▸</span>&nbsp; <span id="anchor-legend-label">Your preferred distribution</span></div>
         <div class="legend-item"><span style="color:var(--red); font-size:15px; font-weight:900;">▸</span>&nbsp; You</div>
         <div class="legend-item"><span style="color:#aaa; font-size:15px; font-weight:900;">▸</span>&nbsp; Equal split</div>
       </div>
       <hr class="sep">
       <div class="slider-section giving-slider">
-        <div class="slider-value giving-value">Reward for performance: <span id="giving-val">0</span>% → you get $<span id="giving-keep">2.00</span></div>
-        <div class="slider-label"><span>Everyone equal</span><span>Winner takes all</span></div>
+        <div class="slider-value giving-value">Reward for <span id="giving-reward-word">performance</span>: <span id="giving-val">0</span>% → you get $<span id="giving-keep">2.00</span></div>
+        <div class="slider-label"><span>Everyone equal</span><span id="giving-slider-right-label">Winner takes all</span></div>
         <input type="range" min="0" max="100" value="0" id="giving-slider" oninput="updateGivingHistogram()">
       </div>
       <div class="stat-row">
-        <div class="stat-box"><div class="stat-value" id="giving-bottom">$2.00</div><div class="stat-label">Worst performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="giving-bottom">$2.00</div><div class="stat-label" id="giving-bottom-label">Least-paid person gets</div></div>
         <div class="stat-box"><div class="stat-value" id="giving-your-post">$2.00</div><div class="stat-label">Your bonus under your split</div></div>
-        <div class="stat-box"><div class="stat-value" id="giving-top">$2.00</div><div class="stat-label">Best performer gets</div></div>
+        <div class="stat-box"><div class="stat-value" id="giving-top">$2.00</div><div class="stat-label" id="giving-top-label">Most-paid person gets</div></div>
       </div>
     </div>
     <div class="btn-row">
       <button class="btn btn-primary" onclick="submitDecision()">Confirm decision →</button>
+      <button class="btn btn-secondary" id="giving-nopref-btn" onclick="noPreferenceNudge_('giving')" style="padding:12px 18px; font-size:12px;">I don't have a preference</button>
     </div>
+    <p id="giving-nopref-msg" style="font-size:12px; color:var(--muted); margin-top:8px; min-height:16px;"></p>
   </div>
 
   <!-- ===================== SCREEN 9: OUTCOME ===================== -->
@@ -855,11 +1013,12 @@
     <div class="card">
       <div class="card-title">Your results</div>
       <div class="outcome-grid">
-        <div class="outcome-card"><div class="stat-label">Your performance rank</div><div class="stat-value" style="margin-top:6px" id="out-rank">#5</div></div>
-        <div class="outcome-card"><div class="stat-label">Your final payment (under your split)</div><div class="stat-value" style="margin-top:6px" id="final-payment">$2.00</div></div>
-        <div class="outcome-card"><div class="stat-label">Reward for performance you chose</div><div class="stat-value" style="margin-top:6px" id="out-giving">—</div></div>
+        <div class="outcome-card"><div class="stat-label" id="out-rank-label">Your rank</div><div class="stat-value" style="margin-top:6px" id="out-rank">#5</div></div>
+        <div class="outcome-card"><div class="stat-label">Your vote for payment</div><div class="stat-value" style="margin-top:6px" id="final-payment">$2.00</div></div>
+        <div class="outcome-card"><div class="stat-label" id="out-giving-label">Reward for performance you chose</div><div class="stat-value" style="margin-top:6px" id="out-giving">—</div></div>
       </div>
-      <p style="color:var(--muted); font-size:13px; margin-top:16px;">Thank you for your participation. Your responses have been recorded. Your bonus payment will be processed once everyone in your group of 10 has completed the study — at that point, <strong>one participant's chosen split is selected at random and applied to the whole group</strong>. <strong>Please wait to be redirected to Prolific</strong> to confirm your participation — this happens automatically in a new tab once your responses are saved. Once you see that page, you can close this one.</p>
+      <p style="color:var(--muted); font-size:13px; margin-top:8px;" id="out-odds-note"></p>
+      <p style="color:var(--muted); font-size:13px; margin-top:16px;">Thank you for your participation. Your responses have been recorded. Your bonus payment will be processed once everyone in your group of 5 has completed the study. <strong>Please wait to be redirected to Prolific</strong> to confirm your participation — this happens automatically in a new tab once your responses are saved. Once you see that page, you can close this one.</p>
     </div>
     <div class="card" id="p2-save-status">
       <div id="p2-saving-row" style="display:flex; align-items:center; gap:10px;">
@@ -897,7 +1056,8 @@
       <div id="recall-slots" class="recall-slots"></div>
       <div style="text-align:center; margin:8px 0 18px;">
         <button class="btn btn-secondary" id="recall-clear-btn" onclick="clearRecall()" style="padding:6px 18px; font-size:11px; margin-right:8px;">Clear</button>
-        <button class="btn btn-secondary" id="recall-dontknow-btn" onclick="submitDontRemember()" style="padding:6px 18px; font-size:11px;">I don't remember</button>
+        <button class="btn btn-secondary" id="recall-dontknow-btn" onclick="submitDontRemember()" style="padding:6px 18px; font-size:11px; margin-right:8px;">I don't remember</button>
+        <button class="btn btn-secondary" id="recall-nomemory-btn" onclick="submitNoMemoryOfTask()" style="padding:6px 18px; font-size:11px;">I don't remember memorizing these</button>
       </div>
       <div class="card-title">Click emojis to build your answer</div>
       <div id="recall-palette" class="recall-palette"></div>
@@ -923,7 +1083,10 @@ const DATA_LOG = {
   session_id: null,              // from URL param SESSION_ID
   app_phase: null,                // 'phase1' | 'phase2' | 'full' (demo)
   demo_mode: null,
-  treatment: null,
+  treatment: null,               // 3-letter additive arm string, e.g. 'CCT' (CCC/CCT/CTT/TTT)
+  phase1_condition: null,        // 'C' (luck-framed) or 'T' (performance-framed) — decoded from treatment
+  phase2_condition: null,
+  phase3_condition: null,
   session_start: Date.now(),
   session_start_iso: new Date().toISOString(),
   last_updated_iso: null,
@@ -931,26 +1094,31 @@ const DATA_LOG = {
   elicitation_pref: null,      // slider 0..100
   elicitation_start_value: null,
   elicitation_time_ms: 0,      // time spent on the elicitation screen specifically
+  elicitation_nopref_clicks: 0,     // # times "I don't have a preference" was clicked on this screen
+  elicitation_nopref_clicked_ever: false, // whether it was clicked at all before final submission
   memory_sequence: null,       // emojis shown
   // experiment (step 2)
   reelicitation_pref: null,    // T3 only
   reelicitation_start_value: null,
   reelicitation_time_ms: 0,    // time spent on the re-elicitation screen specifically
+  reelicitation_nopref_clicks: 0,
+  reelicitation_nopref_clicked_ever: false,
   you_rank: null,
   baseline_tau_pct: null,        // a priori baseline split (0-100) used for the "earned" amount at reveal
   initial_earning: null,         // dollar amount shown at the rank-reveal screen
-  task_n_correct: null,          // target emojis required (function of rank, a priori)
-  task_freebie_count: null,      // pre-selected target cells (natural endowment, a priori)
-  task_freebie_proportion: null, // share of target cells pre-selected
-  task_submit_attempts: null,    // number of submit clicks (incl. failed ones)
-  task_extra_selected: null,     // non-target cells selected at successful submission
+  task_n_targets: null,           // total target emojis placed in the grid (function of assigned rank, a priori)
+  task_found_count: null,         // target cells the participant actually found within the 45s window — the real performance metric
+  task_wrong_clicks: null,        // count of non-target cell clicks (never persist as selected, but recorded)
   task_time_ms: null,           // time spent on the task screen
   recall_answer: null,         // reconstructed emoji array
   recall_score: null,          // 0..6
   recall_score_norm: null,     // 0..1
+  recall_no_memory_of_task: false, // true only if they clicked "I don't remember memorizing these" — distinct from just not recalling the sequence (submitDontRemember)
   giving_pref: null,           // slider 0..100
   giving_start_value: null,
   giving_time_ms: 0,           // time spent on the redistribution screen specifically
+  giving_nopref_clicks: 0,
+  giving_nopref_clicked_ever: false,
   final_payoff: null,
   phase1_completed_at_iso: null,
   phase2_completed_at_iso: null,
@@ -1037,12 +1205,12 @@ function _registerActivity() {
   .forEach(evt => document.addEventListener(evt, _registerActivity, { passive: true }));
 
 // ============================================================
-// DATA — 10 people ranked by performance (rank 1 = best ... rank 10 = worst)
+// DATA — 5 people ranked by performance (rank 1 = best ... rank 5 = worst)
 // ============================================================
-const N_GROUP = 10;
-const TOTAL_POT = 20.0;          // $20 split among 10 -> mean $2
+const N_GROUP = 5;
+const TOTAL_POT = 5.0;          // $5 split among 5 -> mean $1
 const MEAN_W = TOTAL_POT / N_GROUP;
-const RANKS = Array.from({length: N_GROUP}, (_, i) => i + 1); // 1..10
+const RANKS = Array.from({length: N_GROUP}, (_, i) => i + 1); // 1..5
 
 // Reward model B + winner-take-all corner.
 //   Base: share for rank r proportional to performance^k, k = s*KMAX (convex).
@@ -1076,6 +1244,22 @@ function giniOf(arr) {
 // in production this comes from a pre-set file, independent of in-session performance).
 let YOU_RANK = 1 + Math.floor(Math.random() * N_GROUP);
 function sampleRank() { return 1 + Math.floor(Math.random() * N_GROUP); }
+
+// Seam for the future cluster-lock backend (see dev note near the top of
+// this file for the full spec). Once built, PRODUCTION mode will fetch a
+// real assigned rank from the backend's cluster queue at Phase 2 entry —
+// but demo mode (APP_DEMO_MODE 1/2) is NOT meant to simulate real cluster
+// queuing, so it stays fully random there, permanently, by design (per
+// Michele: "keep the rank random for demomode instead"). Today, since the
+// backend piece doesn't exist yet, both branches fall through to the same
+// random sample — this function exists so that swapping in the real
+// backend call later only touches ONE place, not every call site.
+function getAssignedRank_() {
+  if (APP_DEMO_MODE) return sampleRank();
+  // TODO(backend): replace with the real cluster-queue assigned rank once
+  // the cluster-lock backend is built. Falls back to random until then.
+  return sampleRank();
+}
 function ordinalWord(n) {
   const s = ['th','st','nd','rd'], v = n % 100;
   return n + (s[(v-20)%10] || s[v] || s[0]);
@@ -1087,7 +1271,7 @@ function ordinalWord(n) {
 let BASELINE_TAU_PCT = Math.round(Math.random() * 100);
 let YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
 
-// Task parameters (TASK_N_CORRECT, TASK_FREEBIE_PROPORTION) are defined later,
+// Task parameters (TASK_N_TARGETS) are defined later,
 // alongside the grid-task implementation, since they depend on YOU_RANK.
 
 // Emoji memory probe: pick a random 3-emoji sequence at the start of each session
@@ -1116,9 +1300,63 @@ function generateMemorySequence() {
 // Random initial slider position (5..95) so the starting distribution varies each time
 function randomStart() { return 5 + Math.floor(Math.random() * 91); }
 
-let treatment  = 'T1';
-let sStar    = 0;   // preferred slider from survey elicitation
-let sStar2   = 0;   // preferred slider from re-elicitation (T3)
+// ============================================================
+// TREATMENT ARMS (redesign)
+// Treatment is now a 3-letter, ADDITIVE string, one letter per phase:
+//   letter 1 = Phase 1 elicitation condition   (screen 2)
+//   letter 2 = Phase 2 re-elicitation condition (screen 5)
+//   letter 3 = Phase 3 redistribution condition (screen 8)
+// 'C' = framed around RANDOM/luck-based rewards, 'T' = framed around
+// PERFORMANCE-based rewards. Additive/monotonic only — once a participant
+// sees the performance framing, every later phase keeps it. The only valid
+// arms are: CCC, CCT, CTT, TTT. (No CTC, TCC, etc.)
+// Every arm now sees every phase (2, 5, 8) — only the wording/labels differ,
+// not whether the screen is shown. This replaces the old branching flow.
+// ============================================================
+const TREATMENT_ARMS = ['CCC', 'CCT', 'CTT', 'TTT'];
+function sampleRandomTreatmentArm() {
+  return TREATMENT_ARMS[Math.floor(Math.random() * TREATMENT_ARMS.length)];
+}
+// Back-compat alias — kept because it's referenced elsewhere in the code
+// under this name (e.g. the Phase-1-genuinely-new-participant branch in
+// bootstrapAppInner_).
+function sampleRandomTreatment() { return sampleRandomTreatmentArm(); }
+
+// Pulls the per-phase condition letter ('C' or 'T') out of a 3-letter arm
+// string. phaseNum is 1, 2, or 3. Falls back to 'T' (the safer/more-common
+// default) if the arm string is ever malformed, rather than throwing.
+function phaseCondOf(arm, phaseNum) {
+  return (arm && typeof arm === 'string' && arm.length === 3) ? arm[phaseNum - 1] : 'T';
+}
+
+let treatment  = 'CCC';  // now holds the 3-letter arm string, e.g. 'CCT'
+// Derived, per-phase condition letters — recomputed any time `treatment` is
+// (re)assigned, via applyTreatmentDerived_(). Every screen-2/5/7/8/13 text
+// branch reads ONLY these, never `treatment` directly, so there is exactly
+// one place that knows how to decode the arm string.
+let phase1Cond = 'C';
+let phase2Cond = 'C';
+let phase3Cond = 'C';
+function applyTreatmentDerived_() {
+  phase1Cond = phaseCondOf(treatment, 1);
+  phase2Cond = phaseCondOf(treatment, 2);
+  phase3Cond = phaseCondOf(treatment, 3);
+}
+
+// Small text helpers shared by every condition-dependent screen (2, 5, 7, 8,
+// 13) so the C/T -> wording mapping lives in exactly one place.
+function condWord_(cond) { return cond === 'C' ? 'luck' : 'performance'; }
+function condLegendTag_(cond) { return cond === 'C' ? ' (luck-based)' : ' (performance-based)'; }
+function condSliderRightLabel_(cond) { return cond === 'C' ? 'Luckiest takes all' : 'Winner takes all'; }
+// Stat-box row under each slider — the low/high end of the reward rank,
+// worded to match the screen's condition rather than the generic
+// "least-paid/most-paid" the x-axis uses (the axis stays neutral so one
+// chart can serve both conditions; these labels are free to be specific).
+function condLowRankLabel_(cond) { return cond === 'C' ? 'Unluckiest person gets' : 'Worst performer gets'; }
+function condHighRankLabel_(cond) { return cond === 'C' ? 'Luckiest person gets' : 'Best performer gets'; }
+
+let sStar    = 0;   // preferred slider from Phase 1 elicitation (screen 2)
+let sStar2   = 0;   // preferred slider from Phase 2 re-elicitation (screen 5)
 let sStarSet  = false;
 let sStar2Set = false;
 let elicitMoved   = false;
@@ -1127,33 +1365,37 @@ let reelicitMoved = false;
 // Screen IDs
 // NOTE: SCREENS is positionally indexed — SCREENS[idx] must equal 'screen-'+idx
 // for every idx used elsewhere in the code (showScreen(12), showScreen(13), etc).
-// 'screen-11' is kept as a placeholder even though that HTML element no longer
-// exists (its content was merged into screens 2 and 5) — removing it would
-// shift every subsequent index and break screens 12-15. It is simply never
-// referenced by any flow, so document.getElementById('screen-11') is never called.
+// 'screen-11' is now LIVE again — restored as a real intro screen shown
+// right before elicitation (screen 2), explaining that the elicitation is a
+// general opinion question, decoupled from the participant's own upcoming
+// task (this was lost when its old content got merged into screens 2/5;
+// see dev note near the top of this file). Index 16 ('screen-16', the
+// connection-error screen) is never dereferenced through this array — it's
+// shown via a direct getElementById call, not showScreen(16) — but its slot
+// must still be padded here so 'screen-17' lands at index 17.
 const SCREENS = ['screen-0','screen-1','screen-2','screen-3','screen-4',
                  'screen-5','screen-6','screen-7','screen-8','screen-9','screen-10',
-                 'screen-11','screen-12','screen-13','screen-14','screen-15'];
+                 'screen-11','screen-12','screen-13','screen-14','screen-15',
+                 'screen-16','screen-17'];
 
-// Flows (10=emoji recall, 12=end of Phase 1, 13=pre-task debrief):
-// C:  0,3,12,4,10,13,6,7,8,9
-// T1: 0,2,3,12,4,10,13,6,7,8,9
-// T2: 0,2,3,12,4,10,13,6,7,8,9
-// T3: 0,2,3,12,4,10,13,5,6,7,8,9
+// Single flow for every arm now — since every treatment sees every phase
+// (elicitation, re-elicitation, redistribution), there is no more per-arm
+// branching. 11 = intro to elicitation (general framing, not task-specific —
+// see dev note). 17 = "you've been matched" (condition-agnostic, shown
+// before re-elicitation so nothing about how rank/reward is decided leaks
+// early). 13 = pre-task debrief, moved to sit directly before the task (6),
+// after re-elicitation (5), since its wording depends on phase3Cond and
+// shouldn't be shown before that condition is contextually relevant.
+const FULL_FLOW = [0,11,2,3,12,4,10,17,5,13,6,7,8,9];
 function getFullFlow() {
-  if (treatment === 'C')  return [0,3,12,4,10,13,6,7,8,9];
-  if (treatment === 'T1') return [0,2,3,12,4,10,13,6,7,8,9];
-  if (treatment === 'T2') return [0,2,3,12,4,10,13,6,7,8,9];
-  if (treatment === 'T3') return [0,2,3,12,4,10,13,5,6,7,8,9];
-  return [0,2,3,12,4,10,13,6,7,8,9];
+  return FULL_FLOW.slice();
 }
 
 // Returns the slice of the full flow relevant to a given phase.
 //   'full'   -> everything (demo mode: preview both phases end-to-end)
 //   'phase1' -> up to and including the end-of-Phase-1 screen (12)
 //   'phase2' -> from the Step-2 consent screen (4) onward
-// The split point is always the position of screen id 4 (Step-2 consent),
-// which appears exactly once in every treatment's full flow.
+// The split point is always the position of screen id 4 (Step-2 consent).
 function getPhaseFlow(phase) {
   const full = getFullFlow();
   if (phase === 'full' || !phase) return full;
@@ -1173,24 +1415,20 @@ let APP_PHASE = 'full';
 //       runs full experiment; demo panel visible; data still recorded)
 let APP_DEMO_MODE = 0;
 
-function sampleRandomTreatment() {
-  const arr = ['C', 'T1', 'T2', 'T3'];
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
 function demoTreatmentChanged_(value) {
   if (!APP_DEMO_MODE) {
     console.warn('[Study] Ignored stray treatment-change event outside demo mode.');
     return;
   }
-  // Phase 2 must ALWAYS inherit its treatment from Phase 1 — it can never
-  // be reassigned, not even in demo mode. This guard exists specifically
-  // because a <select>'s value can be restored by browser autofill/bfcache
-  // on reload or back-navigation, independent of anything the participant
-  // does, which would otherwise silently fire this handler and corrupt a
-  // real assignment. Any stray event here is reverted, not acted on.
+  // Phase 2 must ALWAYS inherit its treatment arm from Phase 1 — it can
+  // never be reassigned, not even in demo mode. This guard exists
+  // specifically because a <select>'s value can be restored by browser
+  // autofill/bfcache on reload or back-navigation, independent of anything
+  // the participant does, which would otherwise silently fire this handler
+  // and corrupt a real assignment. Any stray event here is reverted, not
+  // acted on.
   if (APP_PHASE === 'phase2') {
-    console.warn('[Study] Ignored treatment-change event during Phase 2 — treatment must be inherited, never reassigned. Reverting dropdown to the actual assigned treatment (' + treatment + ').');
+    console.warn('[Study] Ignored treatment-change event during Phase 2 — treatment arm must be inherited, never reassigned. Reverting dropdown to the actual assigned arm (' + treatment + ').');
     const sel = document.getElementById('demo-treatment-select');
     if (sel) sel.value = treatment;
     return;
@@ -1208,24 +1446,27 @@ function demoTreatmentChanged_(value) {
 function setTreatment(t, phase) {
   phase = phase || 'full';
   APP_PHASE = phase;
-  treatment = t; sStar = 0; sStar2 = 0; sStarSet = false; sStar2Set = false;
+  treatment = t; applyTreatmentDerived_();
+  sStar = 0; sStar2 = 0; sStarSet = false; sStar2Set = false;
   elicitMoved = false; reelicitMoved = false;
-  YOU_RANK = sampleRank();
+  YOU_RANK = getAssignedRank_();
   BASELINE_TAU_PCT = Math.round(Math.random() * 100);
   YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
-  TASK_N_CORRECT = computeTaskNCorrect(YOU_RANK);
-  TASK_FREEBIE_PROPORTION = sampleTaskFreebieProportion();
+  TASK_N_TARGETS = computeTaskNTargets(YOU_RANK);
   MEMORY_SEQUENCE = generateMemorySequence();
   // reset + log into data layer
-  DATA_LOG.treatment = t;
+  DATA_LOG.treatment = t; // 3-letter arm string, e.g. 'CCT'
+  DATA_LOG.phase1_condition = phase1Cond;
+  DATA_LOG.phase2_condition = phase2Cond;
+  DATA_LOG.phase3_condition = phase3Cond;
   DATA_LOG.session_start = Date.now();
   DATA_LOG.memory_sequence = MEMORY_SEQUENCE.slice();
   DATA_LOG.you_rank = YOU_RANK;
   DATA_LOG.baseline_tau_pct = BASELINE_TAU_PCT;
   DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
   flow = getPhaseFlow(phase); flowPos = 0;
-  // Keep the demo panel's treatment dropdown in sync with whatever treatment
-  // was actually assigned (which may differ from what was previously selected).
+  // Keep the demo panel's treatment dropdown in sync with whatever arm was
+  // actually assigned (which may differ from what was previously selected).
   const sel = document.getElementById('demo-treatment-select');
   if (sel) sel.value = t;
 }
@@ -1245,7 +1486,7 @@ function buildSnapshot_() {
   return {
     treatment, flow, flowPos, APP_PHASE,
     YOU_RANK, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
-    TASK_N_CORRECT, TASK_FREEBIE_PROPORTION, MEMORY_SEQUENCE,
+    TASK_N_TARGETS, MEMORY_SEQUENCE,
     sStar, sStar2, sStarSet, sStar2Set,
     data: DATA_LOG
   };
@@ -1317,15 +1558,14 @@ setInterval(() => {
 // state hydration only) is what makes it impossible for a future new resume
 // path to accidentally skip the correction.
 function restoreFromSnapshot(s) {
-  treatment = s.treatment;
+  treatment = s.treatment; applyTreatmentDerived_();
   flow = s.flow;
   flowPos = s.flowPos;
   APP_PHASE = s.APP_PHASE;
   YOU_RANK = s.YOU_RANK;
   BASELINE_TAU_PCT = s.BASELINE_TAU_PCT;
   YOU_INITIAL_EARNING = s.YOU_INITIAL_EARNING;
-  TASK_N_CORRECT = s.TASK_N_CORRECT;
-  TASK_FREEBIE_PROPORTION = s.TASK_FREEBIE_PROPORTION;
+  TASK_N_TARGETS = s.TASK_N_TARGETS;
   MEMORY_SEQUENCE = s.MEMORY_SEQUENCE;
   sStar = s.sStar; sStar2 = s.sStar2; sStarSet = s.sStarSet; sStar2Set = s.sStar2Set;
   Object.assign(DATA_LOG, s.data);
@@ -1460,11 +1700,52 @@ function showScreen(idx) {
     completeStudyPhase(9);
   }
 
+  if (idx === 11) {
+    document.getElementById('elicit-intro-h1').textContent = phase1Cond === 'C' ? 'Are luck-based rewards fair?' : 'Are performance-based rewards fair?';
+    const introBody = document.getElementById('elicit-intro-body');
+    if (phase1Cond === 'C') {
+      introBody.innerHTML = `
+        <p>People taking part in studies often receive rewards based on <strong>chance</strong>. This means that <strong>rewards are given out at random</strong>. Are these rewards fair? We would like to hear your opinion.</p>
+        <p style="margin-top:8px">In the next section, we will ask you to tell us how rewards should be distributed across participants in a study, ranked from unluckiest to luckiest.</p>`;
+    } else {
+      introBody.innerHTML = `
+        <p>People taking part in studies often receive rewards based on their <strong>performance</strong>. This means that <strong>participants that do better than others earn more</strong>. Are these rewards fair? We would like to hear your opinion.</p>
+        <p style="margin-top:8px">In the next section, we will ask you to tell us how rewards should be distributed across participants in a study, ranked from worst to best.</p>`;
+    }
+  }
+
   if (idx === 2) {
     elicitMoved = false;
     const btn = document.getElementById('elicit-confirm-btn');
     btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
     btn.textContent = 'Confirm preference →';
+    document.getElementById('elicit-nopref-msg').textContent = '';
+    document.getElementById('elicit-nopref-btn').style.display = '';
+
+    // Condition-dependent body text (phase1Cond). Deliberately phrased as a
+    // GENERAL opinion question ("people taking part in studies", not "in
+    // this study" and not "for this task") — this elicitation is meant to
+    // be decoupled from whatever task the participant personally does
+    // later. See dev note near the top of this file.
+    const body = document.getElementById('elicit-card-body');
+    if (phase1Cond === 'C') {
+      body.innerHTML = `
+        <p>We'd like to know your view on how people taking part in studies should be <strong>rewarded when rewards are given out at random</strong>.</p>
+        <p style="margin-top:8px">The chart below shows a group of <strong>5 people</strong>, ranked from luckiest to least lucky, sharing a <strong>$5 bonus</strong>. Use the slider to choose how much luckier people should be rewarded compared to less lucky ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the luckiest person takes everything</strong>.</p>
+        <p style="margin-top:8px"><strong>There are no right or wrong answers.</strong> We are interested in what you think is fair, in general.</p>`;
+    } else {
+      body.innerHTML = `
+        <p>We'd like to know your view on how people taking part in studies should be <strong>rewarded for their performance</strong>.</p>
+        <p style="margin-top:8px">The chart below shows a group of <strong>5 people</strong>, ranked from best to worst performer, sharing a <strong>$5 bonus</strong>. Use the slider to choose how much better-performing people should be rewarded compared to worse-performing ones: at one end <strong>everyone is paid the same</strong>, at the other <strong>the best performer takes everything</strong>.</p>
+        <p style="margin-top:8px"><strong>There are no right or wrong answers.</strong> We are interested in what you think is fair, in general.</p>`;
+    }
+    document.getElementById('elicit-legend-cond').textContent = condLegendTag_(phase1Cond);
+    document.getElementById('elicit-reward-word').textContent = condWord_(phase1Cond);
+    document.getElementById('elicit-slider-right-label').textContent = condSliderRightLabel_(phase1Cond);
+    document.getElementById('elicit-bottom-label').textContent = condLowRankLabel_(phase1Cond);
+    document.getElementById('elicit-top-label').textContent = condHighRankLabel_(phase1Cond);
+
+
     const s0 = randomStart();
     DATA_LOG.elicitation_start_value = s0;
     document.getElementById('elicit-slider').value = s0;
@@ -1474,11 +1755,52 @@ function showScreen(idx) {
   }
 
   if (idx === 5) {
-    // T3 re-elicitation — show previous preference in orange
+    // Re-elicitation, shown to every arm — framed by phase2Cond. Orange
+    // overlay is always the Phase 1 preference (sStar), since elicitation
+    // (screen 2) now always happens for every arm.
     reelicitMoved = false;
     const btn = document.getElementById('reelicit-confirm-btn');
     btn.style.opacity = '0.4'; btn.style.cursor = 'not-allowed';
     btn.textContent = 'Confirm →';
+    document.getElementById('reelicit-nopref-msg').textContent = '';
+    document.getElementById('reelicit-nopref-btn').style.display = '';
+
+    document.getElementById('reelicit-h1').textContent = phase2Cond === 'C'
+      ? 'How should luck-based rewards be distributed?'
+      : 'How should performance-based rewards be distributed?';
+
+    const body = document.getElementById('reelicit-card-body');
+    if (phase2Cond === 'C') {
+      body.innerHTML = `
+        <p>We'd like to know your view on how people taking part in this study should be <strong>rewarded when rewards are based on luck</strong>. This means that <strong>rewards are given out at random</strong>.</p>
+        <p style="margin-top:8px">The chart below shows your group of 5 people, ranked from luckiest to least lucky, sharing a $5 bonus. Use the slider as before.</p>`;
+    } else {
+      body.innerHTML = `
+        <p>We'd like to know your view on how people taking part in this study should be <strong>rewarded when rewards are based on performance</strong>. This means that <strong>participants that do better than others earn more</strong>.</p>
+        <p style="margin-top:8px">The chart below shows your group of 5 people, ranked from worst to best performer, sharing a $5 bonus. Use the slider as before.</p>`;
+    }
+
+    // Anchor box referencing the Phase 1 preference (always phase1Cond,
+    // regardless of what phase2Cond is). If phase2Cond switches to
+    // performance framing, the transition note is folded into the SAME
+    // box, right below the anchor sentence — not a second box.
+    const preamble = document.getElementById('reelicit-preamble');
+    let preambleHtml = `<div class="anchor-box">In a previous study, you told us how you think this task's rewards should be distributed if it came down to <strong>${condWord_(phase1Cond)}</strong>. The orange overlay below shows <strong>the distribution you preferred</strong>.`;
+    if (phase1Cond === 'C' && phase2Cond === 'T') {
+      preambleHtml += ` <strong>Note:</strong> your previous preference was based on <strong>luck</strong> — how much a luckier person should be paid. Now we are asking you to distribute based on <strong>performance</strong>.`;
+    }
+    preambleHtml += `</div>`;
+    preamble.innerHTML = preambleHtml;
+
+    document.getElementById('reelicit-legend-label').textContent = 'Present preference';
+    document.getElementById('reelicit-legend-cond').textContent = condLegendTag_(phase2Cond);
+    document.getElementById('reelicit-legend-prev-label').textContent = 'Past preference';
+    document.getElementById('reelicit-legend-prev-cond').textContent = condLegendTag_(phase1Cond);
+    document.getElementById('reelicit-reward-word').textContent = condWord_(phase2Cond);
+    document.getElementById('reelicit-slider-right-label').textContent = condSliderRightLabel_(phase2Cond);
+    document.getElementById('reelicit-bottom-label').textContent = condLowRankLabel_(phase2Cond);
+    document.getElementById('reelicit-top-label').textContent = condHighRankLabel_(phase2Cond);
+
     const s0 = randomStart();
     DATA_LOG.reelicitation_start_value = s0;
     document.getElementById('reelicit-slider').value = s0;
@@ -1487,36 +1809,83 @@ function showScreen(idx) {
     updateReelicitStats(s0 / 100);
   }
 
+  if (idx === 13) {
+    // Pre-task debrief — a short, concrete statement of how the reward is
+    // decided (phase3Cond), added as a boxed callout rather than folded
+    // into the paragraph text above (kept static in HTML).
+    const box = document.getElementById('predebrief-reward-box');
+    box.innerHTML = phase3Cond === 'C'
+      ? `<div class="anchor-box">If you complete the task, you will receive a reward. The reward will be based on <strong>luck</strong>, relative to other people in your group.</div>`
+      : `<div class="anchor-box">If you complete the task, you will receive a reward. The reward will be based on <strong>your performance</strong> in the task, relative to other people in your group.</div>`;
+  }
+
   if (idx === 6) initGridTask();
 
   if (idx === 7) {
+    // Show a brief "calculating" state first (this is where the task's
+    // "submitted" moment resolves into an actual reward, not on the task
+    // screen itself) — content is populated immediately but stays hidden
+    // until the reveal delay below.
+    document.getElementById('rank-reveal-calculating').style.display = '';
+    document.getElementById('rank-reveal-content').style.display = 'none';
+    document.getElementById('rank-reveal-btn-row').style.display = 'none';
+
     // YOU_RANK and YOU_INITIAL_EARNING were already decided a priori, at
-    // session start — never re-rolled here.
+    // session start — never re-rolled here. Wording depends on phase3Cond.
     document.getElementById('reveal-rank-num').textContent = '#' + YOU_RANK;
-    document.getElementById('reveal-rank-desc').textContent = ordinalWord(YOU_RANK) + ' out of 10';
+    document.getElementById('reveal-rank-desc').textContent = ordinalWord(YOU_RANK) + ' out of ' + N_GROUP;
     document.getElementById('reveal-earned').textContent = '$' + YOU_INITIAL_EARNING.toFixed(2);
+    const introEl = document.getElementById('reveal-intro');
+    if (phase3Cond === 'C') {
+      introEl.innerHTML = '<strong>How lucky were you?</strong> Your rank within your group of 5 people is:';
+    } else {
+      introEl.innerHTML = '<strong>How well did you do?</strong> Your rank within your group of 5 people is:';
+    }
+
+    setTimeout(() => {
+      document.getElementById('rank-reveal-calculating').style.display = 'none';
+      document.getElementById('rank-reveal-content').style.display = '';
+      document.getElementById('rank-reveal-btn-row').style.display = 'flex';
+    }, 1200);
   }
 
   if (idx === 8) {
+    const bodyText = document.getElementById('giving-card-body-text');
     const preamble = document.getElementById('giving-preamble');
     const anchorItem = document.getElementById('anchor-legend-item');
     const anchorLabel = document.getElementById('anchor-legend-label');
+    document.getElementById('giving-nopref-msg').textContent = '';
+    document.getElementById('giving-nopref-btn').style.display = '';
 
+    if (phase3Cond === 'C') {
+      bodyText.innerHTML = `
+        <p>You now have the opportunity to <strong>re-distribute</strong> your group's rewards based on each participant's <strong>luck</strong> in how random rewards were given away.</p>
+        <p style="margin-top:8px">The chart below shows your group of <strong>5 people</strong>, ranked from luckiest to least lucky, sharing a <strong>$5 bonus</strong>.</p>`;
+    } else {
+      bodyText.innerHTML = `
+        <p>You now have the opportunity to <strong>re-distribute</strong> your group's rewards based on each participant's <strong>performance</strong> in the task you just completed.</p>
+        <p style="margin-top:8px">The chart below shows your group of <strong>5 people</strong>, ranked from worst to best performer, sharing a <strong>$5 bonus</strong>.</p>`;
+    }
+
+    // Anchor overlay is always the Phase 2 (re-elicitation) preference now,
+    // since re-elicitation (screen 5) happens for every arm directly before
+    // the task. Only the wording of the label changes, based on phase2Cond
+    // (what that earlier preference was actually about) — never phase3Cond.
     let sOrange = null;
-    if (treatment === 'T2' && sStarSet) {
-      sOrange = sStar / 100;
-      preamble.innerHTML = `<div class="anchor-box">In a <strong>previous study</strong>, you told us how you think people taking part in studies like this <strong>should be rewarded for their performance</strong>. The orange overlay below shows <strong>the distribution you preferred</strong> at the time.</div>`;
-      anchorItem.style.display = 'flex';
-      anchorLabel.textContent = 'Your preferred distribution (from previous study)';
-    } else if (treatment === 'T3' && sStar2Set) {
+    if (sStar2Set) {
       sOrange = sStar2 / 100;
-      preamble.innerHTML = `<div class="anchor-box">At the <strong>beginning of this study</strong>, you re-expressed how you think performance <strong>should be rewarded</strong>. The orange overlay below shows <strong>the distribution you preferred</strong>.</div>`;
+      preamble.innerHTML = `<div class="anchor-box">Just before the task, you told us how you think this task's rewards should be distributed if it came down to <strong>${condWord_(phase2Cond)}</strong>. The orange overlay below shows <strong>the distribution you preferred</strong>.</div>`;
       anchorItem.style.display = 'flex';
-      anchorLabel.textContent = 'Your preferred distribution (re-expressed today)';
+      anchorLabel.textContent = 'Your preference for this task' + condLegendTag_(phase2Cond);
     } else {
       preamble.innerHTML = '';
       anchorItem.style.display = 'none';
     }
+    document.getElementById('giving-legend-cond').textContent = condLegendTag_(phase3Cond);
+    document.getElementById('giving-reward-word').textContent = condWord_(phase3Cond);
+    document.getElementById('giving-slider-right-label').textContent = condSliderRightLabel_(phase3Cond);
+    document.getElementById('giving-bottom-label').textContent = condLowRankLabel_(phase3Cond);
+    document.getElementById('giving-top-label').textContent = condHighRankLabel_(phase3Cond);
 
     // Start exactly where the "earned" amount on the previous screen left off —
     // same a priori baseline split, not a fresh independent random draw.
@@ -1566,7 +1935,7 @@ function updateProgress() {
 }
 
 // ============================================================
-// CANVAS DRAWING — 10 people ranked by performance
+// CANVAS DRAWING — 5 people ranked by performance
 // ============================================================
 const PAD = { l: 48, r: 16, t: 28, b: 44 };
 
@@ -1596,7 +1965,7 @@ function drawRewardChart(canvas, sBlue, sOrange, showYou) {
   const payOrange = sOrange !== null ? payoffsForSlider(sOrange) : null;
 
   // --- bars ---
-  // x-slot mapping: worst performer (index 9) on the LEFT, best (index 0) on the RIGHT
+  // x-slot mapping: worst performer (last index) on the LEFT, best (index 0) on the RIGHT
   function slotFor(i) { return (N_GROUP - 1) - i; }
 
   for (let i = 0; i < N_GROUP; i++) {
@@ -1661,14 +2030,14 @@ function drawRewardChart(canvas, sBlue, sOrange, showYou) {
   for (let i = 0; i < N_GROUP; i++) {
     ctx.fillText((i + 1), xCenter(slotFor(i)), PAD.t + ch + 14);
   }
-  ctx.fillText('performance rank  (10 = worst  →  1 = best)', PAD.l + cw / 2, H - 4);
+  ctx.fillText('reward rank  (least paid  →  most paid)', PAD.l + cw / 2, H - 4);
   ctx.textAlign = 'left';
 
   // --- y axis ---
   ctx.strokeStyle = '#333';
   ctx.beginPath(); ctx.moveTo(PAD.l, PAD.t); ctx.lineTo(PAD.l, PAD.t + ch); ctx.stroke();
   ctx.fillStyle = '#555'; ctx.font = '9px IBM Plex Mono, monospace';
-  [0, 5, 10, 15, 20].forEach(v => {
+  [0, 1, 2, 3, 4, 5].forEach(v => {
     const y = toY(v);
     ctx.beginPath(); ctx.moveTo(PAD.l - 4, y); ctx.lineTo(PAD.l, y); ctx.stroke();
     ctx.textAlign = 'right'; ctx.fillText('$' + v, PAD.l - 6, y + 3); ctx.textAlign = 'left';
@@ -1711,6 +2080,39 @@ function updateElicitHistogram() {
   elicitMoved = true;
   const btn = document.getElementById('elicit-confirm-btn');
   btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+  document.getElementById('elicit-nopref-msg').textContent = '';
+}
+
+// "I don't have a preference" is deliberately NOT a real opt-out — there is
+// no DATA_LOG field it writes to and it never advances the screen. It just
+// nudges the participant to give their best guess anyway, since a slider
+// value is required to proceed. Shared across screens 2/5/8 via `key`
+// ('elicit' | 'reelicit' | 'giving'), which maps to that screen's message
+// paragraph id.
+// Maps the button's screen key to its DATA_LOG field prefix (elicitation_ /
+// reelicitation_ / giving_) so a single function can serve all three
+// screens without triplicating this logic.
+const NOPREF_FIELD_PREFIX_ = { elicit: 'elicitation', reelicit: 'reelicitation', giving: 'giving' };
+
+function noPreferenceNudge_(key) {
+  const el = document.getElementById(key + '-nopref-msg');
+  if (el) el.textContent = "There's no right or wrong answer here — please give us your best guess anyway. Try moving the slider to wherever feels closest to fair.";
+
+  // This button is a nudge, not a real opt-out — it never skips the screen
+  // or leaves the underlying *_pref field unset. But every click is real
+  // participant behavior and must be recorded, not discarded.
+  const prefix = NOPREF_FIELD_PREFIX_[key];
+  if (prefix) {
+    DATA_LOG[prefix + '_nopref_clicks'] = (DATA_LOG[prefix + '_nopref_clicks'] || 0) + 1;
+    DATA_LOG[prefix + '_nopref_clicked_ever'] = true;
+  }
+
+  // Hide the button itself once clicked — one nudge is enough, and it
+  // clutters the screen if left there after the participant already got
+  // the message. Reset (see showScreen idx===2/5/8) if the screen is
+  // re-entered fresh.
+  const btn = document.getElementById(key + '-nopref-btn');
+  if (btn) btn.style.display = 'none';
 }
 
 // ---------- RE-ELICITATION (T3, no YOU, shows previous preference in orange) ----------
@@ -1733,6 +2135,7 @@ function updateReelicitHistogram() {
   reelicitMoved = true;
   const btn = document.getElementById('reelicit-confirm-btn');
   btn.style.opacity = '1'; btn.style.cursor = 'pointer';
+  document.getElementById('reelicit-nopref-msg').textContent = '';
 }
 
 // ---------- REDISTRIBUTION (experiment, YOU highlighted, preferred overlay by treatment) ----------
@@ -1747,23 +2150,28 @@ function updateGivingHistogram() {
   document.getElementById('giving-bottom').textContent = '$' + pay[N_GROUP - 1].toFixed(2);
   document.getElementById('giving-your-post').textContent = '$' + pay[YOU_RANK - 1].toFixed(2);
   document.getElementById('giving-top').textContent = '$' + pay[0].toFixed(2);
+  document.getElementById('giving-nopref-msg').textContent = '';
 
   let sOrange = null;
   logSlider('giving', Math.round(s*100));
-  if (treatment === 'T2' && sStarSet)  sOrange = sStar / 100;
-  if (treatment === 'T3' && sStar2Set) sOrange = sStar2 / 100;
+  // Anchor is always the Phase 2 re-elicitation preference now (see showScreen idx===8).
+  if (sStar2Set) sOrange = sStar2 / 100;
   drawGivingCanvas(s, sOrange);
 }
 
 
 // ============================================================
-// TASK — 15×15 emoji-search grid, fills in progressively.
-// The number of target emojis required is a function of the participant's
-// (already, a priori, pre-decided) rank — never disclosed as such. A random
-// proportion of the target cells "spawn" already selected (freebies = natural
-// endowment, also decided a priori). Genuine search behaviour (clicks, time,
-// submit attempts) is recorded for research purposes only — it plays no role
-// in determining rank or reward.
+// TASK — 15×15 emoji-search grid.
+// The grid starts EMPTY (placeholder cells only) while the participant
+// reads the instructions. Pressing "Ready" starts both the fast reveal
+// (~1.8s total) and a fixed 45-second countdown at once. There is no
+// manual submit — whatever's been found when the clock hits 0 is what
+// counts, auto-submitted. The number of target emojis PLACED in the grid
+// (TASK_N_TARGETS) is a function of the participant's assigned rank —
+// never disclosed as such, and the live "Found: N" counter deliberately
+// never reveals how many targets exist in total. No freebies: every
+// target has to be found by the participant within the time they have.
+// Wrong clicks flash red and never persist as selected.
 // ============================================================
 const TASK_EMOJIS = [
   "😃","😁","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😗","😋",
@@ -1772,47 +2180,42 @@ const TASK_EMOJIS = [
   "😢","😭","😱","😖","😞","😓","😫","😤","😠","🤐","🤬","🥸","🤩","🫠","😎","🤑"
 ];
 const GRID_ROWS = 15, GRID_COLS = 15, GRID_TOTAL = GRID_ROWS * GRID_COLS;
-const GRID_REVEAL_MS = 500; // per-cell reveal interval
+const GRID_REVEAL_MS = 8;       // per-cell reveal interval — fast, but still visibly filling in
+const TASK_DURATION_MS = 45000; // fixed 45s window, no early/late submit
 
-// Required correct count is a function of rank: lowest rank -> 1 or 2,
-// next -> 3 or 4, ... best rank -> 19 or 20. Decided a priori with YOU_RANK.
-function computeTaskNCorrect(rank) {
-  const position = (N_GROUP + 1) - rank; // 1 = lowest rank, 10 = best rank
-  const low = 2 * position - 1, high = 2 * position;
-  return Math.random() < 0.5 ? low : high;
+// Target COUNT (not "required correct" — there's no quota to complete
+// anymore, just a density of targets scattered in the grid) is a function
+// of assigned rank: lowest assigned rank -> 1 or 2, next -> 3 or 4, ...
+// best assigned rank -> 19 or 20 (feeds into 2/4/8/16/32 doubling below).
+// Decided a priori with YOU_RANK (== assigned rank; see getAssignedRank_).
+function computeTaskNTargets(rank) {
+  const position = (N_GROUP + 1) - rank; // 1 = lowest assigned rank, N_GROUP = best
+  return Math.pow(2, position); // 2, 4, 8, 16, 32 for position 1..5 — the doubling Michele specified
 }
-let TASK_N_CORRECT = computeTaskNCorrect(YOU_RANK);
-
-// Freebie proportion: a random share (0–50%) of the target cells are pre-selected
-// the moment they appear, decided a priori (file-based in production).
-function sampleTaskFreebieProportion() { return Math.random() * 0.5; }
-let TASK_FREEBIE_PROPORTION = sampleTaskFreebieProportion();
+let TASK_N_TARGETS = computeTaskNTargets(YOU_RANK);
 
 let taskTarget = '';
 let taskGridEmojis = [];      // length GRID_TOTAL
 let taskTargetPositions = new Set();
-let taskFreebieCount = 0;     // number of cells granted for free (not a fixed position set)
-let taskFreebiesGranted = false;
-let taskSelected = new Set(); // only ever contains correct (target) cells
+let taskSelected = new Set(); // only ever contains correctly-found target cells
+let taskWrongClicks = 0;      // count of non-target clicks (real behavioral data, kept even though they never persist visually)
 let taskRevealTimers = [];
-let taskStartTime = 0;
-let taskSubmitAttempts = 0;
+let taskStartTime = 0;        // set when "Ready" is pressed, not on screen entry
 let taskGridFullyRevealed = false;
-const FAST_REVEAL_MS = 14; // catch-up speed if the grid hasn't finished revealing yet
+let taskCountdownTimer = null;
+let taskEndAt = 0;
 
 function buildGridTask() {
   taskTarget = TASK_EMOJIS[Math.floor(Math.random() * TASK_EMOJIS.length)];
-  const nCorrect = TASK_N_CORRECT;
-  taskFreebieCount = Math.round(nCorrect * TASK_FREEBIE_PROPORTION);
-  taskFreebiesGranted = false;
+  const nTargets = TASK_N_TARGETS;
 
-  // choose nCorrect distinct positions for the target emoji
+  // choose nTargets distinct positions for the target emoji
   const positions = Array.from({length: GRID_TOTAL}, (_, i) => i);
   for (let i = positions.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [positions[i], positions[j]] = [positions[j], positions[i]];
   }
-  taskTargetPositions = new Set(positions.slice(0, nCorrect));
+  taskTargetPositions = new Set(positions.slice(0, nTargets));
 
   taskGridEmojis = new Array(GRID_TOTAL);
   for (let i = 0; i < GRID_TOTAL; i++) {
@@ -1832,14 +2235,19 @@ function getTaskCellEl(i) {
   return row ? row.children[c] : null;
 }
 
-function updateRemainingDisplay() {
-  const remaining = Math.max(0, TASK_N_CORRECT - taskSelected.size);
-  document.getElementById('task-remaining').textContent = remaining;
+function updateFoundDisplay() {
+  document.getElementById('task-found-count').textContent = taskSelected.size;
 }
 
-// Reveal a single cell: show its emoji, wire up its click handler, and
-// optionally give it a brief neutral flash (used for the fast catch-up reveal).
-function revealCellAt(i, flash) {
+function formatCountdown(ms) {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return m + ':' + String(s).padStart(2, '0');
+}
+
+// Reveal a single cell: show its emoji and wire up its click handler.
+function revealCellAt(i) {
   const cell = getTaskCellEl(i);
   if (!cell) return;
   cell.classList.remove('ph'); cell.classList.add('live');
@@ -1851,102 +2259,37 @@ function revealCellAt(i, flash) {
         taskSelected.delete(i); cell.classList.remove('selected');
       } else {
         taskSelected.add(i); cell.classList.add('selected');
-        maybeGrantFreebies();
       }
-      updateRemainingDisplay();
+      updateFoundDisplay();
     } else {
-      // wrong cell: flash red, never persists as selected
+      // wrong cell: flash red, never persists as selected — recorded anyway
+      taskWrongClicks++;
       cell.classList.add('wrong-flash');
       setTimeout(() => cell.classList.remove('wrong-flash'), 550);
     }
   };
-  if (flash) {
-    cell.classList.add('reveal-flash');
-    setTimeout(() => cell.classList.remove('reveal-flash'), 260);
-  }
 }
 
-// If the participant reaches the freebie threshold while the grid is still
-// mid-reveal, fast-forward the remaining (still-hidden) cells — flashing each
-// as it pops in — then proceed to the freebie grant once everything is visible.
-function fastForwardRemainingCells(onComplete) {
-  taskRevealTimers.forEach(t => clearTimeout(t));
-  taskRevealTimers = [];
-
-  const remainingIdx = [];
-  for (let i = 0; i < GRID_TOTAL; i++) {
-    const cell = getTaskCellEl(i);
-    if (cell && cell.classList.contains('ph')) remainingIdx.push(i);
-  }
-
-  let p = 0;
-  function step() {
-    if (p >= remainingIdx.length) {
-      taskGridFullyRevealed = true;
-      const submitBtn = document.getElementById('task-submit-btn');
-      submitBtn.disabled = false; submitBtn.style.opacity = '1'; submitBtn.style.cursor = 'pointer';
-      onComplete();
-      return;
-    }
-    revealCellAt(remainingIdx[p], true);
-    p++;
-    const t = setTimeout(step, FAST_REVEAL_MS);
-    taskRevealTimers.push(t);
-  }
-  step();
-}
-
-// Once the participant has genuinely found (TASK_N_CORRECT - taskFreebieCount)
-// target cells themselves, the remaining ones are granted for free — flashed
-// green first, then marked selected. If the grid hasn't fully revealed yet,
-// fast-forward the rest of the reveal first.
-function maybeGrantFreebies() {
-  if (taskFreebiesGranted || taskFreebieCount === 0) return;
-  const genuineNeeded = TASK_N_CORRECT - taskFreebieCount;
-  if (taskSelected.size < genuineNeeded) return;
-  taskFreebiesGranted = true;
-
-  function doGrant() {
-    const remaining = [...taskTargetPositions].filter(i => !taskSelected.has(i));
-    const feedback = document.getElementById('task-feedback');
-    feedback.textContent = remaining.length === 1
-      ? 'Your next emoji is on us!'
-      : `Your next ${remaining.length} emojis are on us!`;
-    feedback.style.color = 'var(--accent)';
-
-    remaining.forEach(i => {
-      const cell = getTaskCellEl(i);
-      if (cell) cell.classList.add('freebie-flash');
-    });
-    setTimeout(() => {
-      remaining.forEach(i => {
-        const cell = getTaskCellEl(i);
-        if (cell) { cell.classList.remove('freebie-flash'); cell.classList.add('selected'); }
-        taskSelected.add(i);
-      });
-      updateRemainingDisplay();
-    }, 550);
-  }
-
-  if (taskGridFullyRevealed) doGrant();
-  else fastForwardRemainingCells(doGrant);
-}
-
+// Builds the grid DOM with every cell as an unrevealed placeholder ("·").
+// Called on screen entry — the grid is visibly empty while the participant
+// reads the instructions, and stays that way until "Ready" is pressed.
 function initGridTask() {
   taskRevealTimers.forEach(t => clearTimeout(t));
   taskRevealTimers = [];
+  if (taskCountdownTimer) { clearInterval(taskCountdownTimer); taskCountdownTimer = null; }
   taskSelected = new Set();
-  taskSubmitAttempts = 0;
-  taskStartTime = Date.now();
+  taskWrongClicks = 0;
+  taskStartTime = 0;
   taskGridFullyRevealed = false;
 
   buildGridTask();
   document.getElementById('task-target-display').textContent = taskTarget;
   document.getElementById('task-target-display2').textContent = taskTarget;
   document.getElementById('task-feedback').textContent = '';
-  updateRemainingDisplay();
-  const submitBtn = document.getElementById('task-submit-btn');
-  submitBtn.disabled = true; submitBtn.style.opacity = '0.4'; submitBtn.style.cursor = 'not-allowed';
+  document.getElementById('task-found-count').textContent = '0';
+  document.getElementById('task-countdown').textContent = formatCountdown(TASK_DURATION_MS);
+  document.getElementById('task-status-row').style.display = 'none';
+  document.getElementById('task-ready-row').style.display = 'flex';
 
   const gridEl = document.getElementById('task-grid');
   gridEl.innerHTML = '';
@@ -1960,56 +2303,79 @@ function initGridTask() {
     }
     gridEl.appendChild(row);
   }
+  // Deliberately NOT scheduling the reveal or countdown here — see
+  // startTaskCountdown(), fired only by the "Ready" button.
+}
 
-  // progressive reveal, row by row, left to right
+// Schedules the fast, row-by-row progressive reveal (~1.8s total at
+// GRID_REVEAL_MS=8). Only ever called from startTaskCountdown().
+function scheduleGridReveal() {
   for (let i = 0; i < GRID_TOTAL; i++) {
     const _i = i;
     const t = setTimeout(() => {
-      revealCellAt(_i, false);
-      if (_i === GRID_TOTAL - 1) {
-        taskGridFullyRevealed = true;
-        submitBtn.disabled = false; submitBtn.style.opacity = '1'; submitBtn.style.cursor = 'pointer';
-      }
+      revealCellAt(_i);
+      if (_i === GRID_TOTAL - 1) taskGridFullyRevealed = true;
     }, (_i + 1) * GRID_REVEAL_MS);
     taskRevealTimers.push(t);
   }
 }
 
-function submitGridTask() {
-  taskSubmitAttempts++;
+function updateCountdownDisplay(remainingOverride) {
+  const remaining = remainingOverride !== undefined ? remainingOverride : (taskEndAt - Date.now());
+  document.getElementById('task-countdown').textContent = formatCountdown(remaining);
+}
+
+// Fired by the "Ready" button. Starts the clock and the reveal together;
+// nothing about the grid is visible or clickable before this point.
+function startTaskCountdown() {
+  taskStartTime = Date.now();
+  document.getElementById('task-ready-row').style.display = 'none';
+  document.getElementById('task-status-row').style.display = '';
+  taskEndAt = Date.now() + TASK_DURATION_MS;
+  updateCountdownDisplay(TASK_DURATION_MS);
+  scheduleGridReveal();
+  taskCountdownTimer = setInterval(() => {
+    const remaining = taskEndAt - Date.now();
+    if (remaining <= 0) {
+      clearInterval(taskCountdownTimer);
+      taskCountdownTimer = null;
+      document.getElementById('task-countdown').textContent = '0:00';
+      autoSubmitGridTask();
+      return;
+    }
+    updateCountdownDisplay(remaining);
+  }, 100);
+}
+
+// The ONLY way this screen ever advances — fired automatically when the
+// 45s countdown reaches zero. There is no participant-triggered submit.
+function autoSubmitGridTask() {
+  taskRevealTimers.forEach(t => clearTimeout(t));
+  taskRevealTimers = [];
   const feedback = document.getElementById('task-feedback');
-  const missing = TASK_N_CORRECT - taskSelected.size;
-
-  if (missing > 0) {
-    feedback.textContent = missing + (missing === 1 ? ' emoji missing — keep searching' : ' emojis missing — keep searching');
-    feedback.style.color = 'var(--red)';
-    return;
-  }
-
-  feedback.textContent = 'All found!';
-  feedback.style.color = 'var(--green)';
-  DATA_LOG.task_n_correct = TASK_N_CORRECT;
-  DATA_LOG.task_freebie_count = taskFreebieCount;
-  DATA_LOG.task_freebie_proportion = TASK_FREEBIE_PROPORTION;
-  DATA_LOG.task_submit_attempts = taskSubmitAttempts;
-  DATA_LOG.task_extra_selected = 0;
+  feedback.textContent = 'Time\'s up — task submitted.';
+  feedback.style.color = 'var(--accent)';
+  DATA_LOG.task_n_targets = TASK_N_TARGETS;
+  DATA_LOG.task_found_count = taskSelected.size;
+  DATA_LOG.task_wrong_clicks = taskWrongClicks;
   DATA_LOG.task_time_ms = Date.now() - taskStartTime;
-  document.getElementById('task-submit-btn').disabled = true;
   setTimeout(nextScreen, 450);
 }
 
-// DEBUG: force-complete the grid task from wherever the participant is on it.
+// DEBUG: force-complete the grid task from wherever the participant is on
+// it (works whether or not "Ready" has been pressed yet).
 function debugSkipTask() {
   if (_currentScreenIdx !== 6) { alert('Not on the task screen.'); return; }
+  if (taskCountdownTimer) { clearInterval(taskCountdownTimer); taskCountdownTimer = null; }
   taskRevealTimers.forEach(t => clearTimeout(t));
+  taskRevealTimers = [];
+  if (!taskStartTime) taskStartTime = Date.now(); // Ready was never pressed — start the clock now so task_time_ms is sane
   taskGridFullyRevealed = true;
-  taskSelected = new Set(taskTargetPositions);
-  updateRemainingDisplay();
-  DATA_LOG.task_n_correct = TASK_N_CORRECT;
-  DATA_LOG.task_freebie_count = taskFreebieCount;
-  DATA_LOG.task_freebie_proportion = TASK_FREEBIE_PROPORTION;
-  DATA_LOG.task_submit_attempts = taskSubmitAttempts;
-  DATA_LOG.task_extra_selected = 0;
+  taskSelected = new Set(taskTargetPositions); // pretend everything was found
+  updateFoundDisplay();
+  DATA_LOG.task_n_targets = TASK_N_TARGETS;
+  DATA_LOG.task_found_count = taskSelected.size;
+  DATA_LOG.task_wrong_clicks = taskWrongClicks;
   DATA_LOG.task_time_ms = Date.now() - taskStartTime;
   nextScreen();
 }
@@ -2142,9 +2508,22 @@ function submitRecall() {
 }
 
 function submitDontRemember() {
-  DATA_LOG.recall_answer = null;     // explicitly marks "don't remember"
+  DATA_LOG.recall_answer = null;     // explicitly marks "don't remember [the sequence]"
   DATA_LOG.recall_score = 0;
   DATA_LOG.recall_score_norm = 0;
+  nextScreen();
+}
+
+// Distinct from submitDontRemember(): this is for participants who don't
+// recall the memorization task happening at all, not just participants who
+// tried and couldn't recall the specific sequence. Same scoring outcome
+// (0), but recorded as a different signal — conflating the two would lose
+// a real distinction in the data.
+function submitNoMemoryOfTask() {
+  DATA_LOG.recall_answer = null;
+  DATA_LOG.recall_score = 0;
+  DATA_LOG.recall_score_norm = 0;
+  DATA_LOG.recall_no_memory_of_task = true;
   nextScreen();
 }
 
@@ -2155,8 +2534,11 @@ function submitDecision() {
   DATA_LOG.giving_pref = Math.round(s * 100);
   DATA_LOG.final_payoff = yours;
   document.getElementById('out-rank').textContent = '#' + YOU_RANK;
+  document.getElementById('out-rank-label').textContent = phase3Cond === 'C' ? 'Your luck rank' : 'Your performance rank';
   document.getElementById('out-giving').textContent = Math.round(s * 100) + '%';
+  document.getElementById('out-giving-label').textContent = 'Reward for ' + condWord_(phase3Cond) + ' you chose';
   document.getElementById('final-payment').textContent = '$' + yours.toFixed(2);
+  document.getElementById('out-odds-note').innerHTML = `You have a <strong>1 in ${N_GROUP}</strong> chance of receiving your chosen bonus payment shown above. Otherwise, you'll receive the distribution another participant in your group picked.`;
   nextScreen();
 }
 
@@ -2194,7 +2576,7 @@ function prolificRedirect(codeKey) {
 // Paste the deployed web app URL here (Deploy > New deployment > Web app,
 // "Execute as: Me", "Who has access: Anyone"). It will look like:
 //   https://script.google.com/macros/s/AKfycb.../exec
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwQpfiRruklbgnW4hyhk4kuHw6HhB4JUCmywwtm6mIUnWxXixn8vRI-w06z7oJpTWzG/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwp_xTMK5HE9rR67ENhRpJw0lv8-zdrYpHde0izCtzupayyg-1CRvYSXA6iYfpB_uZN/exec';
 
 function backendConfigured_() {
   return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
@@ -2267,7 +2649,15 @@ async function lookupPriorResponseAttempt_(pid) {
     resume_snapshot: json.resume_snapshot || null,
     elicitation_pref: json.elicitation_pref != null ? json.elicitation_pref : null,
     reelicitation_pref: json.reelicitation_pref != null ? json.reelicitation_pref : null,
-    memory_sequence: memSeq   // the actual array shown in Phase 1, or null
+    memory_sequence: memSeq,   // the actual array shown in Phase 1, or null
+    // Real assigned rank from the backend's cluster-lock queue (see dev
+    // note). Only present once Phase 1 is complete and the backend has
+    // actually assigned this pid into a cluster slot — null otherwise
+    // (including for every Phase 1 lookup, since assignment only happens
+    // once Phase 2 begins). NEVER the same as actual_rank — the backend
+    // deliberately does not return actual_rank here; it must stay a
+    // backend-only, post-hoc instrumental variable, never surfaced live.
+    assigned_rank: json.assigned_rank != null ? Number(json.assigned_rank) : null
   };
 }
 
@@ -2470,7 +2860,7 @@ async function bootstrapAppInner_() {
   if (demoMode === 2) {
     // Full demo: ignore STUDY_ID entirely, start Phase 1 fresh.
     DATA_LOG.app_phase = 'full';
-    setTreatment('T1', 'full');
+    setTreatment(sampleRandomTreatmentArm(), 'full');
     showScreen(flow[0]);
     return;
   }
@@ -2587,6 +2977,20 @@ async function bootstrapAppInner_() {
     const ep = Number(prior.elicitation_pref);
     if (!isNaN(ep) && prior.elicitation_pref !== null && prior.elicitation_pref !== '') {
       sStar = ep; sStarSet = true;
+    }
+
+    // Real assigned rank from the backend's cluster-lock queue overrides
+    // whatever provisional random value setTreatment()/restoreFromSnapshot()
+    // set — but ONLY in production. Demo mode (APP_DEMO_MODE 1/2) stays
+    // fully random, permanently, by design (see getAssignedRank_()).
+    // Everything downstream of YOU_RANK has to be recomputed here too,
+    // since it may have been derived from the earlier provisional value.
+    if (!APP_DEMO_MODE && prior.assigned_rank != null) {
+      YOU_RANK = prior.assigned_rank;
+      DATA_LOG.you_rank = YOU_RANK;
+      YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
+      DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
+      TASK_N_TARGETS = computeTaskNTargets(YOU_RANK);
     }
   }
 
