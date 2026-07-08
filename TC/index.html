@@ -1221,18 +1221,19 @@ let YOU_RANK = 1 + Math.floor(Math.random() * N_GROUP);
 function sampleRank() { return 1 + Math.floor(Math.random() * N_GROUP); }
 
 // Seam for the future cluster-lock backend (see dev note near the top of
-// this file for the full spec). Once built, PRODUCTION mode will fetch a
-// real assigned rank from the backend's cluster queue at Phase 2 entry —
-// but demo mode (APP_DEMO_MODE 1/2) is NOT meant to simulate real cluster
-// queuing, so it stays fully random there, permanently, by design (per
-// Michele: "keep the rank random for demomode instead"). Today, since the
-// backend piece doesn't exist yet, both branches fall through to the same
-// random sample — this function exists so that swapping in the real
-// backend call later only touches ONE place, not every call site.
+// this file for the full spec). The backend now exists (see the .gs file),
+// wired up via the funnel point in bootstrapAppInner_. Only demomode=2
+// (full synthetic pilot — ignores STUDY_ID, always fresh) stays fully
+// random, permanently, by design: it has no real backend record to be
+// consistent WITH. demomode=1 is documented as "real phase routing, real
+// backend lookup/writes... inspect a real record without changing
+// behavior" — it must NOT randomize the rank, or it stops doing what it's
+// for. This function only provides the PROVISIONAL value used before the
+// backend's authoritative assigned_rank arrives (or as the permanent value
+// in demomode=2); production and demomode=1 both get overridden by the
+// real value in the Phase-2 funnel below, once the backend responds.
 function getAssignedRank_() {
-  if (APP_DEMO_MODE) return sampleRank();
-  // TODO(backend): replace with the real cluster-queue assigned rank once
-  // the cluster-lock backend is built. Falls back to random until then.
+  if (APP_DEMO_MODE === 2) return sampleRank();
   return sampleRank();
 }
 function ordinalWord(n) {
@@ -2620,7 +2621,7 @@ function prolificRedirect(codeKey) {
 // Paste the deployed web app URL here (Deploy > New deployment > Web app,
 // "Execute as: Me", "Who has access: Anyone"). It will look like:
 //   https://script.google.com/macros/s/AKfycb.../exec
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbz8EHvh9FdLO3tq9-WYYtb6soiLytlrbLGTu6HkaJHz-YJDavvXgQcrQj22SHECPt3V/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbz74lq--_WVgImIj0D_yTl3h9ORAltqo7GdDdZ8uyPs10rdZ_i9o5Z26FfDJPIRg_a2/exec';
 
 function backendConfigured_() {
   return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
@@ -3025,11 +3026,13 @@ async function bootstrapAppInner_() {
 
     // Real assigned rank from the backend's cluster-lock queue overrides
     // whatever provisional random value setTreatment()/restoreFromSnapshot()
-    // set — but ONLY in production. Demo mode (APP_DEMO_MODE 1/2) stays
-    // fully random, permanently, by design (see getAssignedRank_()).
+    // set — in production AND demomode=1 (which is meant to reflect real
+    // backend state, just with a visible debug panel). Only demomode=2
+    // (full synthetic pilot, no real backend record to match) stays fully
+    // random, permanently, by design (see getAssignedRank_()).
     // Everything downstream of YOU_RANK has to be recomputed here too,
     // since it may have been derived from the earlier provisional value.
-    if (!APP_DEMO_MODE && prior.assigned_rank != null) {
+    if (APP_DEMO_MODE !== 2 && prior.assigned_rank != null) {
       YOU_RANK = prior.assigned_rank;
       DATA_LOG.you_rank = YOU_RANK;
       YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
