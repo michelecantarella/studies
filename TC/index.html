@@ -9,135 +9,64 @@
 <title>TC Study</title>
 <!--
   ====================================================================
-  DEV NOTE — BACKEND TODO (treatment redesign, frontend-only pass)
+  DEV NOTE — current architecture summary (kept short; see the .gs
+  backend file itself for full implementation detail/history).
   ====================================================================
-  This pass only touches index.html. The backend (Apps Script /
-  Google Sheet) still reflects the OLD C/T1/T2/T3 design and needs the
-  following once we finalise the new one:
 
-  1. `treatment` now stores a 3-letter ADDITIVE arm string (CCC / CCT /
-     CTT / TTT), not C/T1/T2/T3. Any backend logic, exports, or
-     analysis scripts keyed on the old labels will break silently
-     (wrong condition, not an error) if not updated.
+  TREATMENT: `treatment` is a 3-letter additive arm string (CCC/CCT/CTT/
+  TTT), one letter per phase (elicitation / re-elicitation / redistribution),
+  C=luck-framed, T=performance-framed. Additive/monotonic only.
 
-  2. New DATA_LOG fields to add to HEADER / P1_FIELDS / P2_FIELDS:
-       phase1_condition  ('C' or 'T') -> P1_FIELDS, written at phase1_complete
-       phase2_condition  ('C' or 'T') -> P2_FIELDS, written at phase2_complete
-       phase3_condition  ('C' or 'T') -> P2_FIELDS, written at phase2_complete
-       elicitation_nopref_clicks        (int)     -> P1_FIELDS
-       elicitation_nopref_clicked_ever  (bool)    -> P1_FIELDS
-       reelicitation_nopref_clicks      (int)     -> P2_FIELDS
-       reelicitation_nopref_clicked_ever(bool)    -> P2_FIELDS
-       giving_nopref_clicks             (int)     -> P2_FIELDS
-       giving_nopref_clicked_ever       (bool)    -> P2_FIELDS
-       recall_no_memory_of_task         (bool)    -> P2_FIELDS
-     (recall_no_memory_of_task distinguishes "I don't remember memorizing
-     these [at all]" from the pre-existing "I don't remember [the
-     sequence]" button — two different participant experiences that were
-     briefly conflated into one button and needed to be split back apart.)
-     (The nopref fields record clicks on the "I don't have a preference"
-     button on screens 2/5/8. That button is a nudge, not a real opt-out —
-     it never skips the screen or leaves *_pref unset — but every click is
-     real participant behavior and needs to be recorded, not discarded.)
-     (phase1/2/3_condition are redundant with `treatment` but kept as
-     separate columns since they're the actual per-phase IV used in
-     analysis — same principle as keeping Δτ as its own control column
-     rather than re-deriving it from other fields every time.)
+  RANK — the important part, get this right:
+    - ASSIGNED_RANK: decided a priori by the backend's cluster-chain queue.
+      Fixes task difficulty (TASK_N_TARGETS) before the task starts. This
+      is ONLY an instrument (Michele uses it in his own estimation) — it
+      is NEVER shown to the participant and NEVER used for payment.
+    - YOU_RANK: what's actually DISPLAYED and PAID on. Starts as a
+      placeholder equal to ASSIGNED_RANK, then gets overwritten with the
+      REAL actual rank the moment the task auto-submits, computed
+      INSTANTLY and LOCALLY (computeActualRankLocally_(), no network wait)
+      against PREDECESSOR_FOUND_COUNTS — real found_counts of this
+      participant's up-to-4 comparison-window predecessors, already
+      fetched at Phase-2-entry lookup time (see the funnel in
+      bootstrapAppInner_). Performance has to matter — that was the whole
+      point of redesigning the task; assigned-rank-only display was a
+      bug, not a design choice, and was corrected.
+    - This works because of the backend's assignment invariant: you can
+      only join a cluster chain if your predecessor was already
+      task-complete, so by induction every one of your 4 predecessors is
+      guaranteed already task-complete before you even start — meaning
+      their found_counts are knowable (and immutable) well before your own
+      task even begins, with no staleness risk. See apps_script_backend
+      v10+ for the full chain/fork model and the tie-break rule (standard
+      competition ranking: ties share the better rank, e.g.
+      [16,8,5,5,2] -> [1,2,3,3,5] — same formula, computed independently
+      on both client and server).
+    - recordTaskResultInBackground_() writes this participant's own result
+      to the backend so FUTURE participants can use it — fire-and-forget,
+      not awaited, since the client's own rank never depends on it. The
+      backend ALSO independently computes/stores its own authoritative
+      actual_rank server-side (not client-tamperable) purely as a
+      cross-check before any real payout; the two should always agree
+      barring a bug, but the live display and provisional payoff run on
+      the instant client computation.
 
-  3. Group size / pot — DONE in this pass (frontend only):
-       N_GROUP 10 -> 5, TOTAL_POT $20 -> $5. All copy, chart axes, and
-       y-axis tick marks updated to match. Reward math itself (payoffsForSlider,
-       giniOf, etc.) needed no changes — it was already parameterized by
-       N_GROUP/TOTAL_POT, not hardcoded to 10/$20.
+  BACKEND: Google Apps Script + Sheet, cluster-chain rank assignment with
+  forking (no row duplication — a `prev_participant_pid` pointer chain),
+  bootstrap synthetic filler for cluster 1. `lookup` (at Phase-2 entry)
+  returns predecessor_found_counts alongside assigned_rank/cluster_id.
+  `task_complete` records this participant's own result and independently
+  computes/stores actual_rank server-side. `actual_rank` itself is never
+  returned by either endpoint to the client — only used server-side, as
+  the authoritative cross-check.
 
-  4. Rank assignment — CLUSTER-LOCK SYSTEM — DONE (backend implemented,
-     see apps_script_backend_v4.gs):
-     - Implements exactly the spec Michele confirmed: ~20 (parameterized,
-       CLUSTER_SIZE-independent) concurrent clusters of 5 slots each,
-       manually throttled by Michele so only ~1 new entrant per available
-       cluster at a time; a cluster LOCKS the moment a participant is
-       assigned into it and stays locked until they complete Phase 2 or
-       time out after 1 hour; timeouts freeze that slot's number
-       permanently via NEW columns (rank_fixed/rank_fixed_value) — the
-       original cluster_slot is never touched or deleted, per Michele's
-       explicit instruction.
-     - Cluster assignment is triggered by the existing `lookup` GET call
-       the frontend already makes unconditionally at Phase 2 start — no
-       new frontend request was needed. It's idempotent: a pid that
-       already has a cluster_id/cluster_slot just gets it echoed back,
-       never reassigned.
-     - actual_rank (the pairing/tournament instrumental variable) is
-       computed automatically once a cluster's 5 slots are ALL resolved
-       (completed or fixed) — verified against Michele's worked example
-       (fixed=3 -> groups {1,2} and {4,5}, better real performer within
-       each group gets the numerically better slot number). It is
-       DELIBERATELY never returned by the lookup endpoint — it only ever
-       lives in the Sheet, exactly per the architecture decision below.
-     - New columns: cluster_id, cluster_slot, entered_phase2_at_iso,
-       rank_fixed, rank_fixed_value, actual_rank. None of these are
-       written through the P1_FIELDS/P2_FIELDS DATA_LOG mapping — they're
-       backend-internal, touched only by the cluster-assignment functions.
-     - FRONTEND WIRING: lookupPriorResponseAttempt_ now parses
-       `assigned_rank` from the lookup response; the Phase-2 funnel point
-       in bootstrapAppInner_ overrides YOU_RANK with it (production only —
-       demo mode stays fully random, permanently, via getAssignedRank_())
-       and recomputes everything downstream (YOU_INITIAL_EARNING,
-       TASK_N_TARGETS) since those may have been set provisionally before
-       the authoritative value arrived.
-     - CLUSTER_SIZE is a manually-synced constant in the backend file
-       (must match frontend's N_GROUP by hand — no shared config between
-       the two files).
+  TASK: 15x15 canvas-rendered grid (not DOM — canvas has no text/
+  accessibility representation, so Find-in-page can't match it), 45s fixed
+  window, no manual submit, target count = 2^position by assigned rank
+  (2/4/8/16/32), no freebies.
 
-  5. Task redesign — DONE in this pass (frontend only):
-       - Grid fills fast (GRID_REVEAL_MS = 8ms/cell, ~1.8s total for 225
-         cells) instead of the old 500ms/cell slow build.
-       - Grid starts genuinely empty (all placeholder cells) while the
-         participant reads instructions; nothing reveals until they press
-         "Ready". Pressing Ready starts BOTH the reveal and the 45s clock
-         at once.
-       - Fixed 45-second window, no early/manual submission (Submit
-         button removed entirely), auto-submits when the clock hits 0.
-       - Live counter counts UP ("Found: N"), not down — there's no
-         disclosed quota to complete, per Michele's instruction not to
-         indicate how many are left to find.
-       - Freebie mechanic fully removed: TASK_FREEBIE_PROPORTION,
-         taskFreebieCount, maybeGrantFreebies(), fastForwardRemainingCells(),
-         the freebie-flash CSS animation, and the "some emojis may be
-         given to you for free" instruction text are all gone.
-       - Target density (TASK_N_TARGETS, renamed from TASK_N_CORRECT) is
-         still the 2/4/8/16/32-by-assigned-rank mapping, kept as
-         specified — Michele confirmed the ceiling effect at the top of
-         the distribution (ranks 1/2 likely both maxing out target-finding
-         within 45s) is intentional, not a bug to fix.
-       - DATA_LOG fields renamed/changed: task_n_correct -> task_n_targets;
-         task_freebie_count/task_freebie_proportion/task_submit_attempts/
-         task_extra_selected REMOVED (no longer meaningful — there's no
-         submit button and wrong clicks never persist, so "extra selected"
-         can't happen); task_found_count and task_wrong_clicks ADDED as the
-         real behavioral data driving the actual-rank instrumental
-         variable. Backend HEADER/P2_FIELDS need matching updates.
-       - Wrong-click UX (red flash, auto-deselect, never persists) is
-         UNCHANGED — kept exactly as before per Michele's note.
-
-  6. Actual rank vs. assigned rank — architecture decision (confirmed):
-     actual rank is a BACKEND-ONLY, post-hoc instrumental variable, computed
-     once enough of a cluster has resolved (via the pairing rule in note 4)
-     from each participant's task_found_count. It is NEVER shown live to
-     participants and never changes what the live flow displays — the
-     rank-reveal/redistribution screens (7/8) continue to show ASSIGNED
-     rank exactly as they do today. This was necessary because, per
-     Michele's cluster-lock spec (note 4), cluster slots fill one
-     participant at a time — an early participant in a cluster finishes
-     the task well before later participants even start, so their real
-     opponent's count simply doesn't exist yet at their own completion
-     time. Actual-rank computation therefore has to happen asynchronously,
-     backend-side, after the fact — it cannot be computed or shown in the
-     live single-session flow. Payment/redistribution stays exactly as
-     currently implemented (synchronous, based on assigned rank).
-
-  Reminder: none of the reward MATH changed in this pass (payoffsForSlider,
-  giniOf, etc.) — only the task's fill/timing/scoring mechanics and screen
-  text/labels/flow.
+  Reward math itself (payoffsForSlider, giniOf, N_GROUP=5, $5 pot) is
+  unchanged from the original design.
   ====================================================================
 -->
 
@@ -1078,7 +1007,9 @@ const DATA_LOG = {
   reelicitation_time_ms: 0,    // time spent on the re-elicitation screen specifically
   reelicitation_nopref_clicks: 0,
   reelicitation_nopref_clicked_ever: false,
-  you_rank: null,
+  you_rank: null,               // the FINAL/actual rank shown & paid on (see computeActualRankLocally_) — starts as a placeholder equal to assigned_rank
+  assigned_rank: null,          // Michele's instrument — fixes task difficulty, decided a priori by the cluster-queue backend, never shown/paid on
+  actual_rank_fetch_failed: false, // true if recording this task's result on the backend failed even after retries (see recordTaskResultInBackground_) — YOU_RANK is unaffected (computed locally, always succeeds), but a failed write means this participant's result never lands in the Sheet, so they can't become a future predecessor and the backend's own cross-check actual_rank is missing for them — worth flagging for manual follow-up
   baseline_tau_pct: null,        // a priori baseline split (0-100) used for the "earned" amount at reveal
   initial_earning: null,         // dollar amount shown at the rank-reveal screen
   task_n_targets: null,           // total target emojis placed in the grid (function of assigned rank, a priori)
@@ -1215,9 +1146,30 @@ function giniOf(arr) {
   return (2 * num / (n * sum)) - (n + 1) / n;
 }
 
-// Participant's own performance rank (1..10) — decided a priori (random for now;
-// in production this comes from a pre-set file, independent of in-session performance).
-let YOU_RANK = 1 + Math.floor(Math.random() * N_GROUP);
+// ASSIGNED_RANK: decided a priori (cluster-queue backend), fixes task
+// difficulty (TASK_N_TARGETS) before the task starts. This is Michele's
+// INSTRUMENT for his own estimation — it is NOT what the participant sees
+// or gets paid on.
+// YOU_RANK: what actually gets DISPLAYED and PAID. Starts out equal to
+// ASSIGNED_RANK as a placeholder (before the task happens), then gets
+// overwritten with the real ACTUAL rank the moment the task auto-submits
+// (see computeActualRankLocally_()) — actual task performance is what's supposed
+// to matter, that's the whole point of the redesigned task.
+let ASSIGNED_RANK = 1 + Math.floor(Math.random() * N_GROUP);
+let YOU_RANK = ASSIGNED_RANK;
+// True only once the real actual rank has been computed by computeActualRankLocally_()
+// (or the demomode=2 permanent-random-only path decides not to fetch one).
+// Guards whether it's still safe to sync YOU_RANK to a freshly-corrected
+// ASSIGNED_RANK (placeholder phase) versus leaving an already-fetched real
+// value alone (post-task phase).
+let ACTUAL_RANK_KNOWN = false;
+// Real found_counts of this participant's (up to) 4 comparison-window
+// predecessors — fetched once, at Phase-2-entry lookup time (same call
+// that already fetches memory_sequence/elicitation_pref), because by the
+// backend's assignment invariant they're guaranteed already task-complete
+// at that point and never change afterward. Lets the client compute its
+// own actual_rank INSTANTLY when its own task ends, no second round-trip.
+let PREDECESSOR_FOUND_COUNTS = [];
 function sampleRank() { return 1 + Math.floor(Math.random() * N_GROUP); }
 
 // Seam for the future cluster-lock backend (see dev note near the top of
@@ -1244,6 +1196,9 @@ function ordinalWord(n) {
 // "Earned" amount shown at the rank-reveal screen: a baseline split, decided a
 // priori (random for now, file-based in production), applied to YOU_RANK —
 // entirely independent of the redistribution decision made afterwards.
+// (This is a PLACEHOLDER value until the task's real actual_rank comes
+// back — see computeActualRankLocally_() — at which point both YOU_RANK and this
+// figure get recomputed against the real result.)
 let BASELINE_TAU_PCT = Math.round(Math.random() * 100);
 let YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
 
@@ -1425,13 +1380,16 @@ function setTreatment(t, phase) {
   treatment = t; applyTreatmentDerived_();
   sStar = 0; sStar2 = 0; sStarSet = false; sStar2Set = false;
   elicitMoved = false; reelicitMoved = false;
-  YOU_RANK = getAssignedRank_();
+  ASSIGNED_RANK = getAssignedRank_();
+  YOU_RANK = ASSIGNED_RANK; // placeholder — overwritten with the real actual rank once the task completes
+  ACTUAL_RANK_KNOWN = false;
   BASELINE_TAU_PCT = Math.round(Math.random() * 100);
   YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
-  TASK_N_TARGETS = computeTaskNTargets(YOU_RANK);
+  TASK_N_TARGETS = computeTaskNTargets(ASSIGNED_RANK);
   MEMORY_SEQUENCE = generateMemorySequence();
   // reset + log into data layer
   DATA_LOG.treatment = t; // 3-letter arm string, e.g. 'CCT'
+  DATA_LOG.assigned_rank = ASSIGNED_RANK;
   DATA_LOG.phase1_condition = phase1Cond;
   DATA_LOG.phase2_condition = phase2Cond;
   DATA_LOG.phase3_condition = phase3Cond;
@@ -1461,7 +1419,7 @@ function setTreatment(t, phase) {
 function buildSnapshot_() {
   return {
     treatment, flow, flowPos, APP_PHASE,
-    YOU_RANK, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
+    ASSIGNED_RANK, YOU_RANK, ACTUAL_RANK_KNOWN, PREDECESSOR_FOUND_COUNTS, BASELINE_TAU_PCT, YOU_INITIAL_EARNING,
     TASK_N_TARGETS, MEMORY_SEQUENCE,
     sStar, sStar2, sStarSet, sStar2Set,
     data: DATA_LOG
@@ -1539,6 +1497,9 @@ function restoreFromSnapshot(s) {
   flowPos = s.flowPos;
   APP_PHASE = s.APP_PHASE;
   YOU_RANK = s.YOU_RANK;
+  ASSIGNED_RANK = s.ASSIGNED_RANK != null ? s.ASSIGNED_RANK : s.YOU_RANK;
+  ACTUAL_RANK_KNOWN = !!s.ACTUAL_RANK_KNOWN;
+  PREDECESSOR_FOUND_COUNTS = Array.isArray(s.PREDECESSOR_FOUND_COUNTS) ? s.PREDECESSOR_FOUND_COUNTS : [];
   BASELINE_TAU_PCT = s.BASELINE_TAU_PCT;
   YOU_INITIAL_EARNING = s.YOU_INITIAL_EARNING;
   TASK_N_TARGETS = s.TASK_N_TARGETS;
@@ -1810,8 +1771,9 @@ function showScreen(idx) {
     document.getElementById('rank-reveal-content').style.display = 'none';
     document.getElementById('rank-reveal-btn-row').style.display = 'none';
 
-    // YOU_RANK and YOU_INITIAL_EARNING were already decided a priori, at
-    // session start — never re-rolled here. Wording depends on phase3Cond.
+    // YOU_RANK now holds the REAL actual rank (computed instantly and
+    // locally in computeActualRankLocally_, before we ever navigated here)
+    // — no longer the a priori assigned rank. Wording depends on phase3Cond.
     document.getElementById('reveal-rank-num').textContent = '#' + YOU_RANK;
     document.getElementById('reveal-rank-desc').textContent = ordinalWord(YOU_RANK) + ' out of ' + N_GROUP;
     document.getElementById('reveal-earned').textContent = '$' + YOU_INITIAL_EARNING.toFixed(2);
@@ -1822,11 +1784,13 @@ function showScreen(idx) {
       introEl.innerHTML = '<strong>How well did you do?</strong> Your rank within your group of 5 people is:';
     }
 
+    // Purely a cosmetic beat — the rank was already computed instantly
+    // and locally back on screen 6, no pending fetch to cover for here.
     setTimeout(() => {
       document.getElementById('rank-reveal-calculating').style.display = 'none';
       document.getElementById('rank-reveal-content').style.display = '';
       document.getElementById('rank-reveal-btn-row').style.display = 'flex';
-    }, 1200);
+    }, 500);
   }
 
   if (idx === 8) {
@@ -2170,12 +2134,14 @@ const TASK_DURATION_MS = 45000; // fixed 45s window, no early/late submit
 // anymore, just a density of targets scattered in the grid) is a function
 // of assigned rank: lowest assigned rank -> 1 or 2, next -> 3 or 4, ...
 // best assigned rank -> 19 or 20 (feeds into 2/4/8/16/32 doubling below).
-// Decided a priori with YOU_RANK (== assigned rank; see getAssignedRank_).
+// Decided a priori with ASSIGNED_RANK (see getAssignedRank_) — task
+// difficulty is fixed before the task starts and never changes, unlike
+// YOU_RANK which gets overwritten with the real actual rank afterward.
 function computeTaskNTargets(rank) {
   const position = (N_GROUP + 1) - rank; // 1 = lowest assigned rank, N_GROUP = best
   return Math.pow(2, position); // 2, 4, 8, 16, 32 for position 1..5 — the doubling Michele specified
 }
-let TASK_N_TARGETS = computeTaskNTargets(YOU_RANK);
+let TASK_N_TARGETS = computeTaskNTargets(ASSIGNED_RANK);
 
 let taskTarget = '';
 let taskGridEmojis = [];      // length GRID_TOTAL
@@ -2396,13 +2362,19 @@ function autoSubmitGridTask() {
   taskRevealTimers.forEach(t => clearTimeout(t));
   taskRevealTimers = [];
   const feedback = document.getElementById('task-feedback');
-  feedback.textContent = 'Time\'s up — task submitted.';
+  feedback.textContent = 'Task submitted — calculating your reward…';
   feedback.style.color = 'var(--accent)';
   DATA_LOG.task_n_targets = TASK_N_TARGETS;
   DATA_LOG.task_found_count = taskSelected.size;
   DATA_LOG.task_wrong_clicks = taskWrongClicks;
   DATA_LOG.task_time_ms = Date.now() - taskStartTime;
-  setTimeout(nextScreen, 450);
+
+  // Instant, local — no network wait. This is the fix: performance has to
+  // matter, not just the a priori assigned rank. See computeActualRankLocally_().
+  computeActualRankLocally_();
+  recordTaskResultInBackground_(); // not awaited — see its own comment
+
+  nextScreen();
 }
 
 // DEBUG: force-complete the grid task from wherever the participant is on
@@ -2422,6 +2394,8 @@ function debugSkipTask() {
   DATA_LOG.task_found_count = taskSelected.size;
   DATA_LOG.task_wrong_clicks = taskWrongClicks;
   DATA_LOG.task_time_ms = Date.now() - taskStartTime;
+  computeActualRankLocally_(); // same real path as autoSubmitGridTask — debug mode should exercise it too
+  recordTaskResultInBackground_();
   nextScreen();
 }
 
@@ -2621,7 +2595,7 @@ function prolificRedirect(codeKey) {
 // Paste the deployed web app URL here (Deploy > New deployment > Web app,
 // "Execute as: Me", "Who has access: Anyone"). It will look like:
 //   https://script.google.com/macros/s/AKfycb.../exec
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzCpR7QdqVCouGCzScm9dsX0tp98WoOVpgkIDPKUBTigFnWbDdq8u_45h5R4ipF7gv5/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzcf935I-RepZwP5zkYEHF0cFMEcEScj77UsAddn-pEEEe7nSSB3DiV--PwOhAcNOUu/exec';
 
 function backendConfigured_() {
   return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
@@ -2699,10 +2673,15 @@ async function lookupPriorResponseAttempt_(pid) {
     // note). Only present once Phase 1 is complete and the backend has
     // actually assigned this pid into a cluster slot — null otherwise
     // (including for every Phase 1 lookup, since assignment only happens
-    // once Phase 2 begins). NEVER the same as actual_rank — the backend
-    // deliberately does not return actual_rank here; it must stay a
-    // backend-only, post-hoc instrumental variable, never surfaced live.
-    assigned_rank: json.assigned_rank != null ? Number(json.assigned_rank) : null
+    // once Phase 2 begins). This is Michele's instrument only — never
+    // shown/paid on; see ASSIGNED_RANK vs YOU_RANK.
+    assigned_rank: json.assigned_rank != null ? Number(json.assigned_rank) : null,
+    // Real found_counts of this pid's (up to) 4 comparison-window
+    // predecessors — always already-resolved data by the time this is
+    // returned (see the backend's assignment invariant). Lets the client
+    // compute its own actual_rank the instant its own task ends, no
+    // second round-trip needed.
+    predecessor_found_counts: Array.isArray(json.predecessor_found_counts) ? json.predecessor_found_counts : []
   };
 }
 
@@ -2769,6 +2748,54 @@ async function postToBackend_(payload, maxAttempts) {
 }
 
 const COMPLETION_SUBMIT_ATTEMPTS = 4;
+
+// Fired right after the task auto-submits — BEFORE the rest of Phase 2
+// (recall, redistribution) happens. This is what makes actual performance
+// matter: it fetches the real actual_rank from the backend and applies it
+// to YOU_RANK (what's displayed and paid on) — ASSIGNED_RANK stays
+// whatever it always was, used only for task difficulty and as Michele's
+// own instrument. Uses COMPLETION_SUBMIT_ATTEMPTS retries since this is
+// now a critical, blocking call: the rank-reveal screen has nothing
+// meaningful to show until this resolves.
+// Computes YOU_RANK INSTANTLY and locally, using this participant's own
+// just-finished found_count against PREDECESSOR_FOUND_COUNTS (fetched back
+// at Phase-2-entry lookup time — see the funnel in bootstrapAppInner_).
+// No network wait at all: the predecessor data was already known before
+// the task even started, and never goes stale (a predecessor's
+// found_count never changes once written). Same tie-break rule as the
+// backend's own independent computation: standard competition ranking —
+// ties share the same, better (numerically lower) rank.
+function computeActualRankLocally_() {
+  const mine = DATA_LOG.task_found_count || 0;
+  const rank = 1 + PREDECESSOR_FOUND_COUNTS.filter(f => f > mine).length;
+  YOU_RANK = rank;
+  ACTUAL_RANK_KNOWN = true;
+  DATA_LOG.you_rank = YOU_RANK;
+  YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
+  DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
+}
+
+// Records this participant's own real result on the backend so FUTURE
+// participants can use it as one of their own predecessors. Deliberately
+// NOT awaited by callers — the rank itself never depends on this call
+// succeeding (see computeActualRankLocally_), so there's no reason to make
+// the participant wait on it. The backend also independently computes and
+// stores its own authoritative actual_rank from this data (server-side,
+// not client-tamperable) — a useful cross-check before any real payout,
+// even though the live display runs on the instant local computation.
+function recordTaskResultInBackground_() {
+  postToBackend_({
+    action: 'task_complete',
+    pid: DATA_LOG.prolific_pid,
+    treatment: DATA_LOG.treatment,
+    data: DATA_LOG
+  }, COMPLETION_SUBMIT_ATTEMPTS).then(function(ok) {
+    if (!ok) {
+      DATA_LOG.actual_rank_fetch_failed = true;
+      console.error('[Study] Task result failed to record on the backend after retries — this participant will not be usable as a future predecessor.');
+    }
+  });
+}
 
 async function submitPhase1Complete() {
   DATA_LOG.phase1_completed_at_iso = new Date().toISOString();
@@ -3030,14 +3057,26 @@ async function bootstrapAppInner_() {
     // backend state, just with a visible debug panel). Only demomode=2
     // (full synthetic pilot, no real backend record to match) stays fully
     // random, permanently, by design (see getAssignedRank_()).
-    // Everything downstream of YOU_RANK has to be recomputed here too,
-    // since it may have been derived from the earlier provisional value.
+    // IMPORTANT: this only ever touches ASSIGNED_RANK (task difficulty)
+    // and TASK_N_TARGETS — and ONLY syncs YOU_RANK/YOU_INITIAL_EARNING to
+    // match if the real actual rank hasn't been fetched yet (still in the
+    // placeholder phase). On a RESUMED session where the task is already
+    // done, ACTUAL_RANK_KNOWN is true (restored from the snapshot) and
+    // YOU_RANK must be left completely alone.
     if (APP_DEMO_MODE !== 2 && prior.assigned_rank != null) {
-      YOU_RANK = prior.assigned_rank;
-      DATA_LOG.you_rank = YOU_RANK;
-      YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
-      DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
-      TASK_N_TARGETS = computeTaskNTargets(YOU_RANK);
+      ASSIGNED_RANK = prior.assigned_rank;
+      DATA_LOG.assigned_rank = ASSIGNED_RANK;
+      TASK_N_TARGETS = computeTaskNTargets(ASSIGNED_RANK);
+      if (!ACTUAL_RANK_KNOWN) {
+        YOU_RANK = ASSIGNED_RANK;
+        YOU_INITIAL_EARNING = payoffsForSlider(BASELINE_TAU_PCT / 100)[YOU_RANK - 1];
+        DATA_LOG.you_rank = YOU_RANK;
+        DATA_LOG.initial_earning = YOU_INITIAL_EARNING;
+        // Fetched once, here, well before the task starts — see
+        // computeActualRankLocally_() for how this turns into YOU_RANK
+        // the instant the task ends, with no second network round-trip.
+        PREDECESSOR_FOUND_COUNTS = prior.predecessor_found_counts || [];
+      }
     }
   }
 
