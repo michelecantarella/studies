@@ -1,0 +1,1617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>WT Study</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b;
+  --warn:#d4860a; --bdr:#d8d4c8;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;}
+
+/* ── BOOT OVERLAY ─────────────────────────────────────────────── */
+#boot-overlay{
+  position:fixed;inset:0;z-index:9999;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+}
+#boot-overlay .boot-spin{
+  width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PROGRESS TIMELINE ───────────────────────────────────────── */
+#prog-wrap{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  background:var(--sur);border-bottom:1px solid var(--bdr);
+  padding:6px 16px 4px;visibility:hidden;
+}
+#prog-wrap.visible{visibility:visible;}
+#prog-canvas{display:block;width:100%;height:90px;}
+
+/* ── SCREENS ─────────────────────────────────────────────────── */
+.screen{display:none;padding-top:116px;min-height:100vh;}
+.screen.active{display:block;}
+#screen-consent,#screen-already-done,#screen-conn-error{padding-top:0;}
+.wrap{max-width:700px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+.wrap-wide{max-width:860px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+
+/* ── CARD ────────────────────────────────────────────────────── */
+.card{background:var(--sur);border:1px solid var(--bdr);padding:2rem;position:relative;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--red);}
+details summary::-webkit-details-marker{display:none;}
+details summary{list-style:none;}
+
+/* ── TYPE ────────────────────────────────────────────────────── */
+.lbl{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin-bottom:.4rem;}
+h1{font-family:var(--mono);font-size:1.4rem;font-weight:600;line-height:1.2;margin-bottom:1rem;}
+h2{font-family:var(--mono);font-size:.95rem;font-weight:500;margin:1.2rem 0 .4rem;}
+p{line-height:1.7;color:var(--ink2);margin-bottom:.8rem;font-size:.93rem;}
+p strong{color:var(--ink);}
+ul{padding-left:1.3rem;margin-bottom:.8rem;}
+li{line-height:1.7;color:var(--ink2);font-size:.93rem;}
+li strong{color:var(--ink);}
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+.btn{font-family:var(--mono);font-size:.76rem;letter-spacing:.06em;padding:.65rem 1.5rem;
+  border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;
+  transition:all .15s;text-transform:uppercase;display:inline-block;}
+.btn:hover:not(:disabled){background:transparent;color:var(--ink);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--ink);}
+.btn-outline:hover:not(:disabled){background:var(--ink);color:var(--bg);}
+.btn-red{border-color:var(--red);background:var(--red);color:#fff;}
+.btn-red:hover:not(:disabled){background:transparent;color:var(--red);}
+.btn-blue{border-color:var(--blue);background:var(--blue);color:#fff;}
+.btn-blue:hover:not(:disabled){background:transparent;color:var(--blue);}
+.btn-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.2rem;}
+
+/* ── NOTICE ──────────────────────────────────────────────────── */
+.notice{font-family:var(--mono);font-size:.73rem;padding:.6rem .9rem;
+  background:var(--bg);border-left:3px solid var(--warn);color:var(--ink2);margin:.8rem 0;}
+
+/* ── FORM ────────────────────────────────────────────────────── */
+.frow{margin-bottom:1rem;}
+.frow label{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:.3rem;color:var(--ink2);}
+.frow select,.frow input[type=text],.frow input[type=number]{
+  font-family:var(--sans);font-size:.93rem;
+  padding:.42rem .7rem;border:1.5px solid var(--bdr);background:var(--bg);color:var(--ink);width:100%;}
+.frow select:focus,.frow input:focus{outline:none;border-color:var(--ink);}
+
+/* ── INSTRUCTION CANVAS ──────────────────────────────────────── */
+canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(--sur);}
+
+/* ── DEMO GRID ───────────────────────────────────────────────── */
+.demo-grid{display:inline-grid;grid-template-columns:repeat(5,44px);gap:5px;padding:10px;
+  border:1px solid var(--bdr);background:var(--sur);}
+.demo-cell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:1.35rem;border:1px solid var(--bdr);border-radius:3px;cursor:pointer;
+  transition:background .1s;user-select:none;}
+.demo-cell.ph{color:#ccc;}
+.demo-cell.live:hover{border-color:var(--ink);}
+.demo-cell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+/* ── TASK SCREEN ─────────────────────────────────────────────── */
+.grid-outer{display:flex;justify-content:center;margin:.8rem 0;}
+.grid-box{border:1px solid var(--bdr);padding:10px;background:var(--sur);display:inline-block;}
+.grow-el{display:flex;gap:5px;margin-bottom:5px;}
+.grow-el:last-child{margin-bottom:0;}
+.ecell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:1.35rem;border:1px solid var(--bdr);background:var(--sur);border-radius:3px;
+  cursor:default;transition:background .08s;line-height:1;user-select:none;}
+.ecell.ph{color:#ccc;font-size:.9rem;}
+.ecell.live{cursor:pointer;}
+.ecell.live:hover{border-color:var(--ink);}
+.ecell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+/* ── GRACE ───────────────────────────────────────────────────── */
+#screen-grace .grace-inner{min-height:calc(100vh - 80px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.7rem;text-align:center;}
+
+/* ── INST NAV ────────────────────────────────────────────────── */
+.inst-pages .inst-page{display:none;}
+.inst-pages .inst-page.active{display:block;}
+.inst-nav{display:flex;justify-content:space-between;align-items:center;margin-top:1.4rem;}
+.inst-dots{display:flex;gap:6px;}
+.inst-dot{width:8px;height:8px;border-radius:50%;background:var(--bdr);}
+.inst-dot.active{background:var(--ink);}
+
+/* ── OFFER BOX ───────────────────────────────────────────────── */
+.offer-box{border:1.5px solid var(--blue);padding:1.1rem 1.4rem;margin:1rem 0;position:relative;}
+
+/* ── STATS STRIP ─────────────────────────────────────────────── */
+.stats-strip{display:flex;border:1px solid var(--bdr);margin-bottom:1rem;}
+.sc{flex:1;padding:.45rem .65rem;border-right:1px solid var(--bdr);}
+.sc:last-child{border-right:none;}
+.sv{font-family:var(--mono);font-size:.95rem;font-weight:600;}
+.sl{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
+
+/* ── RESULTS TABLE ───────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.7rem 0;}
+th,td{padding:.4rem .6rem;border:1px solid var(--bdr);text-align:left;}
+th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;background:var(--bg);}
+.tfoot-row td{font-weight:500;background:var(--bg);}
+.csv-btn{display:inline-block;margin-top:.8rem;font-family:var(--mono);font-size:.72rem;
+  letter-spacing:.06em;padding:.55rem 1.2rem;border:1.5px solid var(--grn);
+  background:var(--grn);color:#fff;cursor:pointer;text-transform:uppercase;}
+.csv-btn:hover{background:transparent;color:var(--grn);}
+
+/* ── SAVE STATUS ─────────────────────────────────────────────── */
+.save-row{display:flex;align-items:center;gap:10px;padding:.7rem 0;}
+.save-spin{width:16px;height:16px;border:2px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
+
+@keyframes switchFlash{
+  0%,100%{opacity:1;}20%{opacity:.1;}40%{opacity:1;}60%{opacity:.1;}80%{opacity:1;}
+}
+.switch-flash{animation:switchFlash 1.5s ease;}
+</style>
+</head>
+<body>
+
+<!-- BOOT OVERLAY -->
+<div id="boot-overlay">
+  <div class="boot-spin"></div>
+  <div style="font-family:var(--mono);font-size:.8rem;color:var(--ink2);">Checking your study status, please wait…</div>
+</div>
+
+<!-- PROGRESS BAR -->
+<div id="prog-wrap">
+  <canvas id="prog-canvas"></canvas>
+</div>
+
+<!-- ═══ SCREEN: Consent ═══════════════════════════════════════════ -->
+<div id="screen-consent" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Welcome</div>
+  <h1>Before you begin</h1>
+  <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the consent button below, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
+  <p>This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, which will take less than 5 minutes to complete and will earn you a fixed payment upon completion, and an experimental module, which will allow you to gain a random bonus payment.</p>
+
+  <details style="margin:1.4rem 0;border:1px solid var(--bdr);">
+    <summary style="cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.78rem;font-weight:600;letter-spacing:.04em;background:var(--bg);user-select:none;">▸ Consent form (click to read)</summary>
+    <div style="padding:1rem 1.2rem;font-size:.85rem;line-height:1.6;">
+      <p>The data collected will be used for research purposes only. Any responses you provide will be completely anonymous, as no identifying information will be collected during the study. Prolific will allow us to link your choices to your gender, age, and other demographics, but we will receive no identifying information about you, and we will not be able to link this information to your name.</p>
+      <p>If you give us your permission by completing and submitting the study, we plan to discuss/publish the results in an academic forum. The study data, which does not contain any personal information, may be shared with cooperation partners for collaborative analysis and made publicly accessible via research databases or scientific publications. Please note that once study data are publicly accessible, their further distribution by others cannot be ruled out and falls beyond the area of influence or responsibility of the IMT School for Advanced Studies Lucca. This study is conducted in accordance with the laws D. Lgs. 196/2003 and UE GDPR 679/2016 on data protection. The experimental protocol and the management of the study data has been approved by the Joint Ethical Committee of the Universities "Scuola Superiore Sant'Anna", "Scuola Normale Superiore", and "IMT Scuola Alti Studi Lucca" (N: n. 23/2026, April 30).</p>
+      <p>You can reach out to Michele Cantarella (michele.cantarella@imtlucca.it) if you have any questions related to this study or if you wish your response to be deleted.</p>
+      <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
+    </div>
+  </details>
+
+  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site — you'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
+  <div class="btn-row">
+    <button class="btn" onclick="doConsent()">I consent →</button>
+    <button class="btn btn-outline" onclick="doNotConsent()">I do not consent</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Survey ════════════════════════════════════════════ -->
+<div id="screen-survey" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Short Survey</div>
+  <h1>About you</h1>
+  <div class="frow"><label>Age</label><input type="text" inputmode="numeric" id="s-age" placeholder="e.g. 32"></div>
+  <div class="frow"><label>Gender</label>
+    <select id="s-gender">
+      <option value="">— select —</option>
+      <option value="male">Male</option>
+      <option value="female">Female</option>
+      <option value="other">Other / prefer not to say</option>
+    </select>
+  </div>
+  <div class="frow"><label>Student status</label>
+    <select id="s-student">
+      <option value="">— select —</option>
+      <option value="yes">Currently a student</option>
+      <option value="no">Not a student</option>
+    </select>
+  </div>
+  <div class="btn-row"><button class="btn" onclick="submitSurvey()">Continue →</button></div>
+  <div id="debug-notice" style="display:none;margin-top:1rem;padding:.5rem .75rem;background:#fffbe6;border:1px solid #e6c800;border-radius:3px;font-family:var(--mono);font-size:.75rem;color:#7a6000;">Debug mode active</div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Instructions ══════════════════════════════════════ -->
+<div id="screen-instructions" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Instructions</div>
+  <div class="inst-pages">
+
+    <!-- PAGE 1 -->
+    <div class="inst-page active" id="ip-1">
+      <h1>The clicking tasks</h1>
+      <p>You will complete <strong id="inst-ntasks">5</strong> sections. Each section offers a <strong>random cash bonus</strong>; you see the exact amount before each section begins. You earn it only by completing the main task.</p>
+      <p>Each section consists of a series of <strong>tasks</strong>. In each task a 5×5 grid of emoji symbols <strong>progressively reveals</strong> from left to right. Once fully revealed, click all instances of the <strong>target emoji</strong> shown above the grid. The task submits automatically after a short countdown.</p>
+      <p style="text-align:center;margin:.8rem 0 .4rem;"><strong>Try it — find and click all <span id="demo-target" style="font-size:1.4rem;"></span></strong></p>
+      <p style="font-size:.8rem;color:var(--ink2);text-align:center;">Complete the demo below to continue.</p>
+      <div style="display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.5rem;">
+        <div class="demo-grid" id="demo-grid"></div>
+        <div id="demo-status" style="font-family:var(--mono);font-size:.75rem;color:var(--ink2);min-height:1.2em;"></div>
+        <button class="btn btn-outline" id="demo-reveal-btn" onclick="revealDemoGrid()">▶ Reveal grid</button>
+      </div>
+    </div>
+
+    <!-- PAGE 2 -->
+    <div class="inst-page" id="ip-2">
+      <h1>The main task</h1>
+      <p>The number of tasks needed to earn the reward is <strong>random</strong>. The highlighted red zone shows where the task can end — it could be <strong>any task in that range</strong>, with equal probability. The grey zone is the safe zone: the task cannot end there.</p>
+      <p>A <strong>stickman</strong> marks your current position on the timeline, always visible at the top of your screen:</p>
+      <canvas id="inst-timeline" class="demo" style="height:72px;"></canvas>
+      <p style="font-size:.82rem;color:var(--ink2);margin-top:.5rem;">The stickman advances right with each completed task. When it enters the red zone, the task may end at any moment.</p>
+    </div>
+
+    <!-- PAGE 3 -->
+    <div class="inst-page" id="ip-3">
+      <h1>The alternative offer</h1>
+      <p>At a <strong>random point</strong> during a section, a <strong>switch button</strong> will activate on the left and the <strong>alternative sequence</strong> will appear on the timeline. A brief notification will pop up to alert you. The task keeps going — you can switch at any time by clicking the button.</p>
+      <p>Later, the section will <strong>pause</strong> to let you decide. You can switch to the alternative, continue the main task, or forfeit both.</p>
+      <canvas id="inst-offer-timeline" class="demo" style="height:110px;"></canvas>
+      <p style="font-size:.82rem;color:var(--ink2);margin-top:.5rem;">The <span style="color:var(--blue);font-weight:600;">blue line</span> shows the alternative sequence — a fixed, known number of tasks. At the pause, you have three options:</p>
+      <ul style="font-size:.87rem;">
+        <li><strong>Continue</strong>: keep going on the main task (button stays visible)</li>
+        <li><strong>Switch</strong>: move to the alternative sequence</li>
+        <li><strong>Forfeit</strong>: abandon both</li>
+      </ul>
+    </div>
+
+  </div><!-- /inst-pages -->
+  <div class="inst-nav">
+    <button class="btn btn-outline" id="ip-prev" onclick="instNav(-1)" style="visibility:hidden">← Back</button>
+    <div class="inst-dots" id="ip-dots"></div>
+    <button class="btn" id="ip-next" onclick="instNav(1)">Next →</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Grace (section preview) ══════════════════════════ -->
+<div id="screen-grace" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl" id="grace-lbl">Section 1 of 5</div>
+  <h1 id="grace-heading">Get ready</h1>
+  <p id="grace-dist-txt" style="margin-bottom:.4rem;"></p>
+  <canvas id="grace-hist" class="demo" style="height:82px;margin-bottom:.3rem;"></canvas>
+  <p id="grace-dist-note" style="font-size:.8rem;color:var(--ink2);margin-bottom:1.2rem;"></p>
+  <div id="grace-pay-block" style="display:none;border-top:1px solid var(--bdr);padding-top:1rem;margin-top:.5rem;">
+    <p id="grace-pay-txt" style="font-size:1.1rem;color:var(--ink);font-family:var(--mono);font-weight:600;margin-bottom:.2rem;"></p>
+    <p style="font-size:.82rem;color:var(--ink2);">You earn this only by completing the main task.</p>
+  </div>
+  <div id="grace-countdown-block" style="display:none;border-top:1px solid var(--bdr);padding-top:1rem;margin-top:.5rem;text-align:center;">
+    <button class="btn" id="grace-start-btn" onclick="graceStart()">▶ Start section</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Task ══════════════════════════════════════════════ -->
+<div id="screen-subtask" class="screen">
+  <div style="max-width:900px;margin:0 auto;padding:2rem 2rem 1rem;display:flex;flex-direction:column;align-items:center;gap:1.5rem;">
+    <div id="st-instr" style="font-family:var(--mono);font-size:1.1rem;font-weight:600;text-align:center;color:var(--ink);">
+      Find and click all <span id="st-target" style="font-size:1.6rem;vertical-align:middle;"></span>
+    </div>
+    <div style="display:flex;gap:2.5rem;align-items:flex-start;justify-content:center;width:100%;">
+      <!-- LEFT -->
+      <div style="flex:0 0 200px;display:flex;flex-direction:column;gap:0;">
+        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.82rem;border:1.5px solid var(--bdr);">
+          <tbody>
+            <tr><td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);color:var(--ink2);">Tasks done</td>
+                <td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);font-weight:600;text-align:right;" id="s-stask">0</td></tr>
+            <tr><td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);color:var(--ink2);">Reward</td>
+                <td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);font-weight:600;text-align:right;" id="s-pay">—</td></tr>
+            <tr><td style="padding:.5rem .7rem;color:var(--ink2);">Penalty</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;color:var(--red);" id="s-penalty">£0.00</td></tr>
+          </tbody>
+        </table>
+        <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem;">
+          <button class="btn btn-blue" id="btn-switch-alt" onclick="openOfferScreen()"
+            style="width:100%;text-align:center;display:none;">⇄ Switch to alternative</button>
+          <button onclick="openForfeitConfirm()"
+            style="width:100%;text-align:center;font-family:var(--mono);font-size:.75rem;color:var(--ink2);background:none;border:1px solid var(--bdr);border-radius:3px;padding:.4rem;cursor:pointer;">✕ Forfeit section</button>
+        </div>
+      </div>
+      <!-- RIGHT -->
+      <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:.75rem;">
+        <div id="st-grid-wrap">
+          <div class="grid-outer"><div class="grid-box" id="st-grid"></div></div>
+          <div id="st-countdown" style="display:none;font-family:var(--mono);font-size:.8rem;color:var(--ink2);text-align:center;">
+            Submitting in <strong id="st-cd-n">5</strong>s
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN: Offer ═════════════════════════════════════════════ -->
+<div id="screen-switch" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Alternative sequence</div>
+  <h1 id="offer-heading">You can now switch to the alternative sequence</h1>
+  <p id="offer-main-txt"></p>
+  <div class="offer-box">
+    <div style="position:absolute;top:-.55em;left:.8rem;background:var(--sur);padding:0 .3rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.15em;color:var(--blue);text-transform:uppercase;">Alternative sequence</div>
+    <p style="margin:0;">This alternative sequence requires exactly <strong id="offer-alt-n">—</strong> tasks. You know exactly how long it will take.</p>
+  </div>
+  <p style="font-size:.85rem;color:var(--ink2);">Take your time to decide. You can return to the main sequence and switch later using the button on the left.</p>
+  <p id="offer-countdown" style="font-family:var(--mono);font-size:1.15rem;color:var(--ink);margin:.6rem 0 1rem;">Back to main task in: <strong id="offer-countdown-n" style="font-size:1.3rem;">—</strong>s</p>
+  <div class="btn-row">
+    <button class="btn btn-blue" onclick="decide('switch')">⇄ Switch to alternative sequence</button>
+    <button class="btn btn-outline" onclick="decide('continue')">▶ Continue main sequence</button>
+  </div>
+</div></div>
+</div>
+
+<!-- Switch confirm overlay -->
+<div id="confirm-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:420px;width:90%;font-family:var(--mono);">
+    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem;color:var(--ink);">Switch to alternative?</div>
+    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">This alternative sequence requires exactly <strong id="confirm-alt-n">—</strong> tasks. This cannot be undone.</p>
+    <div style="display:flex;gap:.75rem;">
+      <button class="btn btn-blue" style="flex:1;" onclick="confirmSwitch()">⇄ Confirm switch</button>
+      <button class="btn btn-outline" style="flex:1;" onclick="closeConfirm()">✕ Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN: Section complete ══════════════════════════════════ -->
+<div id="screen-task-complete" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Task Result</div>
+  <h1 id="tc-h">Well done!</h1>
+  <p id="tc-msg"></p>
+  <div class="btn-row"><button class="btn" onclick="nextTask()">Next section →</button></div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Results ═══════════════════════════════════════════ -->
+<div id="screen-results" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Study Complete</div>
+  <h1>Your results</h1>
+  <table>
+    <thead><tr>
+      <th>Section</th><th>Decision</th><th>Bonus</th>
+      <th>Grids done</th><th>Grid pay</th><th>Total</th>
+    </tr></thead>
+    <tbody id="res-tbody"></tbody>
+  </table>
+  <p id="res-total" style="font-family:var(--mono);font-size:.92rem;margin-top:.7rem;"></p>
+  <button class="csv-btn" onclick="downloadCSV()">↓ Download CSV</button>
+
+  <!-- Save status -->
+  <div id="results-save-block" style="margin-top:1.5rem;border-top:1px solid var(--bdr);padding-top:1.2rem;">
+    <div id="results-saving" class="save-row">
+      <div class="save-spin"></div>
+      <span style="font-family:var(--mono);font-size:.78rem;color:var(--ink2);">Confirming your responses were saved…</span>
+    </div>
+    <div id="results-saved" style="display:none;font-family:var(--mono);font-size:.78rem;color:var(--grn);">
+      ✓ Your responses have been saved. Redirecting you to Prolific now — if nothing happens, your browser may have blocked the pop-up:
+      <a href="#" onclick="prolificRedirect_();return false;" style="color:var(--blue);">click here to continue</a>.
+    </div>
+    <div id="results-error" style="display:none;">
+      <p style="font-size:.85rem;color:var(--red);margin-bottom:.6rem;">We could not confirm your responses were saved. Please try the options below.</p>
+      <p style="font-size:.75rem;color:var(--ink2);margin-bottom:.8rem;">Reference code: <strong id="results-error-code" style="font-family:var(--mono);"></strong></p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="retryComplete_()">Try again</button>
+        <button class="btn btn-outline" onclick="downloadDataBackup()">Download my responses</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--ink);margin-top:.9rem;"><strong>Please download your responses using the button above, then contact the research team via Prolific messaging</strong> and attach the downloaded file along with the reference code shown above.</p>
+    </div>
+  </div>
+
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Already completed ════════════════════════════════ -->
+<div id="screen-already-done" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Status</div>
+  <h1>Thank You</h1>
+  <p>We have already received a complete response from you for this study.</p>
+  <p style="margin-top:.4rem;">You may safely close this page. If you believe this is an error, please contact the research team via Prolific.</p>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Connection error ══════════════════════════════════ -->
+<div id="screen-conn-error" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Connection problem</div>
+  <h1>Something needs a second try</h1>
+  <p id="conn-error-msg">We couldn't reach our server to check your study status. To make sure we never overwrite any progress you've already made, we won't continue automatically.</p>
+  <div class="btn-row"><button class="btn" onclick="retryBootstrap()">Try again</button></div>
+</div></div>
+</div>
+
+<!-- Forfeit overlay -->
+<div id="forfeit-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
+    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Forfeit section</div>
+    <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Are you sure?</div>
+    <p style="font-size:.83rem;color:var(--ink2);margin-bottom:1.2rem;">You will not earn the reward for this section.</p>
+    <div style="display:flex;gap:.75rem;justify-content:center;">
+      <button class="btn btn-red" onclick="confirmForfeit()">✕ Yes, forfeit</button>
+      <button class="btn btn-outline" onclick="closeForfeitConfirm()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Debug bar -->
+<div id="debug-bar" style="display:none;position:fixed;bottom:0;left:0;width:100%;z-index:9999;background:#fffbe6;border-top:1px solid #e6c800;padding:.25rem .75rem;font-family:IBM Plex Mono,monospace;font-size:.68rem;color:#7a6000;line-height:1.5;box-sizing:border-box;">
+  <span id="debug-content"></span>
+  <span style="float:right;display:flex;gap:.5rem;">
+    <button onclick="debugSkipTask()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip task</button>
+    <button onclick="debugSkipSection()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip section</button>
+    <button onclick="debugStop()" id="debug-stop-btn" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Stop</button>
+  </span>
+</div>
+
+<script>
+// ── URL PARAMS ────────────────────────────────────────────────────
+const _params     = new URLSearchParams(window.location.search);
+const _prolificID = _params.get('PROLIFIC_PID') || '';
+const _studyID    = _params.get('STUDY_ID')     || '';
+const _sessionID  = _params.get('SESSION_ID')   || '';
+const _demoMode   = parseInt(_params.get('demomode') || '0', 10);
+// 0 = production | 1 = debug bar (backend still active) | 2 = debug bar + no backend
+
+// ── BACKEND ───────────────────────────────────────────────────────
+// Paste your deployed Apps Script URL here after deploying backend.txt
+const BACKEND_URL = 'PASTE_YOUR_APPS_SCRIPT_URL_HERE';
+const COMPLETION_CODE  = 'C194BROI';
+const NO_CONSENT_CODE  = 'C1E6TYZR';
+const GRID_PAY_PER_TASK = 0.03;
+
+function backendConfigured_(){
+  return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
+}
+
+async function fetchWithTimeout_(url, opts, ms){
+  const ctrl = new AbortController();
+  const id = setTimeout(()=>ctrl.abort(), ms);
+  try{ return await fetch(url, {...opts, signal:ctrl.signal}); }
+  finally{ clearTimeout(id); }
+}
+
+async function lookupBackend_(pid){
+  const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
+  const resp = await fetchWithTimeout_(url, {method:'GET', cache:'no-store'}, 12000);
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
+
+async function postToBackend_(payload, maxAttempts){
+  maxAttempts = maxAttempts || 1;
+  if(!backendConfigured_() || _demoMode >= 2) return true; // skip in demo=2
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    try{
+      const resp = await fetchWithTimeout_(BACKEND_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify(payload)
+      }, 12000);
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const json = await resp.json();
+      return json.ok !== false;
+    } catch(e){
+      if(attempt < maxAttempts) await new Promise(r=>setTimeout(r, 900*attempt));
+    }
+  }
+  return false;
+}
+
+// ── CONFIG ────────────────────────────────────────────────────────
+const CFG = {
+  numTasks:   5,
+  gridR:      5,
+  gridC:      5,
+  revealMs:   500,
+  submitSecs: 5,
+  winLo: 5,
+  winHi: 15,
+  payLevels: [1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0,5.5,6.0,6.5,7.0,7.5,8.0,8.5,9.0,9.5,10.0],
+};
+
+const EMOJIS = [
+  "😃","😁","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😗","😋",
+  "😝","🤪","😐","😑","😶","😏","😒","🙄","😬","😔","🤤","😴","😷","🤒","🤕",
+  "🤧","🥵","🥴","😵","🤯","🤠","🥳","🤓","🧐","😕","☹️","😮","😳","🥺","😨",
+  "😢","😭","😱","😖","😞","😓","😫","😤","😠","😵‍💫","🤐","🤬","🥸","🤩","🫠","😎","🤑"
+];
+
+// ── SESSION ───────────────────────────────────────────────────────
+let SESSION = {
+  consentAt:    null,   // ISO; never overwritten after first set
+  reloadLog:    [],     // [{seq_index, at}]
+  totalReloads: 0,
+};
+
+// ── STATE ─────────────────────────────────────────────────────────
+let S = {
+  survey: {}, tasks: [], taskIdx: 0,
+  subtaskDone: 0, phase: 'main', offerShown: false, switchAvailable: false, altStartPos: 0,
+  penalty: 0,
+  debugMode: _demoMode >= 1,
+  altFlashing: false,
+  log: [],          // completed section entries
+  handles: [],
+  grid: [],
+  target: '',
+  checked: new Set(),
+  mouseMoved: false,
+  offerTimer: null,
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const rnd  = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const shuf = a => { const r=[...a]; for(let i=r.length-1;i>0;i--){const j=rnd(0,i);[r[i],r[j]]=[r[j],r[i]];} return r; };
+
+function kill(){
+  S.handles.forEach(h=>{ clearTimeout(h); clearInterval(h); });
+  S.handles=[];
+}
+function addTimer(h){ S.handles.push(h); return h; }
+
+function el(id){
+  const e=document.getElementById(id);
+  if(!e) console.error('el('+id+') is null');
+  return e;
+}
+
+// ── GENERATE TASKS ────────────────────────────────────────────────
+function generateTasks(){
+  return Array.from({length:CFG.numTasks},(_,i)=>{
+    const inactive = rnd(0, 5);
+    const window   = rnd(CFG.winLo, CFG.winHi);
+    const barLo    = inactive + 1;
+    const barHi    = inactive + 1 + window;
+    const pauseMax = barHi - 3;
+
+    const regime = Math.random() < 0.5 ? 1 : 2;
+    let nReq, pause;
+    if(regime === 1){
+      nReq  = barLo + rnd(0, window);
+      pause = rnd(0, Math.min(nReq, pauseMax));
+    } else {
+      pause = rnd(0, pauseMax);
+      nReq  = (pause < barLo)
+        ? barLo + rnd(0, window)
+        : rnd(pause, barHi);
+    }
+
+    const switch_cost = pause;
+    const adjustment  = inactive - pause;
+
+    let altDuration;
+    if(pause >= barLo - 1){
+      altDuration = rnd(2, barHi - pause - 1);
+    } else {
+      const altLo = barLo - pause + 1;
+      const altHi = window - 1;
+      altDuration = (altLo <= altHi)
+        ? rnd(altLo, altHi)
+        : rnd(2, barHi - pause - 1);
+    }
+    const altEnd = pause + altDuration;
+
+    const payTasks = barLo + Math.round(Math.random() * (barHi - barLo));
+    const pay      = Math.round(payTasks * 0.04375 / 0.05) * 0.05;
+
+    return { index:i, pay, regime,
+             inactive, pause, switch_cost, adjustment,
+             window, nReq, altEnd, altDuration, barLo, barHi,
+             switched:null, forfeited:null, completed:null, elapsed:null, earnings:0,
+             startAt:null, grids:[] };
+  });
+}
+
+// ── TIMELINE CANVAS ───────────────────────────────────────────────
+function drawTimeline(canvasId, opts){
+  const canvas=document.getElementById(canvasId);
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.offsetWidth||600;
+  const H=canvas.offsetHeight||120;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+
+  const {barLo,barHi,offerPos,stickPos,altEnd,showSafe,offerActive,onAlt} = opts;
+  const maxK = opts.maxK || Math.max(barHi+2, altEnd ? altEnd+2 : 0);
+
+  const padL=10, padR=10;
+  const tickW = (W-padL-padR)/(maxK+1);
+  const tx = k => padL + k*tickW;
+
+  const FONT   = '8px IBM Plex Mono,monospace';
+  const LABCLR = '#5a5a54';
+
+  const mainBarH = showSafe ? 36 : 34;
+  const mainTop  = showSafe ? 14 :  6;
+  const mainBase = mainTop + mainBarH;
+  const mainLblY = mainBase + 9;
+  const numY     = mainLblY + 10;
+  const altBase  = numY + 6;
+  const altLblY  = altBase + 9;
+
+  if(showSafe && barLo>0){
+    const x0=tx(0), x1=tx(barLo)-tickW/2;
+    ctx.fillStyle='rgba(100,100,100,0.10)';
+    ctx.fillRect(x0, mainTop, x1-x0, mainBarH);
+    ctx.strokeStyle='#888'; ctx.lineWidth=1.2;
+    ctx.strokeRect(x0+0.5, mainTop+0.5, x1-x0-1, mainBarH-1);
+    ctx.fillStyle='#777'; ctx.font=FONT; ctx.textAlign='center';
+    ctx.fillText('The task cannot end here', (x0+x1)/2, mainTop+mainBarH/2+3);
+  }
+
+  if(!onAlt){
+    if(barLo && barHi){
+      const x0=tx(barLo)-tickW/2, x1=tx(barHi)+tickW/2;
+      ctx.fillStyle='#c84b2f'; ctx.globalAlpha=0.15;
+      ctx.fillRect(x0, mainTop, x1-x0, mainBarH);
+      ctx.globalAlpha=1;
+      ctx.strokeStyle='#c84b2f'; ctx.lineWidth=1.2;
+      ctx.strokeRect(x0+0.5, mainTop+0.5, x1-x0-1, mainBarH-1);
+      ctx.fillStyle='#c84b2f'; ctx.font=FONT; ctx.textAlign='center';
+      ctx.fillText('The task can end anywhere here', (x0+x1)/2, mainTop+mainBarH/2+3);
+    }
+    ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(tx(0),mainBase); ctx.lineTo(W-padR,mainBase); ctx.stroke();
+    ctx.fillStyle=LABCLR; ctx.font=FONT; ctx.textAlign='left';
+    ctx.fillText('Main sequence', tx(0), mainLblY);
+    for(let k=0;k<=maxK;k++){
+      const x=tx(k);
+      ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,mainBase); ctx.lineTo(x,mainBase+4); ctx.stroke();
+      if(tickW>12||k%2===0){
+        ctx.fillStyle=LABCLR; ctx.font=FONT; ctx.textAlign='center';
+        ctx.fillText(k, x, numY);
+      }
+    }
+    if(stickPos!=null) drawStickman(ctx, tx(stickPos), mainBase-1, 10);
+  }
+
+  if((offerActive || onAlt) && altEnd){
+    const altColor = S && S.altFlashing ? '#c8dcf8' : '#2f6fc8';
+    const aBase = onAlt ? mainBase : altBase;
+    const aLblY = onAlt ? mainLblY : altLblY;
+    const aNumY = onAlt ? numY     : altLblY + 10;
+
+    ctx.strokeStyle=altColor; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(tx(0),aBase); ctx.lineTo(tx(altEnd),aBase); ctx.stroke();
+    for(let k=0;k<=altEnd;k++){
+      ctx.strokeStyle=altColor; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx(k),aBase); ctx.lineTo(tx(k),aBase+4); ctx.stroke();
+    }
+    ctx.strokeStyle=altColor; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(tx(altEnd),aBase-3); ctx.lineTo(tx(altEnd),aBase+6); ctx.stroke();
+    ctx.fillStyle=altColor; ctx.font=FONT; ctx.textAlign='left';
+    ctx.fillText('Alternative sequence', tx(0), aLblY);
+    for(let k=0;k<=altEnd;k++){
+      if(tickW>12||k%2===0){
+        ctx.fillStyle=altColor; ctx.font=FONT; ctx.textAlign='center';
+        ctx.fillText(k, tx(k), aNumY);
+      }
+    }
+    if(onAlt&&stickPos!=null) drawStickman(ctx, tx(stickPos), aBase-1, 10);
+  }
+}
+
+function drawStickman(ctx,cx,yBase,sz){
+  ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(cx,yBase-sz*1.8,sz*0.55,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,yBase-sz*1.25); ctx.lineTo(cx,yBase-sz*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-sz*0.6,yBase-sz); ctx.lineTo(cx+sz*0.6,yBase-sz); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,yBase-sz*0.5); ctx.lineTo(cx-sz*0.5,yBase);
+    ctx.moveTo(cx,yBase-sz*0.5); ctx.lineTo(cx+sz*0.5,yBase); ctx.stroke();
+}
+
+// ── PROGRESS BAR ─────────────────────────────────────────────────
+function redrawProg(){
+  const pw=el('prog-wrap');
+  if(!pw) return;
+  const onConsent=document.getElementById('screen-consent').classList.contains('active');
+  if(onConsent){ pw.classList.remove('visible'); return; }
+  pw.classList.add('visible');
+
+  const task=S.tasks[S.taskIdx];
+  if(!task){
+    const cv=el('prog-canvas');
+    if(cv){ const dpr=window.devicePixelRatio||1; cv.width=cv.offsetWidth*dpr; cv.height=cv.offsetHeight*dpr; cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
+    return;
+  }
+  const stickPos = S.subtaskDone;
+  const maxK = Math.max(task.barHi+2, task.altDuration+2);
+  drawTimeline('prog-canvas',{
+    barLo:task.barLo, barHi:task.barHi,
+    offerPos: S.offerShown ? task.pause : null,
+    stickPos, altEnd: task.altDuration,
+    offerActive: S.switchAvailable, onAlt: S.phase==='alt',
+    showSafe: false, maxK,
+  });
+}
+
+// ── SCREEN ROUTING ────────────────────────────────────────────────
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const sc = document.getElementById('screen-'+name);
+  if(sc) sc.classList.add('active');
+  window.scrollTo(0,0);
+  redrawProg();
+}
+
+// ── SNAPSHOT / RESUME ─────────────────────────────────────────────
+function buildSnapshot_(){
+  return {
+    v: 1,
+    taskIdx:      S.taskIdx,
+    survey:       S.survey,
+    consentAt:    SESSION.consentAt,
+    sectionsLog:  S.log.slice(),
+    totalReloads: SESSION.totalReloads,
+    reloadLog:    SESSION.reloadLog.slice(),
+  };
+}
+
+let _lastSnapJson = null;
+function saveProgress(isHeartbeat){
+  const snap = buildSnapshot_();
+  const json = JSON.stringify(snap);
+  if(isHeartbeat && json === _lastSnapJson) return;
+  _lastSnapJson = json;
+  try{ localStorage.setItem('wtstudy_resume_' + (_prolificID||'anon'), json); } catch(e){}
+  if(!_prolificID || _demoMode >= 2 || !backendConfigured_()) return;
+  postToBackend_({
+    action: 'progress',
+    pid: _prolificID, study_id: _studyID, session_id: _sessionID,
+    data: buildFullData_(),
+    snapshot: snap
+  });
+}
+setInterval(()=>saveProgress(true), 25000);
+
+function buildFullData_(){
+  const totalEarnings     = S.log.reduce((a,r)=>a+(r.earnings||0), 0);
+  const totalGridPay      = S.log.reduce((a,r)=>a+(r.grid_pay||0), 0);
+  const totalGridsDone    = S.log.reduce((a,r)=>a+(r.n_tasks_done||0), 0);
+  return {
+    demo_mode:              _demoMode,
+    consent_at:             SESSION.consentAt,
+    age:                    S.survey.age,
+    gender:                 S.survey.gender,
+    student:                S.survey.student,
+    sections_done:          S.log.length,
+    total_earnings:         Math.round(totalEarnings*100)/100,
+    total_grid_pay:         Math.round(totalGridPay*100)/100,
+    total_grids_completed:  totalGridsDone,
+    reload_count:           SESSION.totalReloads,
+    reload_log:             SESSION.reloadLog,
+    sequences:              S.log,
+  };
+}
+
+// ── BOOTSTRAP / RESUME ───────────────────────────────────────────
+async function bootstrapApp(){
+  try{ await bootstrapAppInner_(); }
+  finally{ el('boot-overlay').style.display='none'; }
+}
+
+async function bootstrapAppInner_(){
+  if(S.debugMode){
+    el('debug-bar').style.display='block';
+    el('debug-notice').style.display='block';
+  }
+
+  // demomode=2: bypass backend, start fresh
+  if(_demoMode >= 2){
+    showScreen('consent'); return;
+  }
+
+  // No PID or backend not configured: just show consent
+  if(!_prolificID || !backendConfigured_()){
+    showScreen('consent'); return;
+  }
+
+  let prior = null;
+  try{
+    prior = await lookupBackend_(_prolificID);
+  } catch(e){
+    // Backend unreachable: try local snapshot
+    if(tryLocalResume_()) return;
+    showConnError_('We couldn\'t reach our server to check your study status. To make sure we never overwrite any progress you\'ve already made, we won\'t continue automatically.');
+    return;
+  }
+
+  if(prior.study_complete){
+    showScreen('already-done'); return;
+  }
+
+  if(prior.found && prior.resume_snapshot){
+    applyResume_(prior.resume_snapshot); return;
+  }
+
+  // Not found but backend responded — try local as cross-device fallback
+  if(prior.found){
+    if(tryLocalResume_()) return;
+  }
+
+  showScreen('consent');
+}
+
+function tryLocalResume_(){
+  try{
+    const raw = localStorage.getItem('wtstudy_resume_' + (_prolificID||'anon'));
+    if(!raw) return false;
+    applyResume_(JSON.parse(raw));
+    return true;
+  } catch(e){ return false; }
+}
+
+function applyResume_(snap){
+  if(!snap || !snap.v){ showScreen('consent'); return; }
+
+  // Restore session state from snapshot
+  S.survey           = snap.survey  || {};
+  SESSION.consentAt  = snap.consentAt || null;
+  SESSION.reloadLog  = (snap.reloadLog || []).slice();
+  SESSION.totalReloads = snap.totalReloads || 0;
+  S.log              = (snap.sectionsLog || []).slice();
+  S.taskIdx          = snap.taskIdx || 0;
+
+  // Record this reload
+  SESSION.reloadLog.push({ seq_index: S.taskIdx, at: new Date().toISOString() });
+  SESSION.totalReloads++;
+
+  // Generate fresh tasks (current section gets new random params)
+  S.tasks = generateTasks();
+
+  // Go directly to grace period for current section
+  buildInstDots();
+  gracePeriod(()=>startTask());
+  saveProgress(false);
+}
+
+function showConnError_(msg){
+  el('conn-error-msg').textContent = msg || 'Connection error.';
+  showScreen('conn-error');
+}
+
+function retryBootstrap(){
+  el('boot-overlay').style.display='flex';
+  bootstrapApp();
+}
+
+// ── CONSENT ───────────────────────────────────────────────────────
+function doConsent(){
+  if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
+  showScreen('survey');
+}
+
+function doNotConsent(){
+  window.location.href = 'https://app.prolific.com/submissions/complete?cc=' + NO_CONSENT_CODE;
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.querySelectorAll('details summary').forEach(s=>{
+    s.addEventListener('click', ()=>{
+      setTimeout(()=>{
+        const open = s.parentElement.hasAttribute('open');
+        s.textContent = (open?'▾':'▸') + ' Consent form (click to read)';
+      }, 0);
+    });
+  });
+});
+
+// ── SURVEY ────────────────────────────────────────────────────────
+function submitSurvey(){
+  const age=el('s-age').value.trim()||'—', gender=el('s-gender').value||'—', student=el('s-student').value||'—';
+  S.survey = { age, gender, student };
+  buildInstDots();
+  instPage=1;
+  document.querySelectorAll('.inst-page').forEach((p,i)=>p.classList.toggle('active',i===0));
+  el('ip-prev').style.visibility='hidden';
+  el('ip-next').textContent='Next →';
+  el('ip-next').onclick=()=>instNav(1);
+  buildDemoGrid();
+  showScreen('instructions');
+  saveProgress(false);
+}
+
+// ── INSTRUCTIONS ─────────────────────────────────────────────────
+let instPage=1;
+const INST_TOTAL=3;
+
+function buildInstDots(){
+  const d=el('ip-dots'); if(!d) return; d.innerHTML='';
+  for(let i=1;i<=INST_TOTAL;i++){
+    const dot=document.createElement('div');
+    dot.className='inst-dot'+(i===instPage?' active':'');
+    d.appendChild(dot);
+  }
+}
+
+let instEx={};
+function freshInstEx(){
+  const inactive = rnd(0,5);
+  const window   = rnd(CFG.winLo, CFG.winHi);
+  const barLo    = inactive + 1;
+  const barHi    = inactive + 1 + window;
+  const pauseMax = barHi - 3;
+  const nReq     = barLo + rnd(0, window);
+  const pause    = rnd(0, Math.min(nReq, pauseMax));
+  const switch_cost = pause;
+  const adjustment  = inactive - pause;
+  let altDuration;
+  if(pause >= barLo - 1){
+    altDuration = rnd(2, barHi - pause - 1);
+  } else {
+    const altLo = barLo - pause + 1;
+    const altHi = window - 1;
+    altDuration = (altLo <= altHi) ? rnd(altLo, altHi) : rnd(2, barHi - pause - 1);
+  }
+  const altEnd = pause + altDuration;
+  instEx = { inactive,pause,switch_cost,adjustment,window,barLo,barHi,altEnd,altDuration,
+             maxK:Math.max(barHi+2, altDuration+2) };
+}
+
+function drawInstTimeline(){
+  freshInstEx();
+  const {barLo,barHi,inactive,maxK}=instEx;
+  const stickInSafe=Math.max(0,Math.floor((inactive-1)/2));
+  drawTimeline('inst-timeline',{barLo,barHi,
+    offerPos:null, showSafe:true, stickPos:stickInSafe,
+    altEnd:null, offerActive:false, onAlt:false, maxK});
+}
+
+function drawInstOfferTimeline(){
+  if(!instEx.barLo) freshInstEx();
+  const {barLo,barHi,switch_cost,pause,altDuration,maxK}=instEx;
+  drawTimeline('inst-offer-timeline',{barLo,barHi,
+    offerPos:pause, showSafe:true, stickPos:switch_cost,
+    altEnd:altDuration, offerActive:true, onAlt:false, maxK});
+}
+
+let demoCompleted=false;
+function instNav(dir){
+  if(instPage===1 && dir===1 && !demoCompleted){ el('demo-status').textContent='Please complete the demo first.'; return; }
+  instPage=Math.max(1,Math.min(INST_TOTAL,instPage+dir));
+  document.querySelectorAll('.inst-page').forEach((p,i)=>p.classList.toggle('active',i+1===instPage));
+  buildInstDots();
+  el('ip-prev').style.visibility=instPage>1?'visible':'hidden';
+  const nxt=el('ip-next');
+  if(instPage===INST_TOTAL){ nxt.textContent='Start →'; nxt.onclick=startExperiment; }
+  else { nxt.textContent='Next →'; nxt.onclick=()=>instNav(1); }
+  if(instPage===2) setTimeout(drawInstTimeline,60);
+  if(instPage===3) setTimeout(drawInstOfferTimeline,60);
+}
+
+// ── DEMO GRID ─────────────────────────────────────────────────────
+let demoTarget='', demoChecked=new Set(), demoHandle=null;
+
+function buildDemoGrid(){
+  demoTarget=pick(EMOJIS);
+  el('demo-target').textContent=demoTarget;
+  const others=shuf(EMOJIS.filter(e=>e!==demoTarget));
+  const nT=rnd(3,5);
+  const cells=[...Array(nT).fill(demoTarget),...others.slice(0,25-nT)];
+  const shuffled=shuf(cells);
+  const grid=el('demo-grid');
+  grid.innerHTML=''; demoChecked=new Set(); demoHandle=null; demoCompleted=false;
+  el('demo-reveal-btn').style.display='';
+  el('demo-status').textContent='';
+  for(let i=0;i<25;i++){
+    const c=document.createElement('div');
+    c.className='demo-cell ph'; c.id='dc'+i; c.textContent='·';
+    c._emoji=shuffled[i];
+    grid.appendChild(c);
+  }
+}
+
+function revealDemoGrid(){
+  if(demoHandle) return;
+  el('demo-reveal-btn').style.display='none';
+  demoCompleted=true;
+  el('demo-status').textContent='Filling…';
+  let i=0;
+  function step(){
+    if(i>=25){ el('demo-status').textContent='Click all '+demoTarget+' then submit!'; demoHandle=null; return; }
+    const c=document.getElementById('dc'+i);
+    if(c){ c.className='demo-cell live'; c.textContent=c._emoji; c.onclick=()=>toggleDemo(c,i); }
+    i++;
+    demoHandle=setTimeout(step,CFG.revealMs);
+  }
+  demoHandle=setTimeout(step,CFG.revealMs);
+}
+
+function toggleDemo(cell,i){
+  if(demoChecked.has(i)){ demoChecked.delete(i); cell.classList.remove('selected'); }
+  else { demoChecked.add(i); cell.classList.add('selected'); }
+}
+
+// ── EXPERIMENT ────────────────────────────────────────────────────
+function startExperiment(){
+  S.tasks=generateTasks();
+  S.taskIdx=0;
+  gracePeriod(()=>startTask());
+}
+
+let _graceCallback=null;
+function gracePeriod(cb){
+  kill();
+  _graceCallback=cb;
+  S.switchAvailable=false; S.offerShown=false; S.altFlashing=false; S.phase='main';
+  const task=S.tasks[S.taskIdx];
+  showScreen('grace');
+
+  el('grace-lbl').textContent='Section '+(S.taskIdx+1)+' of '+CFG.numTasks;
+  el('grace-heading').textContent='Get ready';
+  el('grace-pay-block').style.display='none';
+  el('grace-countdown-block').style.display='none';
+  el('grace-dist-txt').textContent='The task can end anywhere within this range:';
+  el('grace-dist-note').textContent='The task can end at any point within the highlighted zone.';
+
+  addTimer(setTimeout(()=>{
+    drawTimeline('grace-hist',{
+      barLo:task.barLo, barHi:task.barHi,
+      offerPos:null, showSafe:true, stickPos:0,
+      altEnd:task.altDuration, offerActive:false, onAlt:false,
+      maxK:Math.max(task.barHi+2, task.altDuration+2)
+    });
+  },60));
+
+  addTimer(setTimeout(()=>{
+    el('grace-pay-block').style.display='';
+    el('grace-pay-txt').textContent='Completing this task earns you £'+task.pay.toFixed(2);
+  },2000));
+
+  addTimer(setTimeout(()=>{
+    el('grace-countdown-block').style.display='';
+  },3000));
+}
+
+function graceStart(){
+  el('grace-countdown-block').style.display='none';
+  kill();
+  if(_graceCallback){ const cb=_graceCallback; _graceCallback=null; cb(); }
+}
+
+function startTask(){
+  kill();
+  S.subtaskDone=0; S.phase='main'; S.offerShown=false; S.switchAvailable=false; S.altStartPos=0;
+  S.penalty=0;
+  const task=S.tasks[S.taskIdx];
+  task.startAt = new Date().toISOString();
+  task.grids = [];
+
+  const sw=el('btn-switch-alt');
+  if(sw){ sw.style.display='block'; sw.disabled=true; sw.style.opacity='0.35'; sw.style.cursor='not-allowed'; }
+  showScreen('subtask');
+  updateStats();
+
+  if(task.switch_cost===0){
+    S.switchAvailable=true;
+    if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
+    redrawProg();
+    setTimeout(()=>{ flashSwitchAvailable(); }, 400);
+  }
+  if(task.pause===0){
+    S.offerShown=true; task.elapsed=0;
+    redrawProg();
+    showOfferScreen(task, 0, 'first');
+    return;
+  }
+  startSubtask();
+}
+
+document.addEventListener('mousemove', ()=>{ S.mouseMoved=true; });
+
+function flashSwitchAvailable(){
+  const sw=el('btn-switch-alt');
+  if(sw){
+    sw.classList.remove('switch-flash');
+    void sw.offsetWidth;
+    sw.classList.add('switch-flash');
+    setTimeout(()=>{ sw.classList.remove('switch-flash'); }, 1500);
+  }
+  let _flashCount=0;
+  const _flashInt=setInterval(()=>{
+    S.altFlashing=!S.altFlashing; redrawProg(); _flashCount++;
+    if(_flashCount>=10){ clearInterval(_flashInt); S.altFlashing=false; redrawProg(); }
+  }, 150);
+}
+
+// ── SUBTASK (grid) ────────────────────────────────────────────────
+function startSubtask(){
+  kill();
+  S.checked=new Set();
+  S.mouseMoved=false;
+
+  const ROWS=CFG.gridR, COLS=CFG.gridC, TOTAL=ROWS*COLS;
+  const target=pick(EMOJIS);
+  S.target=target;
+  const nT=rnd(3,6);
+  const pool=shuf(EMOJIS.filter(e=>e!==target)).slice(0,TOTAL-nT);
+  S.grid=shuf([...Array(nT).fill(target), ...pool]);
+
+  el('st-target').textContent=target;
+  const cdEl=el('st-countdown'); if(cdEl) cdEl.style.display='none';
+
+  const gridEl=el('st-grid');
+  gridEl.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    const row=document.createElement('div');
+    row.className='grow-el'; row.id='row'+r;
+    for(let c=0;c<COLS;c++){
+      const cell=document.createElement('div');
+      cell.className='ecell ph'; cell.textContent='·';
+      row.appendChild(cell);
+    }
+    gridEl.appendChild(row);
+  }
+
+  for(let i=0;i<TOTAL;i++){
+    const _i=i, _r=Math.floor(i/COLS), _c=i%COLS;
+    addTimer(setTimeout(()=>{
+      const rowEl=el('row'+_r); if(!rowEl) return;
+      const cell=rowEl.children[_c]; if(!cell) return;
+      cell.classList.remove('ph'); cell.classList.add('live');
+      cell.textContent=S.grid[_i];
+      cell.onclick=()=>{
+        if(S.checked.has(_i)){ S.checked.delete(_i); cell.classList.remove('selected'); }
+        else { S.checked.add(_i); cell.classList.add('selected'); }
+      };
+      if(_i===TOTAL-1) showSubmit();
+    }, (_i+1)*CFG.revealMs));
+  }
+}
+
+function showSubmit(){
+  const cd=el('st-countdown'), cdn=el('st-cd-n');
+  if(cd) cd.style.display='block';
+  let left=CFG.submitSecs;
+  if(cdn) cdn.textContent=left;
+  addTimer(setInterval(()=>{
+    left--;
+    const e=el('st-cd-n'); if(e) e.textContent=left;
+    if(left<=0){ kill(); if(cd) cd.style.display='none'; submitMatrix(); }
+  },1000));
+}
+
+function updateStats(){
+  const task=S.tasks[S.taskIdx]; if(!task) return;
+  const eS=el('s-stask'), eP=el('s-pay'), ePen=el('s-penalty');
+  if(eS) eS.textContent=S.subtaskDone;
+  if(eP) eP.textContent='£'+task.pay.toFixed(2);
+  if(ePen) ePen.textContent=S.penalty>0?'-£'+S.penalty.toFixed(2):'£0.00';
+
+  if(S.debugMode){
+    const db=el('debug-bar'), dc=el('debug-content');
+    if(db) db.style.display='block';
+    if(dc){
+      let pMainFirst = null;
+      if(task.pause != null){
+        if(task.pause < task.barLo){
+          const total = task.window + 1;
+          const faster = Math.max(0, Math.min(task.pause + task.altDuration - 1, task.barHi) - task.barLo + 1);
+          pMainFirst = total > 0 ? faster/total : 0;
+        } else {
+          const total = task.barHi - task.pause + 1;
+          pMainFirst = Math.min(task.altDuration, total) / total;
+        }
+      }
+      const pPct = pMainFirst !== null ? (pMainFirst*100).toFixed(0)+'%' : '—';
+      dc.innerHTML=[
+        `Regime: <b>${task.regime}</b>`,
+        `Safe zone: <b>0–${task.inactive}</b>`,
+        `End zone: <b>[${task.barLo}, ${task.barHi}]</b>`,
+        `Window: <b>${task.window}</b>`,
+        `Pause at: <b>${task.pause===0?'immediately':task.pause}</b>`,
+        `Main ends at: <b>${task.nReq}</b>`,
+        `Alt duration: <b>${task.altDuration}</b>`,
+        `Alt global end: <b>${task.altEnd}</b>`,
+        `P(main ends before alt): <b style="color:${pMainFirst<0.5?'#c84b2f':'green'}">${pPct}</b>`,
+        `Pay: <b>£${task.pay.toFixed(2)}</b>`,
+        `Reloads this seq: <b>${SESSION.reloadLog.filter(r=>r.seq_index===task.index).length}</b>`,
+      ].join(' &nbsp;|&nbsp; ');
+    }
+  }
+}
+
+// ── SUBMIT MATRIX ─────────────────────────────────────────────────
+function submitMatrix(){
+  kill();
+  closeConfirm();
+
+  if(S.checked.size===0){
+    const gridEl=el('st-grid');
+    if(gridEl) gridEl.innerHTML='<div style="padding:2rem;text-align:center;font-family:var(--mono);"><div style="font-size:.85rem;color:var(--ink2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.5rem;">No activity detected</div><div style="font-size:1.1rem;font-weight:600;color:var(--ink);margin-bottom:1.2rem;">Are you still there?</div><button class="btn" onclick="startSubtask()">Yes, continue</button></div>';
+    return;
+  }
+
+  const correctIdxs = S.grid.reduce((acc,v,i)=>{ if(v===S.target) acc.push(i); return acc; },[]);
+  const nFound    = [...S.checked].filter(i=>correctIdxs.includes(i)).length;
+  const nFalsePos = S.checked.size - nFound;
+  const nMissed   = correctIdxs.length - nFound;
+  const isCorrect = nMissed === 0 && nFalsePos === 0;
+
+  // Record this grid
+  const task=S.tasks[S.taskIdx];
+  if(task){
+    if(!task.grids) task.grids=[];
+    task.grids.push({
+      grid_n:     S.subtaskDone + 1,
+      phase:      S.phase,
+      target:     S.target,
+      all_emojis: S.grid.slice(),
+      n_targets:  correctIdxs.length,
+      n_found:    nFound,
+      n_false_pos:nFalsePos,
+      n_missed:   nMissed,
+    });
+  }
+
+  if(!isCorrect){
+    S.penalty = Math.round((S.penalty + (nMissed + nFalsePos) * 0.01)*100)/100;
+    // Flash feedback
+    const gridEl=el('st-grid');
+    if(gridEl){
+      for(let idx=0; idx<CFG.gridR*CFG.gridC; idx++){
+        const r=Math.floor(idx/CFG.gridC), c=idx%CFG.gridC;
+        const rowEl=el('row'+r); if(!rowEl) continue;
+        const cell=rowEl.children[c]; if(!cell) continue;
+        if(correctIdxs.includes(idx)){
+          cell.style.background = S.checked.has(idx) ? '#d4f4dd' : '#fde8e4';
+          cell.style.borderColor= S.checked.has(idx) ? '#2a7a4b' : '#c84b2f';
+        } else if(S.checked.has(idx)){
+          cell.style.background='#fde8e4'; cell.style.borderColor='#c84b2f';
+        }
+      }
+    }
+    updateStats();
+    addTimer(setTimeout(()=>{ proceedAfterSubmit(); }, 800));
+    return;
+  }
+
+  proceedAfterSubmit();
+}
+
+function proceedAfterSubmit(){
+  S.subtaskDone++;
+  const task=S.tasks[S.taskIdx];
+
+  if(S.phase==='alt' && S.subtaskDone>=task.altDuration){
+    endTask('switched'); return;
+  }
+
+  if(S.phase==='main' && !S.offerShown && task.pause>=1 && S.subtaskDone===task.pause){
+    S.switchAvailable=true;
+    const sw=el('btn-switch-alt');
+    if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
+    S.offerShown=true; task.elapsed=S.subtaskDone;
+    redrawProg();
+    showOfferScreen(task, S.subtaskDone, 'first');
+    return;
+  }
+
+  if(S.phase==='main' && S.subtaskDone>=task.nReq){
+    endTask('completed'); return;
+  }
+
+  updateStats(); redrawProg();
+  startSubtask();
+}
+
+function showOfferScreen(task, subtaskDone, frameType){
+  kill();
+  const isFirst = frameType==='first';
+  el('offer-heading').textContent = isFirst
+    ? 'You can now switch to the alternative sequence'
+    : 'Reminder: you can still switch to the alternative sequence';
+  el('offer-alt-n').textContent = task.altDuration;
+  el('offer-main-txt').textContent =
+    'You have completed '+subtaskDone+' tasks in this sequence. '+
+    'The section can end between task '+task.barLo+' and task '+task.barHi+'.';
+
+  const secs = 5 + Math.floor(Math.random()*26);
+  task.pauseSecs = secs;
+  let remaining = secs;
+  el('offer-countdown-n').textContent = remaining;
+  const tick = setInterval(()=>{
+    remaining--;
+    const n = el('offer-countdown-n');
+    if(n) n.textContent = Math.max(0, remaining);
+    if(remaining <= 0){
+      clearInterval(tick);
+      if(el('screen-switch').classList.contains('active')) decide('continue');
+    }
+  }, 1000);
+  S.offerTimer = tick;
+  showScreen('switch');
+}
+
+// ── FORFEIT ───────────────────────────────────────────────────────
+function openForfeitConfirm(){
+  kill();
+  el('forfeit-overlay').style.display='flex';
+}
+function closeForfeitConfirm(){
+  el('forfeit-overlay').style.display='none';
+  startSubtask();
+}
+function confirmForfeit(){
+  el('forfeit-overlay').style.display='none';
+  decide('forfeit');
+}
+
+// ── CONFIRM OVERLAY ───────────────────────────────────────────────
+function openOfferScreen(){
+  if(!S.switchAvailable) return;
+  const task=S.tasks[S.taskIdx];
+  if(!S.offerShown){ S.offerShown=true; task.elapsed=S.subtaskDone; }
+  el('confirm-alt-n').textContent=task.altDuration;
+  el('confirm-overlay').style.display='flex';
+}
+function closeConfirm(){
+  el('confirm-overlay').style.display='none';
+}
+function confirmSwitch(){
+  closeConfirm();
+  decide('switch');
+}
+
+// ── DECIDE ────────────────────────────────────────────────────────
+function decide(choice){
+  const task=S.tasks[S.taskIdx];
+  if(S.offerTimer){ clearInterval(S.offerTimer); S.offerTimer=null; }
+  if(choice==='continue'){
+    kill();
+    if(S.subtaskDone >= task.nReq){ endTask('completed'); return; }
+    showScreen('subtask');
+    startSubtask();
+  } else if(choice==='switch'){
+    kill();
+    S.phase='alt'; S.altStartPos=task.switch_cost; S.subtaskDone=0;
+    const sw=el('btn-switch-alt');
+    if(sw) sw.style.display='none';
+    updateStats(); redrawProg();
+    showScreen('subtask');
+    startSubtask();
+  } else if(choice==='forfeit'){
+    endTask('forfeited');
+  }
+}
+
+// ── END TASK ──────────────────────────────────────────────────────
+function endTask(outcome){
+  kill();
+  const task=S.tasks[S.taskIdx];
+  task.completed = outcome==='completed';
+  task.switched  = outcome==='switched';
+  task.forfeited = outcome==='forfeited';
+  task.earnings  = task.completed ? task.pay : 0;
+  if(task.elapsed==null) task.elapsed=S.subtaskDone;
+
+  // Total tasks done across main + alt paths
+  const nTasksDone = (S.phase==='alt')
+    ? task.pause + S.subtaskDone
+    : S.subtaskDone;
+  const gridPay = Math.round(nTasksDone * GRID_PAY_PER_TASK * 100) / 100;
+
+  // P(main ends before alt)
+  let pMainFirst = null;
+  if(task.pause < task.barLo){
+    const total  = task.window + 1;
+    const faster = Math.max(0, Math.min(task.pause + task.altDuration - 1, task.barHi) - task.barLo + 1);
+    pMainFirst = total > 0 ? faster/total : 0;
+  } else {
+    const total  = task.barHi - task.pause + 1;
+    pMainFirst = Math.min(task.altDuration, total) / total;
+  }
+
+  // Aggregate grid stats
+  const grids = task.grids || [];
+  const totalTargets  = grids.reduce((a,g)=>a+g.n_targets,  0);
+  const totalFound    = grids.reduce((a,g)=>a+g.n_found,    0);
+  const totalFalsePos = grids.reduce((a,g)=>a+g.n_false_pos,0);
+  const totalMissed   = grids.reduce((a,g)=>a+g.n_missed,   0);
+  const seqReloads    = SESSION.reloadLog.filter(r=>r.seq_index===task.index).length;
+
+  S.log.push({
+    seq:           task.index + 1,
+    pay:           task.pay,
+    regime:        task.regime,
+    inactive:      task.inactive,
+    window:        task.window,
+    bar_lo:        task.barLo,
+    bar_hi:        task.barHi,
+    n_req:         task.nReq,
+    pause:         task.pause,
+    alt_duration:  task.altDuration,
+    alt_end:       task.altEnd,
+    p_main_first:  pMainFirst !== null ? Math.round(pMainFirst*1000)/1000 : null,
+    pause_secs:    task.pauseSecs || null,
+    outcome,
+    switch_offered: S.offerShown ? 1 : 0,
+    switch_at:      S.offerShown ? task.elapsed : null,
+    n_tasks_done:  nTasksDone,
+    earnings:      task.earnings,
+    grid_pay:      gridPay,
+    total_targets: totalTargets,
+    total_found:   totalFound,
+    total_false_pos: totalFalsePos,
+    total_missed:  totalMissed,
+    seq_reload_count: seqReloads,
+    start_at:      task.startAt || null,
+    end_at:        new Date().toISOString(),
+    grids:         grids,
+  });
+
+  const H={ completed:'✓ Task complete!', switched:'Alternative complete.', forfeited:'Task forfeited.' };
+  const M={
+    completed: `You completed the main sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
+    switched:  `You completed the alternative sequence.`,
+    forfeited: `No bonus earned for this task.`,
+  };
+  el('tc-h').textContent  = H[outcome];
+  el('tc-msg').innerHTML  = M[outcome];
+  showScreen('task-complete');
+
+  saveProgress(false);
+}
+
+function nextTask(){
+  S.taskIdx++;
+  S.subtaskDone=0; S.phase='main'; S.offerShown=false; S.switchAvailable=false;
+  S.altFlashing=false; S.altStartPos=0;
+  if(S.taskIdx>=CFG.numTasks){ showResults(); }
+  else { gracePeriod(()=>startTask()); }
+}
+
+// ── RESULTS ───────────────────────────────────────────────────────
+function showResults(){
+  const tbody=el('res-tbody'); tbody.innerHTML='';
+  let totalBonus=0, totalGrid=0, totalGridsDone=0;
+
+  S.log.forEach(r=>{
+    const out = r.outcome==='completed'?'Completed':r.outcome==='switched'?'Switched':'Forfeited';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>${r.seq}</td><td>${out}</td>
+      <td>${r.completed||r.outcome==='completed'?'£'+r.pay.toFixed(2):'£0.00'}</td>
+      <td>${r.n_tasks_done}</td>
+      <td>£${r.grid_pay.toFixed(2)}</td>
+      <td>£${(r.earnings + r.grid_pay).toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+    totalBonus += r.earnings;
+    totalGrid  += r.grid_pay;
+    totalGridsDone += r.n_tasks_done;
+  });
+
+  const trow=document.createElement('tr'); trow.className='tfoot-row';
+  trow.innerHTML=`<td colspan="2"><strong>Total</strong></td>
+    <td><strong>£${totalBonus.toFixed(2)}</strong></td>
+    <td><strong>${totalGridsDone}</strong></td>
+    <td><strong>£${totalGrid.toFixed(2)}</strong></td>
+    <td><strong>£${(totalBonus+totalGrid).toFixed(2)}</strong></td>`;
+  tbody.appendChild(trow);
+
+  el('res-total').textContent =
+    'Bonus: £'+totalBonus.toFixed(2)+
+    ' + Grid pay: £'+totalGrid.toFixed(2)+
+    ' = Grand total: £'+(totalBonus+totalGrid).toFixed(2);
+
+  showScreen('results');
+  completeStudy_();
+}
+
+// ── COMPLETION FLOW ───────────────────────────────────────────────
+async function completeStudy_(){
+  el('results-saving').style.display='flex';
+  el('results-saved').style.display='none';
+  el('results-error').style.display='none';
+
+  const data = buildFullData_();
+  const ok = await postToBackend_({
+    action: 'complete',
+    pid: _prolificID, study_id: _studyID, session_id: _sessionID,
+    data, snapshot: null
+  }, 5);
+
+  el('results-saving').style.display='none';
+  if(ok){
+    el('results-saved').style.display='block';
+    try{ localStorage.removeItem('wtstudy_resume_' + (_prolificID||'anon')); } catch(e){}
+    prolificRedirect_();
+  } else {
+    el('results-error-code').textContent = 'ERR-' + Date.now().toString(36).toUpperCase();
+    el('results-error').style.display='block';
+  }
+}
+
+function retryComplete_(){
+  completeStudy_();
+}
+
+function prolificRedirect_(){
+  if(_demoMode >= 2){
+    console.log('[Demo] Would redirect to Prolific cc=' + COMPLETION_CODE);
+    return;
+  }
+  window.open('https://app.prolific.com/submissions/complete?cc=' + COMPLETION_CODE, '_blank');
+}
+
+function downloadDataBackup(){
+  const data = buildFullData_();
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='wt_study_backup_' + (_prolificID||'unknown') + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function downloadCSV(){
+  if(!S.log.length) return;
+  // Flatten: one row per section (grids omitted — too nested for CSV)
+  const fields = ['seq','pay','regime','inactive','window','bar_lo','bar_hi','n_req',
+    'pause','alt_duration','alt_end','p_main_first','pause_secs',
+    'outcome','switch_offered','switch_at','n_tasks_done',
+    'earnings','grid_pay','total_targets','total_found','total_false_pos','total_missed',
+    'seq_reload_count','start_at','end_at'];
+  const extra = ['prolific_pid','study_id','session_id','age','gender','student','consent_at'];
+  const allFields = [...extra, ...fields];
+  const rows = [allFields.join(','), ...S.log.map(r=>{
+    const base = {
+      prolific_pid: _prolificID, study_id: _studyID, session_id: _sessionID,
+      age: S.survey.age, gender: S.survey.gender, student: S.survey.student,
+      consent_at: SESSION.consentAt
+    };
+    return allFields.map(k=>JSON.stringify((base[k]??r[k])??(null))).join(',');
+  })];
+  const blob = new Blob([rows.join('\n')], {type:'text/csv'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='wt_study_data.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── DEBUG ─────────────────────────────────────────────────────────
+function debugSkipTask(){
+  if(!S.debugMode) return;
+  kill(); proceedAfterSubmit();
+}
+function debugSkipSection(){
+  if(!S.debugMode) return;
+  kill(); endTask('completed');
+}
+let _debugStopped=false;
+function debugStop(){
+  if(!S.debugMode) return;
+  _debugStopped=!_debugStopped;
+  if(_debugStopped){ kill(); el('debug-stop-btn').textContent='Resume'; el('debug-stop-btn').style.background='#ffd'; }
+  else{ el('debug-stop-btn').textContent='Stop'; el('debug-stop-btn').style.background='#fff7cc'; startSubtask(); }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+window.addEventListener('load', ()=>{
+  redrawProg();
+  bootstrapApp();
+});
+window.addEventListener('resize', ()=>{
+  redrawProg();
+  if(el('inst-timeline')&&el('inst-timeline').offsetParent) drawInstTimeline();
+  if(el('inst-offer-timeline')&&el('inst-offer-timeline').offsetParent) drawInstOfferTimeline();
+});
+</script>
+</body>
+</html>
