@@ -90,16 +90,6 @@ li strong{color:var(--ink);}
 /* ── INSTRUCTION CANVAS ──────────────────────────────────────── */
 canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(--sur);}
 
-/* ── DEMO GRID ───────────────────────────────────────────────── */
-.demo-grid{display:inline-grid;grid-template-columns:repeat(5,44px);gap:5px;padding:10px;
-  border:1px solid var(--bdr);background:var(--sur);}
-.demo-cell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
-  font-size:1.35rem;border:1px solid var(--bdr);border-radius:3px;cursor:pointer;
-  transition:background .1s;user-select:none;}
-.demo-cell.ph{color:#ccc;}
-.demo-cell.live:hover{border-color:var(--ink);}
-.demo-cell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
-
 /* ── TASK SCREEN ─────────────────────────────────────────────── */
 .grid-outer{display:flex;justify-content:center;margin:.8rem 0;}
 .grid-box{border:1px solid var(--bdr);padding:10px;background:var(--sur);display:inline-block;}
@@ -118,8 +108,6 @@ canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(
   align-items:center;justify-content:center;gap:.7rem;text-align:center;}
 
 /* ── INST NAV ────────────────────────────────────────────────── */
-.inst-pages .inst-page{display:none;}
-.inst-pages .inst-page.active{display:block;}
 .inst-nav{display:flex;justify-content:space-between;align-items:center;margin-top:1.4rem;}
 .inst-dots{display:flex;gap:6px;}
 .inst-dot{width:8px;height:8px;border-radius:50%;background:var(--bdr);}
@@ -138,6 +126,7 @@ canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(
 /* ── RESULTS TABLE ───────────────────────────────────────────── */
 table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.7rem 0;}
 th,td{padding:.4rem .6rem;border:1px solid var(--bdr);text-align:left;}
+#st-stat-table td{border:none;}
 th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;background:var(--bg);}
 .tfoot-row td{font-weight:500;background:var(--bg);}
 .csv-btn{display:inline-block;margin-top:.8rem;font-family:var(--mono);font-size:.72rem;
@@ -221,54 +210,17 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 </div></div>
 </div>
 
-<!-- ═══ SCREEN: Instructions ══════════════════════════════════════ -->
+<!-- ═══ SCREEN: Training (guided walkthrough, static practice sequence) ══ -->
 <div id="screen-instructions" class="screen">
 <div class="wrap"><div class="card">
-  <div class="lbl">Instructions</div>
-  <div class="inst-pages">
+  <div class="lbl">Training section</div>
+  <h1 id="tr-h"></h1>
+  <p id="tr-body"></p>
 
-    <!-- PAGE 1 -->
-    <div class="inst-page active" id="ip-1">
-      <h1>The clicking tasks</h1>
-      <p>You will complete <strong id="inst-ntasks">5</strong> sections. Each section offers a <strong>random cash bonus</strong>; you see the exact amount before each section begins. You earn it only by completing the main task.</p>
-      <p>Each section consists of a series of <strong>tasks</strong>. In each task a 5×5 grid of emoji symbols <strong>progressively reveals</strong> from left to right. Once fully revealed, click all instances of the <strong>target emoji</strong> shown above the grid. The task submits automatically after a short countdown.</p>
-      <p style="text-align:center;margin:.8rem 0 .4rem;"><strong>Try it — find and click all <span id="demo-target" style="font-size:1.4rem;"></span></strong></p>
-      <p style="font-size:.8rem;color:var(--ink2);text-align:center;">Complete the demo below to continue.</p>
-      <div style="display:flex;justify-content:center;flex-direction:column;align-items:center;gap:.5rem;">
-        <div class="demo-grid" id="demo-grid"></div>
-        <div id="demo-status" style="font-family:var(--mono);font-size:.75rem;color:var(--ink2);min-height:1.2em;"></div>
-        <button class="btn btn-outline" id="demo-reveal-btn" onclick="revealDemoGrid()">▶ Reveal grid</button>
-      </div>
-    </div>
-
-    <!-- PAGE 2 -->
-    <div class="inst-page" id="ip-2">
-      <h1>The main task</h1>
-      <p>The number of tasks needed to earn the reward is <strong>random</strong>. The highlighted red zone shows where the task can end — it could be <strong>any task in that range</strong>, with equal probability. The grey zone is the safe zone: the task cannot end there.</p>
-      <p>A <strong>stickman</strong> marks your current position on the timeline, always visible at the top of your screen:</p>
-      <canvas id="inst-timeline" class="demo" style="height:72px;"></canvas>
-      <p style="font-size:.82rem;color:var(--ink2);margin-top:.5rem;">The stickman advances right with each completed task. When it enters the red zone, the task may end at any moment.</p>
-    </div>
-
-    <!-- PAGE 3 -->
-    <div class="inst-page" id="ip-3">
-      <h1>The alternative offer</h1>
-      <p>At a <strong>random point</strong> during a section, a <strong>switch button</strong> will activate on the left and the <strong>alternative sequence</strong> will appear on the timeline. A brief notification will pop up to alert you. The task keeps going — you can switch at any time by clicking the button.</p>
-      <p>Later, the section will <strong>pause</strong> to let you decide. You can switch to the alternative, continue the main task, or forfeit both.</p>
-      <canvas id="inst-offer-timeline" class="demo" style="height:110px;"></canvas>
-      <p style="font-size:.82rem;color:var(--ink2);margin-top:.5rem;">The <span style="color:var(--blue);font-weight:600;">blue line</span> shows the alternative sequence — a fixed, known number of tasks. At the pause, you have three options:</p>
-      <ul style="font-size:.87rem;">
-        <li><strong>Continue</strong>: keep going on the main task (button stays visible)</li>
-        <li><strong>Switch</strong>: move to the alternative sequence</li>
-        <li><strong>Forfeit</strong>: abandon both</li>
-      </ul>
-    </div>
-
-  </div><!-- /inst-pages -->
   <div class="inst-nav">
-    <button class="btn btn-outline" id="ip-prev" onclick="instNav(-1)" style="visibility:hidden">← Back</button>
-    <div class="inst-dots" id="ip-dots"></div>
-    <button class="btn" id="ip-next" onclick="instNav(1)">Next →</button>
+    <button class="btn btn-outline" id="tr-prev" onclick="trainNav(-1)" style="visibility:hidden">← Back</button>
+    <div class="inst-dots" id="tr-dots"></div>
+    <button class="btn" id="tr-next" onclick="trainNav(1)">Continue →</button>
   </div>
 </div></div>
 </div>
@@ -283,7 +235,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <p id="grace-dist-note" style="font-size:.8rem;color:var(--ink2);margin-bottom:1.2rem;"></p>
   <div id="grace-pay-block" style="display:none;border-top:1px solid var(--bdr);padding-top:1rem;margin-top:.5rem;">
     <p id="grace-pay-txt" style="font-size:1.1rem;color:var(--ink);font-family:var(--mono);font-weight:600;margin-bottom:.2rem;"></p>
-    <p style="font-size:.82rem;color:var(--ink2);">You earn this only by completing the main task.</p>
+    <p style="font-size:.82rem;color:var(--ink2);">You earn this whether you complete the main sequence or switch to the alternative. Only forfeiting loses it.</p>
   </div>
   <div id="grace-countdown-block" style="display:none;border-top:1px solid var(--bdr);padding-top:1rem;margin-top:.5rem;text-align:center;">
     <button class="btn" id="grace-start-btn" onclick="graceStart()">▶ Start section</button>
@@ -299,32 +251,58 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
     </div>
     <div style="display:flex;gap:2.5rem;align-items:flex-start;justify-content:center;width:100%;">
       <!-- LEFT -->
-      <div style="flex:0 0 200px;display:flex;flex-direction:column;gap:0;">
-        <table style="width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.82rem;border:1.5px solid var(--bdr);">
+      <div id="st-left-panel" style="flex:0 0 200px;display:flex;flex-direction:column;gap:0;">
+        <!-- Wrapper clips to exactly N revealed rows' worth of height during
+             training, for the row-by-row reveal effect. -->
+        <div id="st-table-wrap" style="overflow:hidden;">
+        <table id="st-stat-table" style="width:100%;font-family:var(--mono);font-size:.82rem;">
           <tbody>
-            <tr><td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);color:var(--ink2);">Tasks done</td>
-                <td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);font-weight:600;text-align:right;" id="s-stask">0</td></tr>
-            <tr><td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);color:var(--ink2);">Reward</td>
-                <td style="padding:.5rem .7rem;border-bottom:1px solid var(--bdr);font-weight:600;text-align:right;" id="s-pay">—</td></tr>
-            <tr><td style="padding:.5rem .7rem;color:var(--ink2);">Penalty</td>
+            <tr id="st-row-seq"><td style="padding:.5rem .7rem;color:var(--ink2);">Sequence</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;" id="s-seq">—</td></tr>
+            <tr id="st-row-done"><td style="padding:.5rem .7rem;color:var(--ink2);">Tasks done</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;" id="s-stask">0</td></tr>
+            <tr id="st-row-reward"><td style="padding:.5rem .7rem;color:var(--ink2);">Reward</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;" id="s-pay">—</td></tr>
+            <tr id="st-row-penalty"><td style="padding:.5rem .7rem;color:var(--ink2);">Penalty</td>
                 <td style="padding:.5rem .7rem;font-weight:600;text-align:right;color:var(--red);" id="s-penalty">£0.00</td></tr>
           </tbody>
         </table>
+        </div>
         <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem;">
           <button class="btn btn-blue" id="btn-switch-alt" onclick="openOfferScreen()"
             style="width:100%;text-align:center;display:none;">⇄ Switch to alternative</button>
-          <button onclick="openForfeitConfirm()"
+          <button id="btn-forfeit-section" onclick="openForfeitConfirm()"
             style="width:100%;text-align:center;font-family:var(--mono);font-size:.75rem;color:var(--ink2);background:none;border:1px solid var(--bdr);border-radius:3px;padding:.4rem;cursor:pointer;">✕ Forfeit section</button>
         </div>
       </div>
       <!-- RIGHT -->
       <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:.75rem;">
-        <div id="st-grid-wrap">
-          <div class="grid-outer"><div class="grid-box" id="st-grid"></div></div>
+        <div id="st-grid-wrap" style="position:relative;width:100%;">
+          <div class="grid-outer" id="st-grid-outer"><div class="grid-box" id="st-grid"></div></div>
           <div id="st-countdown" style="display:none;font-family:var(--mono);font-size:.8rem;color:var(--ink2);text-align:center;">
             Submitting in <strong id="st-cd-n">5</strong>s
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Training caption: a single fixed-size, fixed-position box, reused
+       across every step. It never resizes — only its position changes
+       (left of the table / centered / right of the grid), computed in JS
+       from the real column positions so it never overlaps whichever
+       element is newly introduced that step. -->
+  <div id="tgc-box" style="display:none;position:fixed;width:480px;height:270px;box-sizing:border-box;overflow:auto;background:var(--sur);border:1px solid var(--bdr);padding:1.1rem 1.3rem;z-index:210;flex-direction:column;">
+    <div class="lbl">Training section</div>
+    <h1 id="tgc-h" style="font-size:1.1rem;margin-bottom:.5rem;"></h1>
+    <p id="tgc-body" style="margin-bottom:.6rem;font-size:.88rem;"></p>
+    <!-- Pinned to the bottom of the fixed-height box regardless of how
+         short the body text is, instead of floating right under it. -->
+    <div style="margin-top:auto;">
+      <div class="inst-dots" id="tgc-dots" style="justify-content:center;margin:.5rem 0;"></div>
+      <div style="display:flex;justify-content:space-between;gap:.5rem;">
+        <button class="btn btn-outline" id="tgc-prev" onclick="trainNav(-1)">← Back</button>
+        <button class="btn" id="tgc-next" onclick="trainNav(1)">Continue →</button>
       </div>
     </div>
   </div>
@@ -338,7 +316,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <p id="offer-main-txt"></p>
   <div class="offer-box">
     <div style="position:absolute;top:-.55em;left:.8rem;background:var(--sur);padding:0 .3rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.15em;color:var(--blue);text-transform:uppercase;">Alternative sequence</div>
-    <p style="margin:0;">This alternative sequence requires exactly <strong id="offer-alt-n">—</strong> tasks. You know exactly how long it will take.</p>
+    <p style="margin:0;">This alternative sequence requires exactly <strong id="offer-alt-n">—</strong> tasks. Switching does not affect your bonus.</p>
   </div>
   <p style="font-size:.85rem;color:var(--ink2);">Take your time to decide. You can return to the main sequence and switch later using the button on the left.</p>
   <p id="offer-countdown" style="font-family:var(--mono);font-size:1.15rem;color:var(--ink);margin:.6rem 0 1rem;">Back to main task in: <strong id="offer-countdown-n" style="font-size:1.3rem;">—</strong>s</p>
@@ -354,7 +332,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:420px;width:90%;font-family:var(--mono);">
     <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
     <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem;color:var(--ink);">Switch to alternative?</div>
-    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">This alternative sequence requires exactly <strong id="confirm-alt-n">—</strong> tasks. This cannot be undone.</p>
+    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">This alternative sequence requires exactly <strong id="confirm-alt-n">—</strong> tasks. Your bonus is unaffected. This cannot be undone.</p>
     <div style="display:flex;gap:.75rem;">
       <button class="btn btn-blue" style="flex:1;" onclick="confirmSwitch()">⇄ Confirm switch</button>
       <button class="btn btn-outline" style="flex:1;" onclick="closeConfirm()">✕ Cancel</button>
@@ -465,10 +443,11 @@ const _demoMode   = parseInt(_params.get('demomode') || '0', 10);
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyY9XDJJHdkkUejwRNAp8QT0UMtW7eV7hNnvq8RMdyVNZnpSHtBfPIEC0hNym14-cNU/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzBPsqbko0qRJ3378n-Qm8rY1DPOEZF1BR2nb3wc0f1GHK7EhUslxSDg-wmIxEHfeTf/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.03;
+const BONUS_RATE_PER_TASK = 0.043; // £9/hr ÷ 3600s × 17.5s per task
 
 function backendConfigured_(){
   return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
@@ -515,7 +494,7 @@ const CFG = {
   gridC:      5,
   revealMs:   500,
   submitSecs: 5,
-  winLo: 5,
+  winLo: 10,
   winHi: 15,
   payLevels: [1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0,5.5,6.0,6.5,7.0,7.5,8.0,8.5,9.0,9.5,10.0],
 };
@@ -532,7 +511,24 @@ let SESSION = {
   consentAt:    null,   // ISO; never overwritten after first set
   reloadLog:    [],     // [{seq_index, at}]
   totalReloads: 0,
+  trainingBonus: 0,     // £0.10 credited once the training walkthrough is completed
+  nSeqFrame:    null,   // 4 or 5 — hidden 50/50 treatment, drawn once at consent, never changes after
 };
+
+// ── SEQUENCE-COUNT FRAMING (hidden 4-vs-5 treatment) ────────────────
+// Participants are always run through all CFG.numTasks (5) sections
+// regardless of treatment. Half are told up front there are 5; the other
+// half are told there are 4, and the real 5th section is instead framed
+// as an unannounced final bonus round.
+function isBonusIdx_(taskIdx){
+  return SESSION.nSeqFrame===4 && taskIdx===CFG.numTasks-1;
+}
+function sectionLongLabel_(taskIdx){
+  return isBonusIdx_(taskIdx) ? 'Bonus section' : ('Section '+(taskIdx+1)+' of '+(SESSION.nSeqFrame||5));
+}
+function sectionShortLabel_(taskIdx){
+  return isBonusIdx_(taskIdx) ? 'Bonus' : ((taskIdx+1)+'/'+(SESSION.nSeqFrame||5));
+}
 
 // ── STATE ─────────────────────────────────────────────────────────
 let S = {
@@ -541,6 +537,8 @@ let S = {
   penalty: 0,
   debugMode: _demoMode >= 1,
   altFlashing: false,
+  zoneHidden: false,
+  stickHidden: false,
   log: [],          // completed section entries
   handles: [],
   grid: [],
@@ -567,6 +565,14 @@ function el(id){
   return e;
 }
 
+// Draws a task count with the same distribution nReq uses for the given
+// regime. Called once for the real nReq and once more (independently) to
+// generate the bonus, so the bonus can't be used to infer the real nReq.
+function drawEndCount_(regime, pause, barLo, barHi, window){
+  if(regime === 1) return barLo + rnd(0, window);
+  return (pause < barLo) ? barLo + rnd(0, window) : rnd(pause, barHi);
+}
+
 // ── GENERATE TASKS ────────────────────────────────────────────────
 function generateTasks(){
   return Array.from({length:CFG.numTasks},(_,i)=>{
@@ -579,13 +585,11 @@ function generateTasks(){
     const regime = Math.random() < 0.5 ? 1 : 2;
     let nReq, pause;
     if(regime === 1){
-      nReq  = barLo + rnd(0, window);
+      nReq  = drawEndCount_(1, null, barLo, barHi, window);
       pause = rnd(0, Math.min(nReq, pauseMax));
     } else {
       pause = rnd(0, pauseMax);
-      nReq  = (pause < barLo)
-        ? barLo + rnd(0, window)
-        : rnd(pause, barHi);
+      nReq  = drawEndCount_(2, pause, barLo, barHi, window);
     }
 
     const switch_cost = pause;
@@ -603,8 +607,8 @@ function generateTasks(){
     }
     const altEnd = pause + altDuration;
 
-    const payTasks = barLo + Math.round(Math.random() * (barHi - barLo));
-    const pay      = Math.round(payTasks * 0.04375 / 0.05) * 0.05;
+    const payTasks = drawEndCount_(regime, pause, barLo, barHi, window);
+    const pay      = Math.round(payTasks * BONUS_RATE_PER_TASK * 100) / 100;
 
     return { index:i, pay, regime,
              inactive, pause, switch_cost, adjustment,
@@ -655,7 +659,7 @@ function drawTimeline(canvasId, opts){
   }
 
   if(!onAlt){
-    if(barLo && barHi){
+    if(barLo && barHi && !(S && S.zoneHidden)){
       const x0=tx(barLo)-tickW/2, x1=tx(barHi)+tickW/2;
       ctx.fillStyle='#c84b2f'; ctx.globalAlpha=0.15;
       ctx.fillRect(x0, mainTop, x1-x0, mainBarH);
@@ -678,7 +682,7 @@ function drawTimeline(canvasId, opts){
         ctx.fillText(k, x, numY);
       }
     }
-    if(stickPos!=null) drawStickman(ctx, tx(stickPos), mainBase-1, 10);
+    if(stickPos!=null && !(S && S.stickHidden)) drawStickman(ctx, tx(stickPos), mainBase-1, 10);
   }
 
   if((offerActive || onAlt) && altEnd){
@@ -760,6 +764,8 @@ function buildSnapshot_(){
     sectionsLog:  S.log.slice(),
     totalReloads: SESSION.totalReloads,
     reloadLog:    SESSION.reloadLog.slice(),
+    trainingBonus: SESSION.trainingBonus,
+    nSeqFrame:    SESSION.nSeqFrame,
   };
 }
 
@@ -771,33 +777,67 @@ function saveProgress(isHeartbeat){
   _lastSnapJson = json;
   try{ localStorage.setItem('wtstudy_resume_' + (_prolificID||'anon'), json); } catch(e){}
   if(!_prolificID || _demoMode >= 2 || !backendConfigured_()) return;
+  const {study_level, sections} = buildFullData_();
   postToBackend_({
     action: 'progress',
     pid: _prolificID, study_id: _studyID, session_id: _sessionID,
-    data: buildFullData_(),
-    snapshot: snap
+    study_level, sections, snapshot: snap
   });
 }
 setInterval(()=>saveProgress(true), 25000);
 
 function buildFullData_(){
-  const totalEarnings     = S.log.reduce((a,r)=>a+(r.earnings||0), 0);
-  const totalGridPay      = S.log.reduce((a,r)=>a+(r.grid_pay||0), 0);
-  const totalGridsDone    = S.log.reduce((a,r)=>a+(r.n_tasks_done||0), 0);
-  return {
-    demo_mode:              _demoMode,
-    consent_at:             SESSION.consentAt,
-    age:                    S.survey.age,
-    gender:                 S.survey.gender,
-    student:                S.survey.student,
-    sections_done:          S.log.length,
-    total_earnings:         Math.round(totalEarnings*100)/100,
-    total_grid_pay:         Math.round(totalGridPay*100)/100,
-    total_grids_completed:  totalGridsDone,
-    reload_count:           SESSION.totalReloads,
-    reload_log:             SESSION.reloadLog,
-    sequences:              S.log,
+  const totalEarnings  = S.log.reduce((a,r)=>a+(r.earnings||0), 0) + (SESSION.trainingBonus||0);
+  const totalGridPay   = S.log.reduce((a,r)=>a+(r.grid_pay||0), 0);
+  const totalGridsDone = S.log.reduce((a,r)=>a+(r.n_tasks_done||0), 0);
+  const study_level = {
+    demo_mode:             _demoMode,
+    consent_at:            SESSION.consentAt,
+    age:                   S.survey.age,
+    gender:                S.survey.gender,
+    student:               S.survey.student,
+    sections_done:         S.log.length,
+    training_bonus:        Math.round((SESSION.trainingBonus||0)*100)/100,
+    seq_frame_treatment:   SESSION.nSeqFrame || 5,
+    total_earnings:        Math.round(totalEarnings*100)/100,
+    total_grid_pay:        Math.round(totalGridPay*100)/100,
+    total_grids_completed: totalGridsDone,
+    reload_count:          SESSION.totalReloads,
+    reload_log:            SESSION.reloadLog,
   };
+  // Map log entries to backend format; tasks_json = serialised per-grid array
+  const sections = S.log.map(r => ({
+    seq_n:           r.seq_n,
+    pay:             r.pay,
+    regime:          r.regime,
+    inactive:        r.inactive,
+    window:          r.window,
+    bar_lo:          r.bar_lo,
+    bar_hi:          r.bar_hi,
+    n_req:           r.n_req,
+    pause:           r.pause,
+    alt_duration:    r.alt_duration,
+    alt_end:         r.alt_end,
+    p_main_first:    r.p_main_first,
+    pause_secs:      r.pause_secs,
+    outcome:         r.outcome,
+    switch_offered:  r.switch_offered,
+    switch_at:       r.switch_at,
+    n_tasks_done:    r.n_tasks_done,
+    earnings:        r.earnings,
+    grid_pay:        r.grid_pay,
+    total_targets:   r.total_targets,
+    total_found:     r.total_found,
+    total_false_pos: r.total_false_pos,
+    total_missed:    r.total_missed,
+    seq_reload_count:r.seq_reload_count,
+    start_at:        r.start_at,
+    end_at:          r.end_at,
+    tasks_json:      r.grids || [],
+    seq_frame_treatment: r.seq_frame_treatment,
+    seq_is_bonus:    r.seq_is_bonus,
+  }));
+  return {study_level, sections};
 }
 
 // ── BOOTSTRAP / RESUME ───────────────────────────────────────────
@@ -865,6 +905,8 @@ function applyResume_(snap){
   SESSION.consentAt  = snap.consentAt || null;
   SESSION.reloadLog  = (snap.reloadLog || []).slice();
   SESSION.totalReloads = snap.totalReloads || 0;
+  SESSION.trainingBonus = snap.trainingBonus || 0;
+  SESSION.nSeqFrame  = snap.nSeqFrame != null ? snap.nSeqFrame : 5; // pre-existing sessions default to the untreated framing
   S.log              = (snap.sectionsLog || []).slice();
   S.taskIdx          = snap.taskIdx || 0;
 
@@ -876,7 +918,6 @@ function applyResume_(snap){
   S.tasks = generateTasks();
 
   // Go directly to grace period for current section
-  buildInstDots();
   gracePeriod(()=>startTask());
   saveProgress(false);
 }
@@ -894,6 +935,7 @@ function retryBootstrap(){
 // ── CONSENT ───────────────────────────────────────────────────────
 function doConsent(){
   if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
+  if(SESSION.nSeqFrame == null) SESSION.nSeqFrame = Math.random()<0.5 ? 4 : 5;
   showScreen('survey');
 }
 
@@ -916,126 +958,350 @@ document.addEventListener('DOMContentLoaded', ()=>{
 function submitSurvey(){
   const age=el('s-age').value.trim()||'—', gender=el('s-gender').value||'—', student=el('s-student').value||'—';
   S.survey = { age, gender, student };
-  buildInstDots();
-  instPage=1;
-  document.querySelectorAll('.inst-page').forEach((p,i)=>p.classList.toggle('active',i===0));
-  el('ip-prev').style.visibility='hidden';
-  el('ip-next').textContent='Next →';
-  el('ip-next').onclick=()=>instNav(1);
-  buildDemoGrid();
+  trainStep=1;
+  trainingActive=true;
   showScreen('instructions');
+  renderTrainStep();
   saveProgress(false);
 }
 
-// ── INSTRUCTIONS ─────────────────────────────────────────────────
-let instPage=1;
-const INST_TOTAL=3;
+// ── TRAINING (static, hard-coded guided walkthrough) ───────────────
+// Fixed practice-sequence parameters — deliberately static so the training
+// task never varies between participants (or between reloads of the same
+// participant). Mirrors the real task-object shape (barLo/barHi/altDuration)
+// so it can drive the same drawTimeline()/top progress bar used live.
+const TRAIN = { inactive:5, barLo:6, barHi:10, altDuration:2, pause:1, pay:0.10 };
 
-function buildInstDots(){
-  const d=el('ip-dots'); if(!d) return; d.innerHTML='';
-  for(let i=1;i<=INST_TOTAL;i++){
+// From TRAIN_FIRST_SUBTASK_STEP onward, the walkthrough runs on top of the
+// REAL #screen-subtask — same DOM, same CSS, same layout, nothing shifts —
+// revealing one real element at a time (grid, then each stat row, then each
+// button) exactly when it's explained. Before that, steps run on the plain
+// #screen-instructions (nothing to reveal there yet).
+const TRAIN_FIRST_SUBTASK_STEP = 4;
+
+// pos: where the fixed caption box sits for this step — 'left' (hangs left
+// of the table, out past the page margin), 'right' (hangs right of the
+// grid), or 'center'. Only meaningful for steps >= TRAIN_FIRST_SUBTASK_STEP.
+const TRAIN_STEPS = [
+  null, // 1-indexed
+  { h:'Welcome',
+    body:'You\'re about to take part in a real-effort task. We\'ll teach you the ropes first.' },
+  { h:'This is a sequence',
+    body:()=>'This is a <strong>sequence</strong>. You\'ll complete '+(SESSION.nSeqFrame||5)+' today. A sequence is made of tasks. The bar above points to the tasks in a sequence.' },
+  { h:'Moving through the sequence',
+    body:'Completing a <strong>task</strong> moves you one step through the sequence. The stickman on the bar marks your progress.' },
+  { h:'This is a task',
+    pos:'left',
+    body:'A task is this 5×5 grid. Click every instance of the target emoji as the grid fills in. Press <strong>Reveal grid</strong> to try it.' },
+  { h:'Task complete',
+    pos:'center',
+    body:'You have completed a task. The stickman moves forward by one task.' },
+  { h:'When does a sequence end?',
+    pos:'center',
+    body:'A sequence only ends at a <strong>random</strong> point within the window shown above. By completing a sequence, you will earn a bonus. In this case, the sequence can only end between task 6 and 10.' },
+  { h:'The alternative sequence',
+    pos:'center',
+    body:'Sometimes we will give you the option to switch to a fixed-length alternative, shown as the blue line. Your progress will restart, but completing the alternative sequence counts as completing the main one. In this case, the alternative sequence lasts 2 tasks.' },
+  { h:'Your sequence',
+    pos:'right',
+    body:'This row tracks which sequence you\'re on, and how many there are in total.' },
+  { h:'Tasks done',
+    pos:'right',
+    body:'This row counts how many tasks you\'ve completed so far in this sequence. So far, you\'ve completed 1 task.' },
+  { h:'The bonus',
+    pos:'right',
+    body:'Finishing or switching always pays this sequence\'s bonus. It\'s shown here. In this case, you earn £0.10.' },
+  { h:'Mistakes',
+    pos:'right',
+    body:'Mistakes cost a small penalty each ($0.01). Your accumulated penalty is shown here.' },
+  { h:'The switch button',
+    pos:'right',
+    body:'Once available, you can always switch to the alternative sequence by pressing this button.' },
+  { h:'Forfeiting',
+    pos:'right',
+    body:'This button lets you <strong>forfeit</strong> a sequence. If you forfeit a sequence, you will lose its bonus and move to the next sequence.' },
+  { h:'You\'re ready to go',
+    pos:'right',
+    body:'This one\'s on us: you have earned <strong>£0.10</strong> for finishing the practice. Time for the real thing.',
+    final:true },
+];
+const TRAIN_TOTAL = TRAIN_STEPS.length - 1;
+
+let trainStep = 1;
+let trainingActive = false; // true from survey submit until finishTraining()
+let trainGridRevealed=false;
+let trainTarget='', trainGrid=[], trainHandles=[];
+
+function trainAddTimer(h){ trainHandles.push(h); return h; }
+function trainKill(){
+  trainHandles.forEach(h=>{ clearTimeout(h); clearInterval(h); }); trainHandles=[];
+  // A flash interval killed mid-blink (e.g. Continue pressed while the
+  // element happened to be in its hidden phase) would otherwise leave it
+  // stuck invisible forever after, since the "settle back to visible"
+  // reset only runs if the interval reaches its final tick naturally.
+  S.zoneHidden=false; S.stickHidden=false; S.altFlashing=false;
+}
+
+function buildTrainDotsInto(id){
+  const d=el(id); if(!d) return; d.innerHTML='';
+  for(let i=1;i<=TRAIN_TOTAL;i++){
     const dot=document.createElement('div');
-    dot.className='inst-dot'+(i===instPage?' active':'');
+    dot.className='inst-dot'+(i===trainStep?' active':'');
     d.appendChild(dot);
   }
 }
 
-let instEx={};
-function freshInstEx(){
-  const inactive = rnd(0,5);
-  const window   = rnd(CFG.winLo, CFG.winHi);
-  const barLo    = inactive + 1;
-  const barHi    = inactive + 1 + window;
-  const pauseMax = barHi - 3;
-  const nReq     = barLo + rnd(0, window);
-  const pause    = rnd(0, Math.min(nReq, pauseMax));
-  const switch_cost = pause;
-  const adjustment  = inactive - pause;
-  let altDuration;
-  if(pause >= barLo - 1){
-    altDuration = rnd(2, barHi - pause - 1);
+// Drives the shared top progress bar (#prog-canvas) with the static
+// training parameters, revealing the end zone and alt line progressively
+// as the walkthrough explains them — same component, same drawTimeline()
+// call the real experiment uses. No safe-zone box; the end zone and the
+// alt line each flash briefly once, the moment they first appear.
+function drawTrainingProg(step){
+  const pw=el('prog-wrap'); if(pw) pw.classList.add('visible');
+  const showZone = step>=6;
+  const showAlt  = step>=7;
+  drawTimeline('prog-canvas',{
+    barLo: showZone ? TRAIN.barLo : 0,
+    barHi: showZone ? TRAIN.barHi : 0,
+    offerPos:null,
+    stickPos: step>=5 ? 1 : 0,
+    altEnd: showAlt ? TRAIN.altDuration : null,
+    offerActive: showAlt,
+    onAlt:false,
+    showSafe:false,
+    maxK: 12,
+  });
+}
+
+// Briefly flashes the just-revealed zone/stickman/alt line a few times, then
+// settles back to its normal steady (visible) appearance. The zone and
+// stickman flash between fully drawn and fully skipped (a real on/off
+// blink); the alt line keeps its own light/dark colour toggle.
+function flashTrainZone(){
+  let n=0;
+  const iv=trainAddTimer(setInterval(()=>{
+    S.zoneHidden=!S.zoneHidden; drawTrainingProg(trainStep); n++;
+    if(n>=6){ clearInterval(iv); S.zoneHidden=false; drawTrainingProg(trainStep); }
+  },150));
+}
+function flashTrainStick(){
+  let n=0;
+  const iv=trainAddTimer(setInterval(()=>{
+    S.stickHidden=!S.stickHidden; drawTrainingProg(trainStep); n++;
+    if(n>=6){ clearInterval(iv); S.stickHidden=false; drawTrainingProg(trainStep); }
+  },150));
+}
+function flashTrainAlt(){
+  let n=0;
+  const iv=trainAddTimer(setInterval(()=>{
+    S.altFlashing=!S.altFlashing; drawTrainingProg(trainStep); n++;
+    if(n>=6){ clearInterval(iv); S.altFlashing=false; drawTrainingProg(trainStep); }
+  },150));
+}
+
+// Reveals the real #screen-subtask elements one at a time, in the exact
+// step each is first explained. The stat table is revealed row-by-row by
+// clipping its wrapper to exactly N rows' worth of height. Buttons use
+// opacity:0 (not display:none) so their layout space stays reserved and
+// nothing on screen ever shifts.
+function revealTrainElements(step){
+  // The grid is only relevant while it's actually being introduced — hide
+  // it everywhere else so it doesn't linger and distract while the top
+  // bar (task complete / zone / alt line) or the table is being explained.
+  const gridOuter = el('st-grid-outer');
+  if(gridOuter) gridOuter.style.opacity = (step===TRAIN_FIRST_SUBTASK_STEP) ? '1' : '0';
+
+  // Row order: Sequence, Tasks done, Reward, Penalty — each gets its own
+  // dedicated step, matching "sequence, task done, reward, penalty,
+  // switch, forfeit".
+  const revealedRows = (step>=8?1:0) + (step>=9?1:0) + (step>=10?1:0) + (step>=11?1:0);
+  const table=el('st-stat-table'), wrap=el('st-table-wrap');
+  if(table && wrap){
+    const rowH = table.rows.length ? table.rows[0].getBoundingClientRect().height : 0;
+    wrap.style.height = Math.round(revealedRows*rowH) + 'px';
+  }
+  const sw=el('btn-switch-alt');
+  if(sw){ sw.style.display='block'; sw.style.opacity = step>=12 ? '1' : '0'; }
+  const show = (node, on) => { if(node) node.style.opacity = on ? '1' : '0'; };
+  show(el('btn-forfeit-section'), step>=13);
+
+  // Training-appropriate values (the real updateStats()/S.tasks-driven
+  // figures don't apply here — this is a static, ungraded practice run).
+  el('s-seq').textContent = sectionShortLabel_(0);
+  el('s-stask').textContent = '1';
+  el('s-pay').textContent = '£'+TRAIN.pay.toFixed(2);
+  el('s-penalty').textContent = '£0.00';
+}
+
+// The caption box is one fixed-size element (#tgc-box, 480x270) that only
+// ever moves — never resizes. Position is computed from the real column
+// positions so it always keeps exactly CAPTION_GAP clearance from whichever
+// element is newly introduced that step (the same gap value both ways, so
+// the box sits exactly as far from the grid in 'left' mode as it does from
+// the table in 'right' mode):
+//   'left'   -> stays CAPTION_GAP to the left of the grid (table's area,
+//               and further into the page margin, stay uncovered)
+//   'right'  -> stays CAPTION_GAP to the right of the table, so the table
+//               and its rows/buttons remain visible as they're revealed
+//   'center' -> centered in the viewport (used while explaining the top
+//               bar, before the table is being introduced at all)
+const CAPTION_GAP = 32;
+function positionCaptionBox(mode){
+  const box = el('tgc-box');
+  const boxW = box.offsetWidth, boxH = box.offsetHeight;
+  const leftPanel = el('st-left-panel').getBoundingClientRect();
+  const gridWrap  = el('st-grid-wrap').getBoundingClientRect();
+  const rowMid = (Math.min(leftPanel.top, gridWrap.top) + Math.max(leftPanel.bottom, gridWrap.bottom)) / 2;
+
+  let left;
+  if(mode==='left')       left = gridWrap.left - CAPTION_GAP - boxW;
+  else if(mode==='right') left = leftPanel.right + CAPTION_GAP;
+  else                    left = (window.innerWidth - boxW) / 2;
+
+  left = Math.max(8, Math.min(left, window.innerWidth - boxW - 8));
+  const top = Math.max(8, rowMid - boxH/2);
+
+  box.style.left = Math.round(left)+'px';
+  box.style.top  = Math.round(top)+'px';
+}
+
+// The action button doubles as "Reveal grid" (on the grid-intro step,
+// before it's been revealed) and "Continue"/"Start the real study"
+// everywhere else — they occupy the same slot rather than being two
+// separate buttons.
+function updateTgcActionButton(){
+  const s = TRAIN_STEPS[trainStep];
+  const btn = el('tgc-next');
+  if(trainStep===TRAIN_FIRST_SUBTASK_STEP && !trainGridRevealed){
+    btn.textContent='▶ Reveal grid';
+    btn.onclick=revealTrainGrid;
+  } else if(s.final){
+    btn.textContent='Start the real study →';
+    btn.onclick=finishTraining;
   } else {
-    const altLo = barLo - pause + 1;
-    const altHi = window - 1;
-    altDuration = (altLo <= altHi) ? rnd(altLo, altHi) : rnd(2, barHi - pause - 1);
-  }
-  const altEnd = pause + altDuration;
-  instEx = { inactive,pause,switch_cost,adjustment,window,barLo,barHi,altEnd,altDuration,
-             maxK:Math.max(barHi+2, altDuration+2) };
-}
-
-function drawInstTimeline(){
-  freshInstEx();
-  const {barLo,barHi,inactive,maxK}=instEx;
-  const stickInSafe=Math.max(0,Math.floor((inactive-1)/2));
-  drawTimeline('inst-timeline',{barLo,barHi,
-    offerPos:null, showSafe:true, stickPos:stickInSafe,
-    altEnd:null, offerActive:false, onAlt:false, maxK});
-}
-
-function drawInstOfferTimeline(){
-  if(!instEx.barLo) freshInstEx();
-  const {barLo,barHi,switch_cost,pause,altDuration,maxK}=instEx;
-  drawTimeline('inst-offer-timeline',{barLo,barHi,
-    offerPos:pause, showSafe:true, stickPos:switch_cost,
-    altEnd:altDuration, offerActive:true, onAlt:false, maxK});
-}
-
-let demoCompleted=false;
-function instNav(dir){
-  if(instPage===1 && dir===1 && !demoCompleted){ el('demo-status').textContent='Please complete the demo first.'; return; }
-  instPage=Math.max(1,Math.min(INST_TOTAL,instPage+dir));
-  document.querySelectorAll('.inst-page').forEach((p,i)=>p.classList.toggle('active',i+1===instPage));
-  buildInstDots();
-  el('ip-prev').style.visibility=instPage>1?'visible':'hidden';
-  const nxt=el('ip-next');
-  if(instPage===INST_TOTAL){ nxt.textContent='Start →'; nxt.onclick=startExperiment; }
-  else { nxt.textContent='Next →'; nxt.onclick=()=>instNav(1); }
-  if(instPage===2) setTimeout(drawInstTimeline,60);
-  if(instPage===3) setTimeout(drawInstOfferTimeline,60);
-}
-
-// ── DEMO GRID ─────────────────────────────────────────────────────
-let demoTarget='', demoChecked=new Set(), demoHandle=null;
-
-function buildDemoGrid(){
-  demoTarget=pick(EMOJIS);
-  el('demo-target').textContent=demoTarget;
-  const others=shuf(EMOJIS.filter(e=>e!==demoTarget));
-  const nT=rnd(3,5);
-  const cells=[...Array(nT).fill(demoTarget),...others.slice(0,25-nT)];
-  const shuffled=shuf(cells);
-  const grid=el('demo-grid');
-  grid.innerHTML=''; demoChecked=new Set(); demoHandle=null; demoCompleted=false;
-  el('demo-reveal-btn').style.display='';
-  el('demo-status').textContent='';
-  for(let i=0;i<25;i++){
-    const c=document.createElement('div');
-    c.className='demo-cell ph'; c.id='dc'+i; c.textContent='·';
-    c._emoji=shuffled[i];
-    grid.appendChild(c);
+    btn.textContent='Continue →';
+    btn.onclick=()=>trainNav(1);
   }
 }
 
-function revealDemoGrid(){
-  if(demoHandle) return;
-  el('demo-reveal-btn').style.display='none';
-  demoCompleted=true;
-  el('demo-status').textContent='Filling…';
-  let i=0;
-  function step(){
-    if(i>=25){ el('demo-status').textContent='Click all '+demoTarget+' then submit!'; demoHandle=null; return; }
-    const c=document.getElementById('dc'+i);
-    if(c){ c.className='demo-cell live'; c.textContent=c._emoji; c.onclick=()=>toggleDemo(c,i); }
-    i++;
-    demoHandle=setTimeout(step,CFG.revealMs);
+function renderTrainStep(){
+  const s = TRAIN_STEPS[trainStep];
+  const bodyText = typeof s.body==='function' ? s.body() : s.body;
+
+  if(trainStep < TRAIN_FIRST_SUBTASK_STEP){
+    el('tgc-box').style.display='none';
+    showScreen('instructions');
+    el('tr-h').textContent = s.h;
+    el('tr-body').innerHTML = bodyText;
+    buildTrainDotsInto('tr-dots');
+    el('tr-prev').style.visibility = trainStep>1 ? 'visible' : 'hidden';
+    el('tr-next').textContent='Continue →';
+    el('tr-next').onclick=()=>trainNav(1);
+    drawTrainingProg(trainStep);
+    return;
   }
-  demoHandle=setTimeout(step,CFG.revealMs);
+
+  // Steps 4+: the real task screen, revealed piece by piece underneath a
+  // fixed-size caption that always hangs in the page margin, never over
+  // whatever is newly introduced this step.
+  showScreen('subtask');
+  drawTrainingProg(trainStep);
+  const lp=el('st-left-panel'); if(lp) lp.style.pointerEvents='none'; // inert during training
+  revealTrainElements(trainStep);
+
+  if(trainStep===TRAIN_FIRST_SUBTASK_STEP) buildTrainGrid();
+
+  const box=el('tgc-box');
+  box.style.display='flex';
+  el('tgc-h').textContent = s.h;
+  el('tgc-body').innerHTML = bodyText;
+  buildTrainDotsInto('tgc-dots');
+  el('tgc-prev').style.visibility = trainStep>1 ? 'visible' : 'hidden';
+  el('tgc-prev').onclick = ()=>trainNav(-1);
+  updateTgcActionButton();
+  positionCaptionBox(s.pos || 'right');
+
+  if(trainStep===5) trainAddTimer(setTimeout(flashTrainStick, 200));
+  if(trainStep===6) trainAddTimer(setTimeout(flashTrainZone, 200));
+  if(trainStep===7) trainAddTimer(setTimeout(flashTrainAlt, 200));
 }
 
-function toggleDemo(cell,i){
-  if(demoChecked.has(i)){ demoChecked.delete(i); cell.classList.remove('selected'); }
-  else { demoChecked.add(i); cell.classList.add('selected'); }
+function trainNav(dir){
+  trainKill();
+  trainStep = Math.max(1, Math.min(TRAIN_TOTAL, trainStep+dir));
+  renderTrainStep();
+}
+
+function finishTraining(){
+  trainKill();
+  trainingActive=false;
+  SESSION.trainingBonus = TRAIN.pay;
+  saveProgress(false);
+  startExperiment();
+}
+
+// ── TRAINING GRID (real grid mechanic, ungraded, on the real #st-grid) ──
+function buildTrainGrid(){
+  trainKill();
+  trainGridRevealed=false;
+  trainTarget = pick(EMOJIS);
+  el('st-target').textContent = trainTarget;
+  const nT = rnd(3,6);
+  const others = shuf(EMOJIS.filter(e=>e!==trainTarget)).slice(0,25-nT);
+  trainGrid = shuf([...Array(nT).fill(trainTarget), ...others]);
+
+  const cd=el('st-countdown'); if(cd) cd.style.display='none';
+
+  const ROWS=CFG.gridR, COLS=CFG.gridC;
+  const gridEl=el('st-grid');
+  gridEl.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    const row=document.createElement('div');
+    row.className='grow-el';
+    for(let c=0;c<COLS;c++){
+      const cell=document.createElement('div');
+      cell.className='ecell ph'; cell.textContent='·';
+      row.appendChild(cell);
+    }
+    gridEl.appendChild(row);
+  }
+}
+
+function revealTrainGrid(){
+  if(trainGridRevealed) return;
+  trainGridRevealed=true;
+  updateTgcActionButton(); // action slot switches from "Reveal grid" to "Continue"
+  const ROWS=CFG.gridR, COLS=CFG.gridC, TOTAL=ROWS*COLS;
+  const gridEl=el('st-grid');
+  for(let i=0;i<TOTAL;i++){
+    const _i=i, _r=Math.floor(i/COLS), _c=i%COLS;
+    trainAddTimer(setTimeout(()=>{
+      const row=gridEl.children[_r]; if(!row) return;
+      const cell=row.children[_c]; if(!cell) return;
+      cell.classList.remove('ph'); cell.classList.add('live');
+      cell.textContent=trainGrid[_i];
+      cell.onclick=()=>{ cell.classList.toggle('selected'); };
+      if(_i===TOTAL-1) trainShowCountdown();
+    }, (_i+1)*CFG.revealMs));
+  }
+}
+
+function trainShowCountdown(){
+  const cd=el('st-countdown'), cdn=el('st-cd-n');
+  if(cd) cd.style.display='block';
+  let left=CFG.submitSecs;
+  if(cdn) cdn.textContent=left;
+  trainAddTimer(setInterval(()=>{
+    left--;
+    const e=el('st-cd-n'); if(e) e.textContent=Math.max(0,left);
+    if(left<=0){
+      trainKill();
+      if(cd) cd.style.display='none';
+      // The task simply stops when the timer ends — ungraded practice run.
+      const gridEl=el('st-grid');
+      if(gridEl) [...gridEl.querySelectorAll('.ecell')].forEach(c=>{ c.onclick=null; c.classList.remove('live'); });
+    }
+  },1000));
 }
 
 // ── EXPERIMENT ────────────────────────────────────────────────────
@@ -1053,8 +1319,8 @@ function gracePeriod(cb){
   const task=S.tasks[S.taskIdx];
   showScreen('grace');
 
-  el('grace-lbl').textContent='Section '+(S.taskIdx+1)+' of '+CFG.numTasks;
-  el('grace-heading').textContent='Get ready';
+  el('grace-lbl').textContent = sectionLongLabel_(S.taskIdx);
+  el('grace-heading').textContent = isBonusIdx_(S.taskIdx) ? 'Bonus round' : 'Get ready';
   el('grace-pay-block').style.display='none';
   el('grace-countdown-block').style.display='none';
   el('grace-dist-txt').textContent='The task can end anywhere within this range:';
@@ -1095,6 +1361,14 @@ function startTask(){
 
   const sw=el('btn-switch-alt');
   if(sw){ sw.style.display='block'; sw.disabled=true; sw.style.opacity='0.35'; sw.style.cursor='not-allowed'; }
+  // Undo any state left over from the training walkthrough.
+  const lp=el('st-left-panel');
+  if(lp){ lp.style.display=''; lp.style.pointerEvents=''; }
+  const tw=el('st-table-wrap'); if(tw) tw.style.height='';
+  const fb=el('btn-forfeit-section'); if(fb) fb.style.opacity='1';
+  const go=el('st-grid-outer'); if(go) go.style.opacity='1';
+  el('tgc-box').style.display='none';
+  el('s-seq').textContent = sectionShortLabel_(S.taskIdx);
   showScreen('subtask');
   updateStats();
 
@@ -1222,6 +1496,7 @@ function updateStats(){
         `P(main ends before alt): <b style="color:${pMainFirst<0.5?'#c84b2f':'green'}">${pPct}</b>`,
         `Pay: <b>£${task.pay.toFixed(2)}</b>`,
         `Reloads this seq: <b>${SESSION.reloadLog.filter(r=>r.seq_index===task.index).length}</b>`,
+        `Seq frame: <b>${SESSION.nSeqFrame}</b>${isBonusIdx_(task.index)?' <b style="color:#2a7a4b">(bonus)</b>':''}`,
       ].join(' &nbsp;|&nbsp; ');
     }
   }
@@ -1398,7 +1673,7 @@ function endTask(outcome){
   task.completed = outcome==='completed';
   task.switched  = outcome==='switched';
   task.forfeited = outcome==='forfeited';
-  task.earnings  = task.completed ? task.pay : 0;
+  task.earnings  = (task.completed || task.switched) ? task.pay : 0;
   if(task.elapsed==null) task.elapsed=S.subtaskDone;
 
   // Total tasks done across main + alt paths
@@ -1427,7 +1702,7 @@ function endTask(outcome){
   const seqReloads    = SESSION.reloadLog.filter(r=>r.seq_index===task.index).length;
 
   S.log.push({
-    seq:           task.index + 1,
+    seq_n:         task.index + 1,
     pay:           task.pay,
     regime:        task.regime,
     inactive:      task.inactive,
@@ -1454,12 +1729,14 @@ function endTask(outcome){
     start_at:      task.startAt || null,
     end_at:        new Date().toISOString(),
     grids:         grids,
+    seq_frame_treatment: SESSION.nSeqFrame || 5,
+    seq_is_bonus:  isBonusIdx_(task.index) ? 1 : 0,
   });
 
   const H={ completed:'✓ Task complete!', switched:'Alternative complete.', forfeited:'Task forfeited.' };
   const M={
     completed: `You completed the main sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
-    switched:  `You completed the alternative sequence.`,
+    switched:  `You completed the alternative sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
     forfeited: `No bonus earned for this task.`,
   };
   el('tc-h').textContent  = H[outcome];
@@ -1480,13 +1757,24 @@ function nextTask(){
 // ── RESULTS ───────────────────────────────────────────────────────
 function showResults(){
   const tbody=el('res-tbody'); tbody.innerHTML='';
-  let totalBonus=0, totalGrid=0, totalGridsDone=0;
+  const trainingBonus = SESSION.trainingBonus||0;
+  let totalBonus=trainingBonus, totalGrid=0, totalGridsDone=0;
+
+  if(trainingBonus>0){
+    const tr=document.createElement('tr');
+    tr.innerHTML=`<td>—</td><td>Training</td>
+      <td>£${trainingBonus.toFixed(2)}</td>
+      <td>—</td>
+      <td>£0.00</td>
+      <td>£${trainingBonus.toFixed(2)}</td>`;
+    tbody.appendChild(tr);
+  }
 
   S.log.forEach(r=>{
     const out = r.outcome==='completed'?'Completed':r.outcome==='switched'?'Switched':'Forfeited';
     const tr=document.createElement('tr');
-    tr.innerHTML=`<td>${r.seq}</td><td>${out}</td>
-      <td>${r.completed||r.outcome==='completed'?'£'+r.pay.toFixed(2):'£0.00'}</td>
+    tr.innerHTML=`<td>${r.seq_n}</td><td>${out}</td>
+      <td>£${r.earnings.toFixed(2)}</td>
       <td>${r.n_tasks_done}</td>
       <td>£${r.grid_pay.toFixed(2)}</td>
       <td>£${(r.earnings + r.grid_pay).toFixed(2)}</td>`;
@@ -1505,7 +1793,7 @@ function showResults(){
   tbody.appendChild(trow);
 
   el('res-total').textContent =
-    'Bonus: £'+totalBonus.toFixed(2)+
+    'Bonus: £'+totalBonus.toFixed(2)+' (incl. £'+trainingBonus.toFixed(2)+' training bonus)'+
     ' + Grid pay: £'+totalGrid.toFixed(2)+
     ' = Grand total: £'+(totalBonus+totalGrid).toFixed(2);
 
@@ -1519,11 +1807,11 @@ async function completeStudy_(){
   el('results-saved').style.display='none';
   el('results-error').style.display='none';
 
-  const data = buildFullData_();
+  const {study_level, sections} = buildFullData_();
   const ok = await postToBackend_({
     action: 'complete',
     pid: _prolificID, study_id: _studyID, session_id: _sessionID,
-    data, snapshot: null
+    study_level, sections
   }, 5);
 
   el('results-saving').style.display='none';
@@ -1561,21 +1849,24 @@ function downloadDataBackup(){
 
 function downloadCSV(){
   if(!S.log.length) return;
-  // Flatten: one row per section (grids omitted — too nested for CSV)
-  const fields = ['seq','pay','regime','inactive','window','bar_lo','bar_hi','n_req',
+  const seqFields = ['seq_n','pay','regime','inactive','window','bar_lo','bar_hi','n_req',
     'pause','alt_duration','alt_end','p_main_first','pause_secs',
     'outcome','switch_offered','switch_at','n_tasks_done',
     'earnings','grid_pay','total_targets','total_found','total_false_pos','total_missed',
-    'seq_reload_count','start_at','end_at'];
-  const extra = ['prolific_pid','study_id','session_id','age','gender','student','consent_at'];
-  const allFields = [...extra, ...fields];
+    'seq_reload_count','start_at','end_at','tasks_json',
+    'seq_frame_treatment','seq_is_bonus'];
+  const studyFields = ['prolific_pid','study_id','session_id','age','gender','student','consent_at'];
+  const allFields = [...studyFields, ...seqFields];
   const rows = [allFields.join(','), ...S.log.map(r=>{
     const base = {
       prolific_pid: _prolificID, study_id: _studyID, session_id: _sessionID,
       age: S.survey.age, gender: S.survey.gender, student: S.survey.student,
       consent_at: SESSION.consentAt
     };
-    return allFields.map(k=>JSON.stringify((base[k]??r[k])??(null))).join(',');
+    return allFields.map(k=>{
+      if(k==='tasks_json') return JSON.stringify(JSON.stringify(r.grids||[]));
+      return JSON.stringify((base[k]??r[k])??null);
+    }).join(',');
   })];
   const blob = new Blob([rows.join('\n')], {type:'text/csv'});
   const url = URL.createObjectURL(blob);
@@ -1608,9 +1899,10 @@ window.addEventListener('load', ()=>{
   bootstrapApp();
 });
 window.addEventListener('resize', ()=>{
-  redrawProg();
-  if(el('inst-timeline')&&el('inst-timeline').offsetParent) drawInstTimeline();
-  if(el('inst-offer-timeline')&&el('inst-offer-timeline').offsetParent) drawInstOfferTimeline();
+  if(trainingActive){
+    drawTrainingProg(trainStep);
+    if(trainStep>=TRAIN_FIRST_SUBTASK_STEP) positionCaptionBox(TRAIN_STEPS[trainStep].pos || 'right');
+  } else redrawProg();
 });
 </script>
 </body>
