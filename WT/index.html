@@ -162,7 +162,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 <div id="screen-consent" class="screen">
 <div class="wrap"><div class="card">
   <div class="lbl">Welcome</div>
-  <h1>Before you begin</h1>
+  <h1>Welcome</h1>
   <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the consent button below, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
   <p>This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, which will take less than 5 minutes to complete and will earn you a fixed payment upon completion, and an experimental module, which will allow you to gain a random bonus payment.</p>
 
@@ -177,6 +177,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   </details>
 
   <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site — you'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
+  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please avoid reloading or refreshing the page during the study — if you accidentally close the tab or leave, you can always come back and continue from where you left off.</p>
   <div class="btn-row">
     <button class="btn" onclick="doConsent()">I consent →</button>
     <button class="btn btn-outline" onclick="doNotConsent()">I do not consent</button>
@@ -513,7 +514,22 @@ let SESSION = {
   totalReloads: 0,
   trainingBonus: 0,     // £0.10 credited once the training walkthrough is completed
   nSeqFrame:    null,   // 4 or 5 — hidden 50/50 treatment, drawn once at consent, never changes after
+  phase:        null,   // 'survey' | 'training' | 'experiment' — which part of the study the participant is in, for resume routing
 };
+
+// Same-tab reload detection: sessionStorage survives a page refresh (F5)
+// but is cleared when the tab/browser is closed, so it's exactly the
+// signal we need to tell "accidental reload, resume the in-progress
+// section exactly as it was" apart from "came back later in a new tab,
+// restart the in-progress section fresh" (see applyResume_).
+const TAB_SESSION_KEY = 'wtstudy_tab_session';
+function isSameTabSession_(){
+  try{ return sessionStorage.getItem(TAB_SESSION_KEY) === (_prolificID||'anon'); }
+  catch(e){ return false; }
+}
+function markTabSession_(){
+  try{ sessionStorage.setItem(TAB_SESSION_KEY, _prolificID||'anon'); } catch(e){}
+}
 
 // ── SEQUENCE-COUNT FRAMING (hidden 4-vs-5 treatment) ────────────────
 // Participants are always run through all CFG.numTasks (5) sections
@@ -755,10 +771,20 @@ function showScreen(name){
 }
 
 // ── SNAPSHOT / RESUME ─────────────────────────────────────────────
+// v2 carries enough state (phase, in-progress section params, position
+// within it) that a same-tab reload can resume exactly where it left off
+// instead of always restarting the current section — see applyResume_.
 function buildSnapshot_(){
   return {
-    v: 1,
+    v: 2,
+    phase:        SESSION.phase,
     taskIdx:      S.taskIdx,
+    tasks:        S.tasks,
+    subtaskDone:  S.subtaskDone,
+    seqPhase:     S.phase,       // 'main' | 'alt' — which leg of the current section
+    altStartPos:  S.altStartPos,
+    penalty:      S.penalty,
+    trainStep:    trainStep,
     survey:       S.survey,
     consentAt:    SESSION.consentAt,
     sectionsLog:  S.log.slice(),
@@ -852,6 +878,12 @@ async function bootstrapAppInner_(){
     el('debug-notice').style.display='block';
   }
 
+  // Same-tab check MUST happen before we mark this tab, and the mark must
+  // happen on every load (fresh or resumed) so a subsequent reload of THIS
+  // tab is correctly recognised as same-tab.
+  const sameTab = isSameTabSession_();
+  markTabSession_();
+
   // demomode=2: bypass backend, start fresh
   if(_demoMode >= 2){
     showScreen('consent'); return;
@@ -867,7 +899,7 @@ async function bootstrapAppInner_(){
     prior = await lookupBackend_(_prolificID);
   } catch(e){
     // Backend unreachable: try local snapshot
-    if(tryLocalResume_()) return;
+    if(tryLocalResume_(sameTab)) return;
     showConnError_('We couldn\'t reach our server to check your study status. To make sure we never overwrite any progress you\'ve already made, we won\'t continue automatically.');
     return;
   }
@@ -877,27 +909,36 @@ async function bootstrapAppInner_(){
   }
 
   if(prior.found && prior.resume_snapshot){
-    applyResume_(prior.resume_snapshot); return;
+    applyResume_(prior.resume_snapshot, sameTab); return;
   }
 
   // Not found but backend responded — try local as cross-device fallback
   if(prior.found){
-    if(tryLocalResume_()) return;
+    if(tryLocalResume_(sameTab)) return;
   }
 
   showScreen('consent');
 }
 
-function tryLocalResume_(){
+function tryLocalResume_(sameTab){
   try{
     const raw = localStorage.getItem('wtstudy_resume_' + (_prolificID||'anon'));
     if(!raw) return false;
-    applyResume_(JSON.parse(raw));
+    applyResume_(JSON.parse(raw), sameTab);
     return true;
   } catch(e){ return false; }
 }
 
-function applyResume_(snap){
+// sameTab=true means this is a plain page reload within the same browser
+// tab (sessionStorage survived) — resume exactly where the participant
+// was, with the in-progress section's already-drawn parameters intact and
+// its progress preserved. sameTab=false means the participant is coming
+// back in a new tab/session (sessionStorage was empty — tab was closed, a
+// different browser/device, or the resume snapshot came from the backend
+// with no local session at all) — resume at the correct screen, but the
+// in-progress section (if any) restarts fresh with newly-drawn parameters,
+// exactly as before (prevents gaming nReq by abandoning and returning).
+function applyResume_(snap, sameTab){
   if(!snap || !snap.v){ showScreen('consent'); return; }
 
   // Restore session state from snapshot
@@ -907,18 +948,49 @@ function applyResume_(snap){
   SESSION.totalReloads = snap.totalReloads || 0;
   SESSION.trainingBonus = snap.trainingBonus || 0;
   SESSION.nSeqFrame  = snap.nSeqFrame != null ? snap.nSeqFrame : 5; // pre-existing sessions default to the untreated framing
+  // Older snapshots (pre-phase-tracking) never reached this far without
+  // being in the real experiment, so that's the correct fallback.
+  SESSION.phase      = snap.phase || 'experiment';
   S.log              = (snap.sectionsLog || []).slice();
   S.taskIdx          = snap.taskIdx || 0;
 
-  // Record this reload
-  SESSION.reloadLog.push({ seq_index: S.taskIdx, at: new Date().toISOString() });
-  SESSION.totalReloads++;
+  // Only count/log a genuine new-session reload, not a same-tab refresh —
+  // otherwise reload_count would climb on every accidental F5.
+  if(!sameTab){
+    SESSION.reloadLog.push({ seq_index: S.taskIdx, at: new Date().toISOString() });
+    SESSION.totalReloads++;
+  }
 
-  // Generate fresh tasks (current section gets new random params)
-  S.tasks = generateTasks();
+  if(!SESSION.consentAt || SESSION.phase==='survey'){
+    showScreen('survey');
+    saveProgress(false);
+    return;
+  }
 
-  // Go directly to grace period for current section
-  gracePeriod(()=>startTask());
+  if(SESSION.phase==='training'){
+    trainStep = sameTab ? Math.max(1, Math.min(TRAIN_TOTAL, snap.trainStep||1)) : 1;
+    trainingActive = true;
+    showScreen('instructions');
+    renderTrainStep();
+    saveProgress(false);
+    return;
+  }
+
+  // phase === 'experiment'
+  if(sameTab && Array.isArray(snap.tasks) && snap.tasks.length===CFG.numTasks){
+    // Exact resume: keep the section's already-drawn parameters and pick
+    // up exactly where it left off instead of restarting it.
+    S.tasks       = snap.tasks;
+    S.phase       = snap.seqPhase==='alt' ? 'alt' : 'main';
+    S.altStartPos = snap.altStartPos || 0;
+    S.penalty     = snap.penalty || 0;
+    startTask(snap.subtaskDone || 0);
+  } else {
+    // New session (or a snapshot too old to trust) — current section
+    // restarts with freshly-drawn parameters, same as always.
+    S.tasks = generateTasks();
+    gracePeriod(()=>startTask());
+  }
   saveProgress(false);
 }
 
@@ -936,7 +1008,9 @@ function retryBootstrap(){
 function doConsent(){
   if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
   if(SESSION.nSeqFrame == null) SESSION.nSeqFrame = Math.random()<0.5 ? 4 : 5;
+  SESSION.phase = 'survey';
   showScreen('survey');
+  saveProgress(false);
 }
 
 function doNotConsent(){
@@ -960,6 +1034,7 @@ function submitSurvey(){
   S.survey = { age, gender, student };
   trainStep=1;
   trainingActive=true;
+  SESSION.phase='training';
   showScreen('instructions');
   renderTrainStep();
   saveProgress(false);
@@ -984,7 +1059,7 @@ const TRAIN_FIRST_SUBTASK_STEP = 4;
 // grid), or 'center'. Only meaningful for steps >= TRAIN_FIRST_SUBTASK_STEP.
 const TRAIN_STEPS = [
   null, // 1-indexed
-  { h:'Welcome',
+  { h:'Before you begin',
     body:'You\'re about to take part in a real-effort task. We\'ll teach you the ropes first.' },
   { h:'This is a sequence',
     body:()=>'This is a <strong>sequence</strong>. You\'ll complete '+(SESSION.nSeqFrame||5)+' today. A sequence is made of tasks. The bar above points to the tasks in a sequence.' },
@@ -1236,8 +1311,9 @@ function finishTraining(){
   trainKill();
   trainingActive=false;
   SESSION.trainingBonus = TRAIN.pay;
+  SESSION.phase = 'experiment';
+  startExperiment(); // sets S.tasks — must run before saveProgress captures the snapshot
   saveProgress(false);
-  startExperiment();
 }
 
 // ── TRAINING GRID (real grid mechanic, ungraded, on the real #st-grid) ──
@@ -1351,13 +1427,19 @@ function graceStart(){
   if(_graceCallback){ const cb=_graceCallback; _graceCallback=null; cb(); }
 }
 
-function startTask(){
+// resumeSubtaskDone: when set (>0), or when S.phase is already 'alt', this
+// is a same-tab resume picking the section back up mid-way — its already-
+// drawn parameters and progress are kept as-is rather than restarting the
+// section from scratch. See applyResume_.
+function startTask(resumeSubtaskDone){
   kill();
-  S.subtaskDone=0; S.phase='main'; S.offerShown=false; S.switchAvailable=false; S.altStartPos=0;
-  S.penalty=0;
+  const startAt = resumeSubtaskDone || 0;
+  const resuming = startAt>0 || S.phase==='alt';
+  S.subtaskDone=startAt; S.offerShown=false; S.switchAvailable=false;
+  if(!resuming){ S.phase='main'; S.altStartPos=0; S.penalty=0; }
   const task=S.tasks[S.taskIdx];
-  task.startAt = new Date().toISOString();
-  task.grids = [];
+  task.startAt = task.startAt || new Date().toISOString();
+  task.grids = task.grids || [];
 
   const sw=el('btn-switch-alt');
   if(sw){ sw.style.display='block'; sw.disabled=true; sw.style.opacity='0.35'; sw.style.cursor='not-allowed'; }
@@ -1372,17 +1454,28 @@ function startTask(){
   showScreen('subtask');
   updateStats();
 
-  if(task.switch_cost===0){
+  if(S.phase==='main' && (task.switch_cost===0 || startAt>=task.switch_cost)){
     S.switchAvailable=true;
     if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
     redrawProg();
-    setTimeout(()=>{ flashSwitchAvailable(); }, 400);
+    if(!resuming) setTimeout(()=>{ flashSwitchAvailable(); }, 400);
   }
-  if(task.pause===0){
+
+  if(S.phase==='alt' && startAt>=task.altDuration){ endTask('switched'); return; }
+  if(S.phase==='main' && startAt>=task.nReq){ endTask('completed'); return; }
+
+  if(S.phase==='main' && !resuming && task.pause===0){
     S.offerShown=true; task.elapsed=0;
     redrawProg();
     showOfferScreen(task, 0, 'first');
     return;
+  }
+  if(S.phase==='main' && resuming && startAt>=task.pause){
+    // Pause point was already reached before the reload — treat it as
+    // already decided (defaults to "continue", same as the offer screen's
+    // own timeout behaviour) rather than forcing the offer screen open
+    // again with a brand new countdown.
+    S.offerShown = true;
   }
   startSubtask();
 }
