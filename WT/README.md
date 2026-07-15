@@ -121,7 +121,7 @@ Decisions available at the pause:
 
 ## 6. Parameter generation
 
-All parameters are drawn independently per section.
+Every parameter except `regime` is drawn independently per section. `regime` is drawn **once per respondent** (at consent, stored in `SESSION.regime`) and reused for all 5 sections — deliberately not redrawn per section, so a within-subject comparison across a respondent's sections isn't confounded by regime switching under them.
 
 ### Core parameters
 
@@ -130,10 +130,11 @@ inactive   ~ Uniform[0, 5]          (integer; safe zone length)
 window     ~ Uniform[10, 15]        (integer; end-zone width)
 barLo      = inactive + 1
 barHi      = inactive + 1 + window
-pauseMax   = barHi - 3              (guarantee at least 2-task alt range)
+pauseMax   = inactive + ceil(window / 2)
 ```
+`pauseMax` caps the offer to the first half of the window (rounded up), not (as before) anywhere up to `barHi - 3`. A late-landing offer made it obvious the main sequence was about to end, trivialising the switch decision.
 
-### Two regimes (drawn 50/50)
+### Two regimes (respondent-level, drawn 50/50 once)
 
 **Regime 1** — nReq drawn first, pause second:
 ```
@@ -150,24 +151,16 @@ nReq  ~ Uniform[pause, barHi]        if pause >= barLo
 
 ### Alternative sequence duration
 
-`alt_duration` is drawn from a uniform distribution whose bounds depend on where `pause` falls relative to the end zone:
-
-**Case A** — pause is inside or one task before the window (`pause >= barLo - 1`):
-```
-altDuration ~ Uniform[2, barHi - pause - 1]
-```
-
-**Case B** — pause is more than one task before the window (`pause < barLo - 1`):
-```
-altLo = barLo - pause + 1
-altHi = window - 1
-altDuration ~ Uniform[altLo, altHi]
-```
-Fallback to Case A formula if `altLo > altHi` (degenerate window).
+`alt_duration` is no longer drawn from however many window slots happen to be left after the offer — that routinely produced alternatives so short or so long relative to the main sequence's likely end that the "right" choice was obvious. Instead it's tightly centred on the main sequence's **expected** end, from the participant's own information set at the moment the offer is made:
 
 ```
-altEnd = pause + altDuration          (global task number when alt sequence ends)
+expectedMainEnd = (barLo + barHi) / 2        if pause < barLo   (still uniform over the full visible range)
+expectedMainEnd = (pause + barHi) / 2        if pause >= barLo  (offer landed inside the red zone; range narrows to [pause, barHi])
+
+altDuration = max(2, round(expectedMainEnd) + Uniform{-1, 0, 1} - pause)
+altEnd      = pause + altDuration             (global task number when alt sequence ends)
 ```
+The `±1` jitter keeps `altDuration` from being perfectly predictable from `barLo`/`barHi` alone; the `max(2, …)` floor preserves the existing "no single-task alternatives" rule.
 
 ### Reward
 
@@ -187,10 +180,14 @@ With `window ~ Uniform[10, 15]`, `payTasks` ranges roughly 1–21, so `pay` rang
 
 ### P(main ends before alt) — shown in debug mode
 
-This is the probability that the main sequence would have ended before the alternative, given only the information available at the moment of the pause:
+This is the probability that the main sequence would have ended before the alternative, given only the information available at the moment being evaluated. `computePMainFirst_(atTask, altDuration, task)` in `index.html` implements this and is shared by two fields:
 
-- **If `pause < barLo`** (pause is in safe zone): nReq is uniform over `[barLo, barHi]` (window+1 values). `pMainFirst` = fraction of those values ≤ `pause + altDuration - 1`.
-- **If `pause >= barLo`** (pause is in end zone): nReq is uniform over `[pause, barHi]`. `pMainFirst = min(altDuration, total) / total` where `total = barHi - pause + 1`.
+- **`p_main_first`** — evaluated at `atTask = pause` (when the offer was first shown).
+- **`p_main_at_switch`** — evaluated at `atTask = switchTakenAtTask` (when the participant actually switched, via the persistent switch button, which can be later than the initial offer if it was declined at first). `null` if the participant never switched.
+
+Formula, given `atTask`:
+- **If `atTask < barLo`** (still in the safe zone): nReq is uniform over `[barLo, barHi]` (window+1 values). Result = fraction of those values ≤ `atTask + altDuration - 1`.
+- **If `atTask >= barLo`** (already in the end zone): nReq is uniform over `[atTask, barHi]`. Result = `min(altDuration, total) / total` where `total = barHi - atTask + 1`.
 
 ---
 
@@ -201,9 +198,9 @@ A between-subjects treatment, independent of the per-section parameter draws in 
 - On consent, each participant is assigned `nSeqFrame` — **50/50, drawn once, persisted for the rest of the session** (survives reload via the resume snapshot, never re-rolled): either `4` or `5`.
 - **Everyone actually completes all `CFG.numTasks` (5) sections, regardless of `nSeqFrame`.** Only what's *communicated* changes:
   - `nSeqFrame = 5`: told there are 5 sections, throughout (status quo / untreated).
-  - `nSeqFrame = 4`: told there are 4 sections. Sections 1–4 are labelled normally against a denominator of 4 (`Section 2 of 4`, counter `2/4`). The real 5th section is never announced in advance — it's relabelled as a **"Bonus round"** / **"Bonus section"** (grace screen heading + label, and the in-task counter shows `Bonus` instead of a fraction) rather than the self-contradictory `Section 5 of 4`.
+  - `nSeqFrame = 4`: told there are 4 sections. Sections 1–4 are labelled normally against a denominator of 4 (`Section 2 of 4`, counter `2/4`). The real 5th section is never announced in advance — the grace screen instead opens with an explicit invitation ("You are now invited to take part in a bonus round!") gated behind its own Continue click before the normal grace-screen flow (end-zone graphic, bonus amount, Start section) proceeds, and the in-task counter shows `Bonus` instead of a fraction, rather than the self-contradictory `Section 5 of 4`.
 - Implemented via `SESSION.nSeqFrame`, `isBonusIdx_()`, `sectionLongLabel_()`, `sectionShortLabel_()` in `index.html`. Training's step 1 also states the treated total (4 or 5) so the framing is consistent from the very first thing the participant reads.
-- A compact section counter (`n/total`, or `Bonus`) is shown directly on the task screen (`#st-section-lbl`), in addition to the existing fuller "Section N of M" label on the grace screen.
+- A compact section counter (`n/total`, or `Bonus`) is shown as the "Sequence" row in the task screen's stat table (`#s-seq`), in addition to the existing fuller "Section N of M" label on the grace screen.
 - Recorded per-respondent (`seq_frame_treatment` in `Meta`) and per-sequence (`seq_frame_treatment`, `seq_is_bonus` in `Responses`), so analysis can condition on treatment arm and identify the bonus-framed row without recomputing it.
 - The debug bar (`?demomode=1/2`) shows `Seq frame: 4/5` and flags `(bonus)` on the relevant section.
 
@@ -250,12 +247,16 @@ A between-subjects treatment, independent of the per-section parameter draws in 
 | seq_n | Sequence number 1–5 |
 | pay, regime, inactive, window, bar_lo, bar_hi, n_req | Task design parameters |
 | pause, alt_duration, alt_end, p_main_first, pause_secs | Offer design parameters |
-| outcome | `completed` / `switched` / `forfeited` |
-| switch_offered, switch_at | Whether and at which task the offer appeared |
-| n_tasks_done, earnings, grid_pay | Outcomes |
+| outcome | `completed` / `switched` / `forfeited` — the row's final state. Kept for convenience, but **cannot** represent "switched, then later forfeited the alt sequence" (a real, possible combination) — use `switch_taken`/`forfeit_taken` for that. |
+| switch_offered, switch_at | Legacy fields, kept for backward compat. `switch_at` is the same value as `switch_offered_at_task` below — it is **not** when the participant actually switched, only when the offer first appeared. |
+| switch_offered_at_task, switch_offered_at_time | Task number and timestamp when the offer/switch button first became available |
+| switch_taken, switch_taken_at_task, switch_taken_at_time | Whether the participant ever actually switched (persists even if they later forfeit — see `outcome` caveat above), and the task/timestamp at which they did. Can be later than `switch_offered_at_*` if the first offer was declined and the persistent switch button was used afterward. |
+| forfeit_taken, forfeit_taken_at_task, forfeit_taken_at_time | Whether the participant forfeited, and the task/timestamp at which they did. `forfeit_taken_at_task` counts total tasks across both legs (main + alt), same convention as `n_tasks_done`. |
+| p_main_first, p_main_at_switch | P(main sequence ends before the alternative), evaluated at the offer (`p_main_first`) vs. at the actual switch moment (`p_main_at_switch`, `null` if never switched) — see §6. |
+| n_tasks_done, earnings, grid_pay | Outcomes. `n_tasks_done` is the true total across both legs — main-phase tasks completed *before the actual switch* (not `pause`, which can predate a delayed switch) plus alt-phase tasks completed. |
 | total_targets, total_found, total_false_pos, total_missed | Aggregated grid accuracy |
 | seq_reload_count | Reloads during this specific sequence |
-| start_at, end_at | ISO timestamps |
+| start_at, end_at, seq_start_at_time | ISO timestamps. `seq_start_at_time` is an explicit alias of `start_at`, set the moment the participant clicks "Start section" (i.e. after the grace/preview screen, not including it) |
 | tasks_json | JSON array — one object per grid task (see below) |
 | seq_frame_treatment | Hidden 4-vs-5 framing treatment (see §7); repeated per row for convenience |
 | seq_is_bonus | 1 if this row is the unannounced 5th "bonus" section under the 4-treatment; 0 otherwise |
@@ -289,6 +290,13 @@ A between-subjects treatment, independent of the per-section parameter draws in 
 
 ## 10. Resume system
 
+Two genuinely different situations both land on the boot screen, and are handled differently:
+
+- **Same-tab reload** (accidental F5, browser back/forward, `Ctrl+R`): the participant should land back exactly where they were, with zero loss of progress — no re-drawn parameters, no restarted section.
+- **New-session return** (closed the tab/browser and came back later, possibly on another device): the participant should resume at the correct *screen* (survey / training / experiment), but if they were mid-section, that section restarts with freshly-drawn parameters — this is what stops a participant from strategically reloading to learn `nReq` before committing to continue/switch/forfeit.
+
+These are told apart with `sessionStorage` (key `wtstudy_tab_session`): it survives a same-tab reload but is cleared when the tab/browser closes, so `isSameTabSession_()` checked at the very top of `bootstrapAppInner_()` (before the tab is (re-)marked) is a reliable same-tab-vs-new-session signal, independent of the backend.
+
 On every section completion and every 25 s (heartbeat), the frontend:
 1. Saves a **snapshot** to `localStorage` (key: `wtstudy_resume_<pid>`)
 2. POSTs the snapshot to the backend `Meta` sheet
@@ -296,10 +304,17 @@ On every section completion and every 25 s (heartbeat), the frontend:
 Snapshot contents:
 ```json
 {
-  "v": 1,
+  "v": 2,
+  "phase":        "experiment",
   "taskIdx":      3,
+  "tasks":        [ ... full per-section parameter objects, incl. in-progress grids ... ],
+  "subtaskDone":  4,
+  "seqPhase":     "main",
+  "altStartPos":  0,
+  "penalty":      0.02,
+  "trainStep":    1,
   "survey":       { "age": "28", "gender": "female", "student": "no" },
-  "consentAt":    "2026-07-14T10:00:00.000Z",
+  "consentAt":    "2026-07-15T10:00:00.000Z",
   "sectionsLog":  [ ... completed sections ... ],
   "totalReloads": 1,
   "reloadLog":    [ { "seq_index": 2, "at": "..." } ]
@@ -307,15 +322,16 @@ Snapshot contents:
 ```
 
 On page load, `bootstrapApp()` runs:
-1. Backend `lookup` GET is called (if PID present and backend configured)
-2. If `study_complete = true` → show "already completed" screen
-3. If `resume_snapshot` present → call `applyResume_()`:
-   - Restore completed sections from snapshot
-   - **Current section regenerates fresh random parameters** (new `inactive`, `window`, `pause`, etc.)
-   - Reload is logged (`reloadLog` entry + `totalReloads++`)
-   - Jump to grace period for the current section
-4. Fallback: check `localStorage` (same-device cross-session fallback)
-5. If nothing found → show consent screen
+1. `isSameTabSession_()` is checked, then the tab is (re-)marked via `markTabSession_()`.
+2. Backend `lookup` GET is called (if PID present and backend configured)
+3. If `study_complete = true` → show "already completed" screen
+4. If `resume_snapshot` present → call `applyResume_(snapshot, sameTab)`:
+   - `phase === 'survey'` (or consent never completed) → show the survey screen again
+   - `phase === 'training'` → resume the training walkthrough — at the exact `trainStep` if same-tab, or restarted from step 1 on a new session (training is unincentivized, so a full restart there is cheap and simple)
+   - `phase === 'experiment'`, same-tab → restore `S.tasks` **unregenerated** and jump straight into the current section via `startTask(subtaskDone)`, picking up exactly where the participant was (same `nReq`/`pause`/`altDuration`, same grids-completed count, same main/alt leg)
+   - `phase === 'experiment'`, new session → **current section regenerates fresh random parameters**, same as before; reload is logged (`reloadLog` entry + `totalReloads++` — only for new-session reloads, so accidental same-tab refreshes don't inflate this counter)
+5. Fallback: check `localStorage` (same-device cross-session fallback)
+6. If nothing found → show consent screen
 
 ---
 
@@ -369,12 +385,17 @@ If the backend POST fails after 5 retries, the results screen shows:
 
 ## 14. Known design decisions and rationale
 
-- **pauseMax = barHi − 3**: guarantees the alternative duration can always be at least 2 tasks (the minimum), since `altDuration ~ U[2, barHi − pause − 1]` requires `barHi − pause − 1 ≥ 2`, i.e. `pause ≤ barHi − 3`.
+- **pauseMax = inactive + ceil(window/2)**: caps the offer to the first half of the window, so there's always substantial genuine uncertainty left in the main sequence when the decision is made. (Superseded the original `barHi − 3`, which let the offer land so close to `barHi` that the switch decision became trivial — see §6.)
 - **Alt duration minimum = 2**: single-task alternatives are considered too trivial to present as a meaningful choice.
+- **Alt duration is centred on the expected main-sequence end, not spread over the leftover window** (see §6): the original approach (uniform over however many slots were left after the offer) routinely produced alternatives obviously shorter or longer than the main sequence was likely to run, making the "right" choice too easy to read off the visible zone alone.
 - **P(main ends before alt)** is computed at the moment of the pause using only the information visible to the participant (the end zone and the alt duration); it does not use the realised `nReq`.
 - **Grid pay is always earned** regardless of section outcome, to ensure participants are compensated for effort even when they forfeit or switch. The UI deliberately does not reveal this during the task (it says "no bonus earned" for the section bonus specifically) to avoid confounding incentives.
 - **Section bonus is earned on completed or switched, lost only on forfeit**: switching to the alternative sequence is a within-budget decision (uncertain duration → known duration, same payoff), not a penalized one. Forfeiting is the only decision that costs the bonus. The UI states this explicitly in the instructions, grace screen, and offer/confirm screens.
 - **Bonus uses an independent second draw, not the realised `nReq`**: `payTasks` is drawn using the same regime-conditional procedure as `nReq` (same distribution) but as a fresh, independent `Math.random()` call. If the bonus were computed directly from the realised `nReq` — which is shown to the participant up front via the pay amount — a participant could work backward from the displayed pay to infer how many tasks the main sequence actually requires, undermining the uncertain-stopping-point manipulation. Drawing an independent value from the same distribution preserves the statistical properties needed for `pay` without leaking `nReq`.
-- **Resume regenerates current section**: on reload, completed sections are preserved exactly (from snapshot) but the in-progress section starts fresh. This prevents participants from learning `nReq` by reloading strategically.
+- **Resume only regenerates the current section on a genuinely new session, never on a same-tab reload** (see §10): completed sections are always preserved exactly. A same-tab F5 must be indistinguishable from not having reloaded at all, or participants would be punished (lost grid progress) for an accidental refresh; but resuming days later in a fresh tab must still regenerate the in-progress section's parameters, or a participant could learn `nReq` by strategically abandoning and returning.
 - **Regime 1 vs 2**: regime 1 draws `nReq` first (so `pause ≤ nReq` always), regime 2 draws `pause` first (so `pause` may exceed `nReq`, creating a case where the task could already be over when the offer appears — edge case handled by checking `subtaskDone >= nReq` on resume from offer screen).
 - **Sequence-count framing (`nSeqFrame`) is assigned once, at consent, and never re-rolled**: it's persisted through the resume snapshot specifically so a participant can't end up seeing "4" in one section and "5" in another after a reload — the treatment must stay constant for the whole session. `CFG.numTasks` (the actual number of sections run) is never changed; only what's displayed changes.
+- **Regime is assigned once per respondent, at consent, not redrawn per section** (see §6): mixing regimes within a respondent's own 5 sections would confound any within-subject comparison of whether they learn the task's structure over repeated exposure.
+- **`switch_taken`/`forfeit_taken` are independent, persistent flags, not derived from `outcome`**: a participant can switch to the alt sequence and *then* forfeit it — a real, reachable combination the single `outcome` string cannot represent (it would just show `forfeited`, silently losing the fact that they'd switched first). Both flags are set at the moment of the respective decision and are never overwritten by what happens afterward.
+- **`n_tasks_done` on a switched/forfeited-after-switching row counts from `S.altStartPos`, not `task.pause`**: these were previously conflated. `task.pause` is where the offer first *appeared*; a participant can decline it and switch later via the persistent switch button, at which point the true number of main-phase tasks completed is `S.subtaskDone` at the moment of switching, not `task.pause`. Using `task.pause` silently undercounted `n_tasks_done` (and thus `grid_pay`) whenever a switch was delayed past the first offer.
+- **A resumed snapshot with no `phase` field is not assumed to be mid-experiment**: an earlier version of the resume logic defaulted any phase-less (pre-this-feature) snapshot straight to `'experiment'`, on the assumption that anything old enough to predate phase-tracking must already have been in the real task. That assumption was wrong — a participant who'd only reached the survey screen under old code hit this same fallback and got dropped straight into the experiment on their next visit, skipping training entirely. The fallback now infers conservatively from what's actually present in the old snapshot (completed sections or an awarded training bonus → experiment; a populated `survey` object → training; otherwise → survey) instead of defaulting to the riskiest option.

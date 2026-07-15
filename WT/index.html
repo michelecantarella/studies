@@ -176,8 +176,8 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
     </div>
   </details>
 
-  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site — you'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
-  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please avoid reloading or refreshing the page during the study — if you accidentally close the tab or leave, you can always come back and continue from where you left off.</p>
+  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site. You'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
+  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please avoid reloading or refreshing the page during the study. If you accidentally close the tab or leave, please contact the research team.</p>
   <div class="btn-row">
     <button class="btn" onclick="doConsent()">I consent →</button>
     <button class="btn btn-outline" onclick="doNotConsent()">I do not consent</button>
@@ -231,6 +231,10 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 <div class="wrap"><div class="card">
   <div class="lbl" id="grace-lbl">Section 1 of 5</div>
   <h1 id="grace-heading">Get ready</h1>
+  <div id="grace-bonus-block" style="display:none;">
+    <p style="font-size:.95rem;color:var(--ink);margin-bottom:1.2rem;">You are now invited to take part in a bonus round!</p>
+    <button class="btn" onclick="graceBonusContinue()">Continue →</button>
+  </div>
   <p id="grace-dist-txt" style="margin-bottom:.4rem;"></p>
   <canvas id="grace-hist" class="demo" style="height:82px;margin-bottom:.3rem;"></canvas>
   <p id="grace-dist-note" style="font-size:.8rem;color:var(--ink2);margin-bottom:1.2rem;"></p>
@@ -444,7 +448,7 @@ const _demoMode   = parseInt(_params.get('demomode') || '0', 10);
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzBPsqbko0qRJ3378n-Qm8rY1DPOEZF1BR2nb3wc0f1GHK7EhUslxSDg-wmIxEHfeTf/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbx1CTsk0XY0UsMWa0idLZJ8n2MTNmbs13hTqH2_15ooitASY4Xx8igRr1kVdrs_kuZg/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.03;
@@ -515,6 +519,7 @@ let SESSION = {
   trainingBonus: 0,     // £0.10 credited once the training walkthrough is completed
   nSeqFrame:    null,   // 4 or 5 — hidden 50/50 treatment, drawn once at consent, never changes after
   phase:        null,   // 'survey' | 'training' | 'experiment' — which part of the study the participant is in, for resume routing
+  regime:       null,   // 1 or 2 — drawn once at consent, used for ALL 5 sections (not redrawn per section)
 };
 
 // Same-tab reload detection: sessionStorage survives a page refresh (F5)
@@ -590,15 +595,23 @@ function drawEndCount_(regime, pause, barLo, barHi, window){
 }
 
 // ── GENERATE TASKS ────────────────────────────────────────────────
+// regime is fixed once per respondent (SESSION.regime, drawn at consent) —
+// deliberately NOT redrawn per section, so a within-subject comparison
+// across a respondent's 5 sections isn't confounded by regime switching
+// under them (see README §6).
 function generateTasks(){
   return Array.from({length:CFG.numTasks},(_,i)=>{
     const inactive = rnd(0, 5);
     const window   = rnd(CFG.winLo, CFG.winHi);
     const barLo    = inactive + 1;
     const barHi    = inactive + 1 + window;
-    const pauseMax = barHi - 3;
+    // Tightened cap: the offer must land within the first half of the
+    // window (rounded up), not anywhere up to barHi-3. A late-landing
+    // offer made it too obvious the main sequence was about to end,
+    // trivialising the switch decision.
+    const pauseMax = inactive + Math.ceil(window/2);
 
-    const regime = Math.random() < 0.5 ? 1 : 2;
+    const regime = SESSION.regime || 1;
     let nReq, pause;
     if(regime === 1){
       nReq  = drawEndCount_(1, null, barLo, barHi, window);
@@ -611,16 +624,19 @@ function generateTasks(){
     const switch_cost = pause;
     const adjustment  = inactive - pause;
 
-    let altDuration;
-    if(pause >= barLo - 1){
-      altDuration = rnd(2, barHi - pause - 1);
-    } else {
-      const altLo = barLo - pause + 1;
-      const altHi = window - 1;
-      altDuration = (altLo <= altHi)
-        ? rnd(altLo, altHi)
-        : rnd(2, barHi - pause - 1);
-    }
+    // Alt duration is now tightly centred on the main sequence's EXPECTED
+    // end from the participant's own information set at the moment the
+    // offer is made (mean of the still-uniform range they can see — the
+    // full [barLo,barHi] if the offer landed before the red zone, or the
+    // narrower [pause,barHi] if it landed inside it), with a small ±1
+    // jitter so it isn't perfectly predictable from barLo/barHi alone.
+    // This replaces the old approach of picking anywhere among however
+    // many window slots were left after the offer — which routinely
+    // produced alternatives so short (or so long) relative to the main
+    // sequence's likely end that the "right" choice was obvious.
+    const expectedMainEnd = pause < barLo ? (barLo + barHi) / 2 : (pause + barHi) / 2;
+    let altDuration = Math.round(expectedMainEnd) + rnd(-1, 1) - pause;
+    altDuration = Math.max(2, altDuration); // single-task alternatives stay too trivial to offer
     const altEnd = pause + altDuration;
 
     const payTasks = drawEndCount_(regime, pause, barLo, barHi, window);
@@ -629,7 +645,10 @@ function generateTasks(){
     return { index:i, pay, regime,
              inactive, pause, switch_cost, adjustment,
              window, nReq, altEnd, altDuration, barLo, barHi,
-             switched:null, forfeited:null, completed:null, elapsed:null, earnings:0,
+             switched:null, forfeited:null, completed:null, earnings:0,
+             offerAtTask:null, offerAtTime:null,
+             switchTaken:false, switchTakenAtTask:null, switchTakenAtTime:null,
+             forfeitTaken:false, forfeitTakenAtTask:null, forfeitTakenAtTime:null,
              startAt:null, grids:[] };
   });
 }
@@ -792,6 +811,7 @@ function buildSnapshot_(){
     reloadLog:    SESSION.reloadLog.slice(),
     trainingBonus: SESSION.trainingBonus,
     nSeqFrame:    SESSION.nSeqFrame,
+    regime:       SESSION.regime,
   };
 }
 
@@ -845,10 +865,19 @@ function buildFullData_(){
     alt_duration:    r.alt_duration,
     alt_end:         r.alt_end,
     p_main_first:    r.p_main_first,
+    p_main_at_switch: r.p_main_at_switch,
     pause_secs:      r.pause_secs,
     outcome:         r.outcome,
     switch_offered:  r.switch_offered,
     switch_at:       r.switch_at,
+    switch_offered_at_task: r.switch_offered_at_task,
+    switch_offered_at_time: r.switch_offered_at_time,
+    switch_taken:    r.switch_taken,
+    switch_taken_at_task: r.switch_taken_at_task,
+    switch_taken_at_time: r.switch_taken_at_time,
+    forfeit_taken:   r.forfeit_taken,
+    forfeit_taken_at_task: r.forfeit_taken_at_task,
+    forfeit_taken_at_time: r.forfeit_taken_at_time,
     n_tasks_done:    r.n_tasks_done,
     earnings:        r.earnings,
     grid_pay:        r.grid_pay,
@@ -858,6 +887,7 @@ function buildFullData_(){
     total_missed:    r.total_missed,
     seq_reload_count:r.seq_reload_count,
     start_at:        r.start_at,
+    seq_start_at_time: r.seq_start_at_time,
     end_at:          r.end_at,
     tasks_json:      r.grids || [],
     seq_frame_treatment: r.seq_frame_treatment,
@@ -948,9 +978,25 @@ function applyResume_(snap, sameTab){
   SESSION.totalReloads = snap.totalReloads || 0;
   SESSION.trainingBonus = snap.trainingBonus || 0;
   SESSION.nSeqFrame  = snap.nSeqFrame != null ? snap.nSeqFrame : 5; // pre-existing sessions default to the untreated framing
-  // Older snapshots (pre-phase-tracking) never reached this far without
-  // being in the real experiment, so that's the correct fallback.
-  SESSION.phase      = snap.phase || 'experiment';
+  SESSION.regime     = snap.regime != null ? snap.regime : (Math.random()<0.5 ? 1 : 2); // pre-existing sessions never had a fixed regime — assign one now
+  // Snapshots saved before phase-tracking existed have no `phase` field —
+  // do NOT default that straight to 'experiment' (that was the actual bug:
+  // a participant who'd only ever reached the survey screen, saved under
+  // old code, got promoted straight into the real experiment on resume,
+  // skipping training entirely). Infer conservatively from what's actually
+  // present instead: completed sections or an awarded training bonus mean
+  // they truly reached the experiment; a populated `survey` object (only
+  // ever written by submitSurvey()) means they at least reached training;
+  // otherwise they never got past the survey.
+  if(snap.phase){
+    SESSION.phase = snap.phase;
+  } else if((snap.sectionsLog && snap.sectionsLog.length) || snap.trainingBonus){
+    SESSION.phase = 'experiment';
+  } else if(snap.survey && Object.keys(snap.survey).length){
+    SESSION.phase = 'training';
+  } else {
+    SESSION.phase = 'survey';
+  }
   S.log              = (snap.sectionsLog || []).slice();
   S.taskIdx          = snap.taskIdx || 0;
 
@@ -1008,6 +1054,7 @@ function retryBootstrap(){
 function doConsent(){
   if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
   if(SESSION.nSeqFrame == null) SESSION.nSeqFrame = Math.random()<0.5 ? 4 : 5;
+  if(SESSION.regime == null) SESSION.regime = Math.random()<0.5 ? 1 : 2;
   SESSION.phase = 'survey';
   showScreen('survey');
   saveProgress(false);
@@ -1067,31 +1114,31 @@ const TRAIN_STEPS = [
     body:'Completing a <strong>task</strong> moves you one step through the sequence. The stickman on the bar marks your progress.' },
   { h:'This is a task',
     pos:'left',
-    body:'A task is this 5×5 grid. Click every instance of the target emoji as the grid fills in. Press <strong>Reveal grid</strong> to try it.' },
+    body:'A task is this 5×5 grid. <strong>Click</strong> every instance of the target emoji as the grid fills in. Press <strong>Reveal grid</strong> to try it.' },
   { h:'Task complete',
     pos:'center',
-    body:'You have completed a task. The stickman moves forward by one task.' },
+    body:'You have completed a task. The stickman <strong>moves forward</strong> by one task.' },
   { h:'When does a sequence end?',
     pos:'center',
-    body:'A sequence only ends at a <strong>random</strong> point within the window shown above. By completing a sequence, you will earn a bonus. In this case, the sequence can only end between task 6 and 10.' },
+    body:'A sequence only ends at a <strong>random</strong> point within the window shown above. By completing a sequence, you will earn a <strong>bonus reward</strong>. In this case, the sequence can only end between task 6 and 10.' },
   { h:'The alternative sequence',
     pos:'center',
-    body:'Sometimes we will give you the option to switch to a fixed-length alternative, shown as the blue line. Your progress will restart, but completing the alternative sequence counts as completing the main one. In this case, the alternative sequence lasts 2 tasks.' },
+    body:'Sometimes we will give you the option to switch to a <strong>fixed-length alternative</strong>, shown as the blue line. Your progress will restart, but completing the alternative sequence counts as completing the main one. In this case, the alternative sequence lasts 2 tasks.' },
   { h:'Your sequence',
     pos:'right',
-    body:'This row tracks which sequence you\'re on, and how many there are in total.' },
+    body:'This row tracks <strong>which sequence</strong> you\'re on, and how many there are in total.' },
   { h:'Tasks done',
     pos:'right',
-    body:'This row counts how many tasks you\'ve completed so far in this sequence. So far, you\'ve completed 1 task.' },
+    body:'This row counts <strong>how many tasks</strong> you\'ve completed so far in this sequence. So far, you\'ve completed 1 task.' },
   { h:'The bonus',
     pos:'right',
-    body:'Finishing or switching always pays this sequence\'s bonus. It\'s shown here. In this case, you earn £0.10.' },
+    body:'Finishing either the main or alternative sequence <strong>always pays</strong> this sequence\'s bonus. It\'s shown here. In this case, you earn £0.10.' },
   { h:'Mistakes',
     pos:'right',
-    body:'Mistakes cost a small penalty each ($0.01). Your accumulated penalty is shown here.' },
+    body:'Mistakes cost a <strong>small penalty</strong> each ($0.01). Your accumulated penalty is shown here.' },
   { h:'The switch button',
     pos:'right',
-    body:'Once available, you can always switch to the alternative sequence by pressing this button.' },
+    body:'Once available, you can <strong>always switch</strong> to the alternative sequence by pressing this button.' },
   { h:'Forfeiting',
     pos:'right',
     body:'This button lets you <strong>forfeit</strong> a sequence. If you forfeit a sequence, you will lose its bonus and move to the next sequence.' },
@@ -1392,13 +1439,31 @@ function gracePeriod(cb){
   kill();
   _graceCallback=cb;
   S.switchAvailable=false; S.offerShown=false; S.altFlashing=false; S.phase='main';
-  const task=S.tasks[S.taskIdx];
   showScreen('grace');
 
   el('grace-lbl').textContent = sectionLongLabel_(S.taskIdx);
-  el('grace-heading').textContent = isBonusIdx_(S.taskIdx) ? 'Bonus round' : 'Get ready';
   el('grace-pay-block').style.display='none';
   el('grace-countdown-block').style.display='none';
+  el('grace-dist-txt').textContent='';
+  el('grace-dist-note').textContent='';
+
+  if(isBonusIdx_(S.taskIdx)){
+    el('grace-heading').textContent = 'A bonus round';
+    el('grace-bonus-block').style.display='';
+    return; // graceBonusContinue() reveals the rest, same as any other section
+  }
+  el('grace-heading').textContent = 'Get ready';
+  el('grace-bonus-block').style.display='none';
+  graceRevealRest_();
+}
+
+function graceBonusContinue(){
+  el('grace-bonus-block').style.display='none';
+  graceRevealRest_();
+}
+
+function graceRevealRest_(){
+  const task=S.tasks[S.taskIdx];
   el('grace-dist-txt').textContent='The task can end anywhere within this range:';
   el('grace-dist-note').textContent='The task can end at any point within the highlighted zone.';
 
@@ -1465,7 +1530,7 @@ function startTask(resumeSubtaskDone){
   if(S.phase==='main' && startAt>=task.nReq){ endTask('completed'); return; }
 
   if(S.phase==='main' && !resuming && task.pause===0){
-    S.offerShown=true; task.elapsed=0;
+    S.offerShown=true; task.offerAtTask=0; task.offerAtTime=new Date().toISOString();
     redrawProg();
     showOfferScreen(task, 0, 'first');
     return;
@@ -1565,18 +1630,9 @@ function updateStats(){
     const db=el('debug-bar'), dc=el('debug-content');
     if(db) db.style.display='block';
     if(dc){
-      let pMainFirst = null;
-      if(task.pause != null){
-        if(task.pause < task.barLo){
-          const total = task.window + 1;
-          const faster = Math.max(0, Math.min(task.pause + task.altDuration - 1, task.barHi) - task.barLo + 1);
-          pMainFirst = total > 0 ? faster/total : 0;
-        } else {
-          const total = task.barHi - task.pause + 1;
-          pMainFirst = Math.min(task.altDuration, total) / total;
-        }
-      }
+      const pMainFirst = task.pause!=null ? computePMainFirst_(task.pause, task.altDuration, task) : null;
       const pPct = pMainFirst !== null ? (pMainFirst*100).toFixed(0)+'%' : '—';
+      const pAtSwitch = task.switchTaken ? computePMainFirst_(task.switchTakenAtTask, task.altDuration, task) : null;
       dc.innerHTML=[
         `Regime: <b>${task.regime}</b>`,
         `Safe zone: <b>0–${task.inactive}</b>`,
@@ -1587,6 +1643,7 @@ function updateStats(){
         `Alt duration: <b>${task.altDuration}</b>`,
         `Alt global end: <b>${task.altEnd}</b>`,
         `P(main ends before alt): <b style="color:${pMainFirst<0.5?'#c84b2f':'green'}">${pPct}</b>`,
+        `P(main first) @ switch: <b>${pAtSwitch!=null?(pAtSwitch*100).toFixed(0)+'%':'—'}</b>`,
         `Pay: <b>£${task.pay.toFixed(2)}</b>`,
         `Reloads this seq: <b>${SESSION.reloadLog.filter(r=>r.seq_index===task.index).length}</b>`,
         `Seq frame: <b>${SESSION.nSeqFrame}</b>${isBonusIdx_(task.index)?' <b style="color:#2a7a4b">(bonus)</b>':''}`,
@@ -1665,7 +1722,7 @@ function proceedAfterSubmit(){
     S.switchAvailable=true;
     const sw=el('btn-switch-alt');
     if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
-    S.offerShown=true; task.elapsed=S.subtaskDone;
+    S.offerShown=true; task.offerAtTask=S.subtaskDone; task.offerAtTime=new Date().toISOString();
     redrawProg();
     showOfferScreen(task, S.subtaskDone, 'first');
     return;
@@ -1725,7 +1782,7 @@ function confirmForfeit(){
 function openOfferScreen(){
   if(!S.switchAvailable) return;
   const task=S.tasks[S.taskIdx];
-  if(!S.offerShown){ S.offerShown=true; task.elapsed=S.subtaskDone; }
+  if(!S.offerShown){ S.offerShown=true; task.offerAtTask=S.subtaskDone; task.offerAtTime=new Date().toISOString(); }
   el('confirm-alt-n').textContent=task.altDuration;
   el('confirm-overlay').style.display='flex';
 }
@@ -1738,6 +1795,12 @@ function confirmSwitch(){
 }
 
 // ── DECIDE ────────────────────────────────────────────────────────
+// Current total tasks completed so far this section, across both legs —
+// used for forfeit bookkeeping and (via S.altStartPos) for n_tasks_done.
+function totalTasksSoFar_(){
+  return S.phase==='alt' ? S.altStartPos + S.subtaskDone : S.subtaskDone;
+}
+
 function decide(choice){
   const task=S.tasks[S.taskIdx];
   if(S.offerTimer){ clearInterval(S.offerTimer); S.offerTimer=null; }
@@ -1748,15 +1811,39 @@ function decide(choice){
     startSubtask();
   } else if(choice==='switch'){
     kill();
-    S.phase='alt'; S.altStartPos=task.switch_cost; S.subtaskDone=0;
+    // switchTaken/At* persist even if the participant later forfeits the
+    // alt sequence — outcome alone can't represent "switched, then
+    // forfeited" (task.switched used to get silently overwritten false).
+    task.switchTaken=true;
+    task.switchTakenAtTask=S.subtaskDone; // true main-phase progress, NOT task.switch_cost — a participant can decline the first offer and switch later via the persistent button, at which point these differ
+    task.switchTakenAtTime=new Date().toISOString();
+    S.phase='alt'; S.altStartPos=S.subtaskDone; S.subtaskDone=0;
     const sw=el('btn-switch-alt');
     if(sw) sw.style.display='none';
     updateStats(); redrawProg();
     showScreen('subtask');
     startSubtask();
   } else if(choice==='forfeit'){
+    task.forfeitTaken=true;
+    task.forfeitTakenAtTask=totalTasksSoFar_();
+    task.forfeitTakenAtTime=new Date().toISOString();
     endTask('forfeited');
   }
+}
+
+// P(main sequence finishes before the alt would, evaluated from the
+// information set visible to the participant at task `atTask`) — shared by
+// p_main_first (evaluated at the offer) and p_main_at_switch (evaluated at
+// the actual switch moment, which can be later if the first offer was
+// declined and the persistent switch button was used afterward instead).
+function computePMainFirst_(atTask, altDur, task){
+  if(atTask < task.barLo){
+    const total  = task.window + 1;
+    const faster = Math.max(0, Math.min(atTask + altDur - 1, task.barHi) - task.barLo + 1);
+    return total > 0 ? faster/total : 0;
+  }
+  const total = task.barHi - atTask + 1;
+  return Math.min(altDur, total) / total;
 }
 
 // ── END TASK ──────────────────────────────────────────────────────
@@ -1767,24 +1854,17 @@ function endTask(outcome){
   task.switched  = outcome==='switched';
   task.forfeited = outcome==='forfeited';
   task.earnings  = (task.completed || task.switched) ? task.pay : 0;
-  if(task.elapsed==null) task.elapsed=S.subtaskDone;
+  if(task.offerAtTask==null) task.offerAtTask=S.subtaskDone;
 
-  // Total tasks done across main + alt paths
-  const nTasksDone = (S.phase==='alt')
-    ? task.pause + S.subtaskDone
-    : S.subtaskDone;
+  // Total tasks done across main + alt paths. S.altStartPos is the TRUE
+  // number of main-phase tasks completed at the moment of switching (set
+  // in decide()) — NOT task.pause, which is only where the offer first
+  // appeared and can predate an actual (delayed) switch.
+  const nTasksDone = totalTasksSoFar_();
   const gridPay = Math.round(nTasksDone * GRID_PAY_PER_TASK * 100) / 100;
 
-  // P(main ends before alt)
-  let pMainFirst = null;
-  if(task.pause < task.barLo){
-    const total  = task.window + 1;
-    const faster = Math.max(0, Math.min(task.pause + task.altDuration - 1, task.barHi) - task.barLo + 1);
-    pMainFirst = total > 0 ? faster/total : 0;
-  } else {
-    const total  = task.barHi - task.pause + 1;
-    pMainFirst = Math.min(task.altDuration, total) / total;
-  }
+  const pMainFirst    = computePMainFirst_(task.pause, task.altDuration, task);
+  const pMainAtSwitch = task.switchTaken ? computePMainFirst_(task.switchTakenAtTask, task.altDuration, task) : null;
 
   // Aggregate grid stats
   const grids = task.grids || [];
@@ -1806,11 +1886,20 @@ function endTask(outcome){
     pause:         task.pause,
     alt_duration:  task.altDuration,
     alt_end:       task.altEnd,
-    p_main_first:  pMainFirst !== null ? Math.round(pMainFirst*1000)/1000 : null,
+    p_main_first:  Math.round(pMainFirst*1000)/1000,
+    p_main_at_switch: pMainAtSwitch!=null ? Math.round(pMainAtSwitch*1000)/1000 : null,
     pause_secs:    task.pauseSecs || null,
     outcome,
     switch_offered: S.offerShown ? 1 : 0,
-    switch_at:      S.offerShown ? task.elapsed : null,
+    switch_at:      S.offerShown ? task.offerAtTask : null, // kept for backward compat — same value as switch_offered_at_task
+    switch_offered_at_task: S.offerShown ? task.offerAtTask : null,
+    switch_offered_at_time: S.offerShown ? task.offerAtTime : null,
+    switch_taken:   task.switchTaken ? 1 : 0,
+    switch_taken_at_task: task.switchTaken ? task.switchTakenAtTask : null,
+    switch_taken_at_time: task.switchTaken ? task.switchTakenAtTime : null,
+    forfeit_taken:  task.forfeitTaken ? 1 : 0,
+    forfeit_taken_at_task: task.forfeitTaken ? task.forfeitTakenAtTask : null,
+    forfeit_taken_at_time: task.forfeitTaken ? task.forfeitTakenAtTime : null,
     n_tasks_done:  nTasksDone,
     earnings:      task.earnings,
     grid_pay:      gridPay,
@@ -1820,6 +1909,7 @@ function endTask(outcome){
     total_missed:  totalMissed,
     seq_reload_count: seqReloads,
     start_at:      task.startAt || null,
+    seq_start_at_time: task.startAt || null, // explicit alias of start_at, requested by name
     end_at:        new Date().toISOString(),
     grids:         grids,
     seq_frame_treatment: SESSION.nSeqFrame || 5,
@@ -1943,10 +2033,14 @@ function downloadDataBackup(){
 function downloadCSV(){
   if(!S.log.length) return;
   const seqFields = ['seq_n','pay','regime','inactive','window','bar_lo','bar_hi','n_req',
-    'pause','alt_duration','alt_end','p_main_first','pause_secs',
-    'outcome','switch_offered','switch_at','n_tasks_done',
+    'pause','alt_duration','alt_end','p_main_first','p_main_at_switch','pause_secs',
+    'outcome','switch_offered','switch_at',
+    'switch_offered_at_task','switch_offered_at_time',
+    'switch_taken','switch_taken_at_task','switch_taken_at_time',
+    'forfeit_taken','forfeit_taken_at_task','forfeit_taken_at_time',
+    'n_tasks_done',
     'earnings','grid_pay','total_targets','total_found','total_false_pos','total_missed',
-    'seq_reload_count','start_at','end_at','tasks_json',
+    'seq_reload_count','start_at','seq_start_at_time','end_at','tasks_json',
     'seq_frame_treatment','seq_is_bonus'];
   const studyFields = ['prolific_pid','study_id','session_id','age','gender','student','consent_at'];
   const allFields = [...studyFields, ...seqFields];

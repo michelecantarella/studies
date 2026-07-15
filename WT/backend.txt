@@ -46,7 +46,17 @@ var RESP_HEADER = [
   'total_targets', 'total_found', 'total_false_pos', 'total_missed',
   'seq_reload_count', 'start_at', 'end_at',
   'tasks_json',
-  'seq_frame_treatment', 'seq_is_bonus' // appended at the end so existing sheet columns never shift
+  'seq_frame_treatment', 'seq_is_bonus',
+  // Appended at the end so existing sheet columns never shift. switch_at is
+  // kept as-is for backward compat (same value as switch_offered_at_task);
+  // the fields below disambiguate "offer first shown" from "actually
+  // switched/forfeited", which switch_at alone conflated, and add the
+  // clock time alongside the task-number for each.
+  'p_main_at_switch',
+  'switch_offered_at_task', 'switch_offered_at_time',
+  'switch_taken', 'switch_taken_at_task', 'switch_taken_at_time',
+  'forfeit_taken', 'forfeit_taken_at_task', 'forfeit_taken_at_time',
+  'seq_start_at_time' // explicit alias of start_at
 ];
 
 // ── Sheet helpers ────────────────────────────────────────────────
@@ -214,6 +224,16 @@ function upsertRespRows_(sheet, pid, study_id, session_id, demo_mode, sections) 
       ['tasks_json',      JSON.stringify(s.tasks_json || [])],
       ['seq_frame_treatment', s.seq_frame_treatment != null ? s.seq_frame_treatment : ''],
       ['seq_is_bonus',        s.seq_is_bonus         != null ? s.seq_is_bonus         : ''],
+      ['p_main_at_switch',        s.p_main_at_switch        != null ? s.p_main_at_switch        : ''],
+      ['switch_offered_at_task',  s.switch_offered_at_task  != null ? s.switch_offered_at_task  : ''],
+      ['switch_offered_at_time',  s.switch_offered_at_time  || ''],
+      ['switch_taken',             s.switch_taken            != null ? s.switch_taken            : ''],
+      ['switch_taken_at_task',     s.switch_taken_at_task    != null ? s.switch_taken_at_task    : ''],
+      ['switch_taken_at_time',     s.switch_taken_at_time    || ''],
+      ['forfeit_taken',            s.forfeit_taken           != null ? s.forfeit_taken           : ''],
+      ['forfeit_taken_at_task',    s.forfeit_taken_at_task   != null ? s.forfeit_taken_at_task   : ''],
+      ['forfeit_taken_at_time',    s.forfeit_taken_at_time   || ''],
+      ['seq_start_at_time',        s.seq_start_at_time       || ''],
     ];
 
     writeRowBatched_(sheet, rowIndex, isNew, updates, RESP_HEADER);
