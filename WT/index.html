@@ -634,8 +634,14 @@ function generateTasks(){
     // many window slots were left after the offer — which routinely
     // produced alternatives so short (or so long) relative to the main
     // sequence's likely end that the "right" choice was obvious.
-    const expectedMainEnd = pause < barLo ? (barLo + barHi) / 2 : (pause + barHi) / 2;
-    let altDuration = Math.round(expectedMainEnd) + rnd(-1, 1) - pause;
+    const expectedMainEnd   = pause < barLo ? (barLo + barHi) / 2 : (pause + barHi) / 2;
+    const expectedRemaining = expectedMainEnd - pause;
+    // Stay within the true expected remaining distance, not up to 1.5 tasks past it:
+    // a half-integer expectation (e.g. 5.5) only ever rounds to its two neighbors (5 or 6),
+    // a whole-integer expectation (e.g. 6) gets the usual +/-1 jitter (5, 6, or 7).
+    let altDuration = (Math.abs(expectedRemaining % 1) === 0.5)
+      ? Math.floor(expectedRemaining) + rnd(0, 1)
+      : Math.round(expectedRemaining) + rnd(-1, 1);
     altDuration = Math.max(2, altDuration); // single-task alternatives stay too trivial to offer
     const altEnd = pause + altDuration;
 
