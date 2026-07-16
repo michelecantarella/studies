@@ -164,7 +164,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <div class="lbl">Welcome</div>
   <h1>Welcome</h1>
   <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the consent button below, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
-  <p>This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, which will take less than 5 minutes to complete and will earn you a fixed payment upon completion, and an experimental module, which will allow you to gain a random bonus payment.</p>
+  <p>This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, and an experimental module, which will allow you to gain a random bonus reward. The bonus reward is awarded on top of your fixed earnings from study participation. You will be able to complete the study earlier if you feel that your bonus rewards are too low.</p>
 
   <details style="margin:1.4rem 0;border:1px solid var(--bdr);">
     <summary style="cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.78rem;font-weight:600;letter-spacing:.04em;background:var(--bg);user-select:none;">▸ Consent form (click to read)</summary>
@@ -321,7 +321,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <p id="offer-main-txt"></p>
   <div class="offer-box">
     <div style="position:absolute;top:-.55em;left:.8rem;background:var(--sur);padding:0 .3rem;font-family:var(--mono);font-size:.6rem;letter-spacing:.15em;color:var(--blue);text-transform:uppercase;">Alternative sequence</div>
-    <p style="margin:0;">This alternative sequence requires exactly <strong id="offer-alt-n">—</strong> tasks. Switching does not affect your bonus.</p>
+    <p style="margin:0;">This alternative sequence requires exactly <strong id="offer-alt-n">—</strong> tasks. Switching does not affect your completion reward.</p>
   </div>
   <p style="font-size:.85rem;color:var(--ink2);">Take your time to decide. You can return to the main sequence and switch later using the button on the left.</p>
   <p id="offer-countdown" style="font-family:var(--mono);font-size:1.15rem;color:var(--ink);margin:.6rem 0 1rem;">Back to main task in: <strong id="offer-countdown-n" style="font-size:1.3rem;">—</strong>s</p>
@@ -337,7 +337,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:420px;width:90%;font-family:var(--mono);">
     <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
     <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem;color:var(--ink);">Switch to alternative?</div>
-    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">This alternative sequence requires exactly <strong id="confirm-alt-n">—</strong> tasks. Your bonus is unaffected. This cannot be undone.</p>
+    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">This alternative sequence requires exactly <strong id="confirm-alt-n">—</strong> tasks. Your bonus reward for this sequence is unaffected. This cannot be undone.</p>
     <div style="display:flex;gap:.75rem;">
       <button class="btn btn-blue" style="flex:1;" onclick="confirmSwitch()">⇄ Confirm switch</button>
       <button class="btn btn-outline" style="flex:1;" onclick="closeConfirm()">✕ Cancel</button>
@@ -645,7 +645,12 @@ function generateTasks(){
     altDuration = Math.max(2, altDuration); // single-task alternatives stay too trivial to offer
     const altEnd = pause + altDuration;
 
-    const payTasks = drawEndCount_(regime, pause, barLo, barHi, window);
+    // Always drawn the regime-1 way (plain uniform over [barLo,barHi]),
+    // independent of pause — bonus pay must have the same distribution
+    // under both regimes, since regime is a between-subject randomization
+    // and no participant should earn systematically more/less because of
+    // which regime they were assigned.
+    const payTasks = drawEndCount_(1, null, barLo, barHi, window);
     const pay      = Math.round(payTasks * BONUS_RATE_PER_TASK * 100) / 100;
 
     return { index:i, pay, regime,
@@ -1138,7 +1143,7 @@ const TRAIN_STEPS = [
     body:'This row counts <strong>how many tasks</strong> you\'ve completed so far in this sequence. So far, you\'ve completed 1 task.' },
   { h:'The bonus',
     pos:'right',
-    body:'Finishing either the main or alternative sequence <strong>always pays</strong> this sequence\'s bonus. It\'s shown here. In this case, you earn £0.10.' },
+    body:'Finishing either the main or alternative sequence <strong>always pays</strong> this sequence\'s bonus. It\'s shown here. The bonus is <strong>always random</strong>. In this case, you earn £0.10.' },
   { h:'Mistakes',
     pos:'right',
     body:'Mistakes cost a <strong>small penalty</strong> each ($0.01). Your accumulated penalty is shown here.' },
