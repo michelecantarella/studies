@@ -1,0 +1,2880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>WT Study</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b;
+  --warn:#d4860a; --bdr:#d8d4c8;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;}
+
+/* ── BOOT OVERLAY ─────────────────────────────────────────────── */
+#boot-overlay{
+  position:fixed;inset:0;z-index:9999;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+}
+#boot-overlay .boot-spin{
+  width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PROGRESS TIMELINE ───────────────────────────────────────── */
+#prog-wrap{
+  position:fixed;top:0;left:0;right:0;z-index:200;
+  background:var(--sur);border-bottom:1px solid var(--bdr);
+  padding:6px 16px 4px;visibility:hidden;
+}
+#prog-wrap.visible{visibility:visible;}
+#prog-canvas{display:block;width:100%;height:90px;}
+
+/* ── SCREENS ─────────────────────────────────────────────────── */
+.screen{display:none;padding-top:116px;min-height:100vh;}
+.screen.active{display:block;}
+#screen-consent,#screen-already-done,#screen-conn-error,#screen-survey,#screen-survey2{padding-top:0;}
+.wrap{max-width:700px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+.wrap-wide{max-width:860px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+
+/* ── CARD ────────────────────────────────────────────────────── */
+.card{background:var(--sur);border:1px solid var(--bdr);padding:2rem;position:relative;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--red);}
+details summary::-webkit-details-marker{display:none;}
+details summary{list-style:none;}
+
+/* ── TYPE ────────────────────────────────────────────────────── */
+.lbl{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin-bottom:.4rem;}
+h1{font-family:var(--mono);font-size:1.4rem;font-weight:600;line-height:1.2;margin-bottom:1rem;}
+h2{font-family:var(--mono);font-size:.95rem;font-weight:500;margin:1.2rem 0 .4rem;}
+p{line-height:1.7;color:var(--ink2);margin-bottom:.8rem;font-size:.93rem;}
+p strong{color:var(--ink);}
+ul{padding-left:1.3rem;margin-bottom:.8rem;}
+li{line-height:1.7;color:var(--ink2);font-size:.93rem;}
+li strong{color:var(--ink);}
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+.btn{font-family:var(--mono);font-size:.76rem;line-height:1;letter-spacing:.06em;padding:.65rem 1.5rem;
+  border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;
+  transition:all .15s;text-transform:uppercase;display:inline-block;}
+.btn:hover:not(:disabled){background:transparent;color:var(--ink);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--ink);}
+.btn-outline:hover:not(:disabled){background:var(--ink);color:var(--bg);}
+.btn-red{border-color:var(--red);background:var(--red);color:#fff;}
+.btn-red:hover:not(:disabled){background:transparent;color:var(--red);}
+.btn-blue{border-color:var(--blue);background:var(--blue);color:#fff;}
+.btn-blue:hover:not(:disabled){background:transparent;color:var(--blue);}
+.btn-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.2rem;}
+
+/* ── NOTICE ──────────────────────────────────────────────────── */
+.notice{font-family:var(--mono);font-size:.73rem;padding:.6rem .9rem;
+  background:var(--bg);border-left:3px solid var(--warn);color:var(--ink2);margin:.8rem 0;}
+
+/* ── FORM ────────────────────────────────────────────────────── */
+.frow{margin-bottom:1rem;}
+.frow label{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:.3rem;color:var(--ink2);}
+.frow select,.frow input[type=text],.frow input[type=number]{
+  font-family:var(--sans);font-size:.93rem;
+  padding:.42rem .7rem;border:1.5px solid var(--bdr);background:var(--bg);color:var(--ink);width:100%;}
+.frow select:focus,.frow input:focus{outline:none;border-color:var(--ink);}
+
+/* ── INSTRUCTION CANVAS ──────────────────────────────────────── */
+canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(--sur);}
+
+/* ── TASK SCREEN ─────────────────────────────────────────────── */
+.grid-outer{display:flex;justify-content:center;margin:.8rem 0;}
+.grid-box{border:1px solid var(--bdr);padding:10px;background:var(--sur);display:inline-block;}
+.grow-el{display:flex;gap:5px;margin-bottom:5px;}
+.grow-el:last-child{margin-bottom:0;}
+.ecell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:1.35rem;border:1px solid var(--bdr);background:var(--sur);border-radius:3px;
+  cursor:default;transition:background .08s;line-height:1;user-select:none;}
+.ecell.ph{color:#ccc;font-size:.9rem;}
+.ecell.live{cursor:pointer;}
+.ecell.live:hover{border-color:var(--ink);}
+.ecell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+/* ── GRACE ───────────────────────────────────────────────────── */
+#screen-grace .grace-inner{min-height:calc(100vh - 80px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.7rem;text-align:center;}
+
+/* ── INST NAV ────────────────────────────────────────────────── */
+.inst-nav{display:flex;justify-content:space-between;align-items:center;margin-top:1.4rem;}
+.inst-dots{display:flex;gap:6px;}
+.inst-dot{width:8px;height:8px;border-radius:50%;background:var(--bdr);}
+.inst-dot.active{background:var(--ink);}
+
+/* ── OFFER BOX ───────────────────────────────────────────────── */
+.offer-box{border:1.5px solid var(--blue);padding:1.1rem 1.4rem;margin:1rem 0;position:relative;}
+
+/* ── STATS STRIP ─────────────────────────────────────────────── */
+.stats-strip{display:flex;border:1px solid var(--bdr);margin-bottom:1rem;}
+.sc{flex:1;padding:.45rem .65rem;border-right:1px solid var(--bdr);}
+.sc:last-child{border-right:none;}
+.sv{font-family:var(--mono);font-size:.95rem;font-weight:600;}
+.sl{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
+
+/* ── RESULTS TABLE ───────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.7rem 0;}
+th,td{padding:.4rem .6rem;border:1px solid var(--bdr);text-align:left;}
+#st-stat-table td{border:none;}
+th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;background:var(--bg);}
+.tfoot-row td{font-weight:500;background:var(--bg);}
+
+/* ── SAVE STATUS ─────────────────────────────────────────────── */
+.save-row{display:flex;align-items:center;gap:10px;padding:.7rem 0;}
+.save-spin{width:16px;height:16px;border:2px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
+
+@keyframes switchFlash{
+  0%,100%{opacity:1;}20%{opacity:.1;}40%{opacity:1;}60%{opacity:.1;}80%{opacity:1;}
+}
+.switch-flash{animation:switchFlash 1.5s ease;}
+</style>
+</head>
+<body>
+
+<!-- BOOT OVERLAY -->
+<div id="boot-overlay">
+  <div class="boot-spin"></div>
+  <div style="font-family:var(--mono);font-size:.8rem;color:var(--ink2);">Checking your study status, please wait…</div>
+</div>
+
+<!-- PROGRESS BAR -->
+<div id="prog-wrap">
+  <canvas id="prog-canvas"></canvas>
+</div>
+
+<!-- ═══ SCREEN: Consent ═══════════════════════════════════════════ -->
+<div id="screen-consent" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Welcome</div>
+  <h1>Welcome</h1>
+  <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the consent button below, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
+  <p>This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, and an experimental module, which will allow you to gain a random bonus reward. The bonus reward is awarded on top of your fixed earnings from study participation. You will be able to complete the study earlier if you feel that your bonus rewards are too low.</p>
+
+  <details style="margin:1.4rem 0;border:1px solid var(--bdr);">
+    <summary style="cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.78rem;font-weight:600;letter-spacing:.04em;background:var(--bg);user-select:none;">▸ Consent form (click to read)</summary>
+    <div style="padding:1rem 1.2rem;font-size:.85rem;line-height:1.6;">
+      <p>The data collected will be used for research purposes only. Any responses you provide will be completely anonymous, as no identifying information will be collected during the study. Prolific will allow us to link your choices to your gender, age, and other demographics, but we will receive no identifying information about you, and we will not be able to link this information to your name.</p>
+      <p>If you give us your permission by completing and submitting the study, we plan to discuss/publish the results in an academic forum. The study data, which does not contain any personal information, may be shared with cooperation partners for collaborative analysis and made publicly accessible via research databases or scientific publications. Please note that once study data are publicly accessible, their further distribution by others cannot be ruled out and falls beyond the area of influence or responsibility of the IMT School for Advanced Studies Lucca. This study is conducted in accordance with the laws D. Lgs. 196/2003 and UE GDPR 679/2016 on data protection. The experimental protocol and the management of the study data has been approved by the Joint Ethical Committee of the Universities "Scuola Superiore Sant'Anna", "Scuola Normale Superiore", and "IMT Scuola Alti Studi Lucca" (N: n. 23/2026, April 30).</p>
+      <p>You can reach out to Michele Cantarella (michele.cantarella@imtlucca.it) if you have any questions related to this study or if you wish your response to be deleted.</p>
+      <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
+    </div>
+  </details>
+
+  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site. You'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
+  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please avoid reloading or refreshing the page during the study. If you accidentally close the tab or leave, please contact the research team.</p>
+  <div class="btn-row">
+    <button class="btn" onclick="doConsent()">I consent →</button>
+    <button class="btn btn-outline" onclick="doNotConsent()">I do not consent</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Survey ════════════════════════════════════════════ -->
+<div id="screen-survey" class="screen">
+<div class="wrap-wide"><div class="card">
+  <div class="lbl">Short Survey (1 of 2)</div>
+  <h1>Before we start, some questions about yourself</h1>
+
+  <div class="frow"><label>What is the highest level of education you have completed?</label>
+    <select id="s-education">
+      <option value="">— select —</option>
+      <option value="some_primary">Some Primary</option>
+      <option value="primary">Completed Primary School</option>
+      <option value="some_secondary">Some Secondary</option>
+      <option value="secondary">Completed Secondary School</option>
+      <option value="vocational">Vocational or Similar</option>
+      <option value="some_university">Some University but no degree</option>
+      <option value="bachelor">University Bachelor's Degree</option>
+      <option value="graduate">Graduate or professional degree (MA, MS, MBA, PhD, JD, MD, DDS)</option>
+      <option value="prefer_not">Prefer not to say</option>
+    </select>
+  </div>
+
+  <div class="frow"><label>Apart from Prolific, how would you define your current main activity status?</label>
+    <select id="s-employment" onchange="onEmploymentChange_()">
+      <option value="">— select —</option>
+      <option value="ft">Employed full-time (at a business, organisation, or a family enterprise)</option>
+      <option value="pt">Employed part-time (at a business, organisation, or a family enterprise)</option>
+      <option value="se_solo">Self-employed without employees / independent contractor / freelancer</option>
+      <option value="se_employer">Self-employed with employees</option>
+      <option value="not_employed">Not employed</option>
+      <option value="student">Student</option>
+      <option value="retired">Retired</option>
+      <option value="other">Other</option>
+    </select>
+  </div>
+
+  <div class="frow" id="row-labor-income" style="display:none;"><label>Excluding earnings from platform work, what is your usual monthly income from employment after taxes? (£)</label>
+    <input type="text" inputmode="numeric" id="s-labor-income" placeholder="e.g. 1800" oninput="onLaborIncomeInput_(this)">
+    <div id="labor-income-warn" style="display:none;margin-top:.5rem;padding:.5rem .7rem;background:#fffbe6;border:1px solid #e6c800;border-radius:3px;font-size:.78rem;color:#7a6000;">
+      That seems like a lot for a <strong>monthly</strong> amount — did you perhaps enter your yearly income instead? Please double-check before continuing.
+      <label style="display:flex;align-items:center;gap:.4rem;margin-top:.4rem;font-weight:600;cursor:pointer;"><input type="checkbox" id="labor-income-confirm"> Yes, this is my correct monthly income after tax.</label>
+    </div>
+  </div>
+
+  <div class="frow"><label>What is your marital status?</label>
+    <select id="s-marstat">
+      <option value="">— select —</option>
+      <option value="married_cohab">Married or cohabiting</option>
+      <option value="separated">Separated</option>
+      <option value="divorced">Divorced</option>
+      <option value="widowed">Widowed</option>
+      <option value="single">Single or never married</option>
+    </select>
+  </div>
+
+  <div class="frow"><label>Including yourself, how many people live in your household?</label>
+    <select id="s-hh-others" onchange="onHhOthersChange_()">
+      <option value="">— select —</option>
+      <option value="0">I live alone</option>
+      <option value="1">2</option>
+      <option value="2">3</option>
+      <option value="3">4</option>
+      <option value="4">5 and more</option>
+    </select>
+  </div>
+
+  <div class="frow" id="row-family-contrib" style="display:none;"><label>In your household, who contributes to family expenses?</label>
+    <select id="s-family-contrib">
+      <option value="">— select —</option>
+      <option value="others_none">My other family members do not contribute</option>
+      <option value="me_most">I contribute the most</option>
+      <option value="me_more">I contribute more than other family members</option>
+      <option value="equal">Me and other family members contribute about the same</option>
+      <option value="others_more">My other family members contribute more than me</option>
+      <option value="others_most">My other family members contribute the most</option>
+      <option value="dont_know">I don't contribute / Don't know</option>
+    </select>
+  </div>
+
+  <p id="survey1-error" style="display:none;color:var(--red);font-size:.8rem;margin-top:-.4rem;">Please answer every question before continuing.</p>
+  <div class="btn-row">
+    <button class="btn" onclick="goToSurvey2_()">Continue →</button>
+  </div>
+  <div id="debug-notice" style="display:none;margin-top:1rem;padding:.5rem .75rem;background:#fffbe6;border:1px solid #e6c800;border-radius:3px;font-family:var(--mono);font-size:.75rem;color:#7a6000;">Debug mode active</div>
+</div></div>
+</div>
+
+<div id="screen-survey2" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Short Survey (2 of 2)</div>
+  <h1>A couple more questions</h1>
+
+  <div class="frow"><label>Thinking about your own financial situation and expenses, how well were you able (or do you expect to be able) to make ends meet…</label>
+    <table style="width:100%;font-size:.85rem;border-collapse:collapse;">
+      <tr><td style="padding:.3rem 0;width:40%;color:var(--ink2);">…this month?</td><td><select id="s-ends-meet-now" style="width:100%;padding:.35rem .5rem;font-family:var(--sans);font-size:.9rem;border:1.5px solid var(--bdr);background:var(--bg);"></select></td></tr>
+      <tr><td style="padding:.3rem 0;color:var(--ink2);">…one year ago?</td><td><select id="s-ends-meet-past" style="width:100%;padding:.35rem .5rem;font-family:var(--sans);font-size:.9rem;border:1.5px solid var(--bdr);background:var(--bg);"></select></td></tr>
+      <tr><td style="padding:.3rem 0;color:var(--ink2);">…one year from now?</td><td><select id="s-ends-meet-future" style="width:100%;padding:.35rem .5rem;font-family:var(--sans);font-size:.9rem;border:1.5px solid var(--bdr);background:var(--bg);"></select></td></tr>
+    </table>
+  </div>
+
+  <div class="frow"><label>How do you see yourself: are you generally a person who is fully prepared to take risks, or do you try to avoid taking risks?</label>
+    <div style="display:flex;align-items:center;gap:.7rem;">
+      <span style="font-size:.72rem;color:var(--ink2);white-space:nowrap;">0 = unwilling</span>
+      <input type="range" min="0" max="10" value="5" id="s-risk" style="flex:1;" oninput="onSliderInput_('risk')">
+      <span style="font-size:.72rem;color:var(--ink2);white-space:nowrap;">10 = willing</span>
+      <span style="font-family:var(--mono);font-weight:600;width:1.4rem;text-align:center;" id="s-risk-n">—</span>
+    </div>
+  </div>
+
+  <div class="frow"><label>How do you see yourself: are you generally a patient person, or do you prefer to have things as soon as possible, even if you have to pay a premium for that?</label>
+    <div style="display:flex;align-items:center;gap:.7rem;">
+      <span style="font-size:.72rem;color:var(--ink2);white-space:nowrap;">0 = impatient</span>
+      <input type="range" min="0" max="10" value="5" id="s-patience" style="flex:1;" oninput="onSliderInput_('patience')">
+      <span style="font-size:.72rem;color:var(--ink2);white-space:nowrap;">10 = patient</span>
+      <span style="font-family:var(--mono);font-weight:600;width:1.4rem;text-align:center;" id="s-patience-n">—</span>
+    </div>
+  </div>
+
+  <p id="survey2-error" style="display:none;color:var(--red);font-size:.8rem;">Please answer every question before continuing.</p>
+  <div class="btn-row">
+    <button class="btn btn-outline" onclick="showScreen('survey')">← Back</button>
+    <button class="btn" onclick="submitSurveyGuarded_()">Continue →</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Training (guided walkthrough, static practice sequence) ══ -->
+<div id="screen-instructions" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Training section</div>
+  <h1 id="tr-h"></h1>
+  <p id="tr-body"></p>
+
+  <div class="inst-nav">
+    <button class="btn btn-outline" id="tr-prev" onclick="trainNav(-1)" style="visibility:hidden">← Back</button>
+    <div class="inst-dots" id="tr-dots"></div>
+    <button class="btn" id="tr-next" onclick="trainNav(1)">Continue →</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Grace (section preview) ══════════════════════════ -->
+<div id="screen-grace" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl" id="grace-lbl">Section 1 of 5</div>
+  <h1 id="grace-heading">Get ready</h1>
+  <div id="grace-bonus-block" style="display:none;">
+    <p style="font-size:.95rem;color:var(--ink);margin-bottom:1.2rem;">You're being offered an additional bonus sequence!</p>
+    <button class="btn" onclick="graceBonusContinue()">Continue →</button>
+  </div>
+  <div id="grace-details-block" style="display:none;">
+  <p id="grace-dist-txt" style="margin-bottom:.4rem;"></p>
+  <canvas id="grace-hist" class="demo" style="height:82px;margin-bottom:.3rem;"></canvas>
+  <p id="grace-dist-note" style="font-size:.8rem;color:var(--ink2);margin-bottom:1.2rem;"></p>
+  </div>
+  <div id="grace-pay-block" style="display:none;border-top:1px solid var(--bdr);padding-top:1rem;margin-top:.5rem;">
+    <p id="grace-pay-txt" style="font-size:1.1rem;color:var(--ink);font-family:var(--mono);font-weight:600;margin-bottom:.2rem;"></p>
+    <p style="font-size:.82rem;color:var(--ink2);">You earn this whether you complete the main sequence or switch to the alternative. The alternative sequence will be revealed as you complete the main sequence.</p>
+  </div>
+  <div id="grace-countdown-block" style="display:none;border-top:1px solid var(--bdr);padding-top:1rem;margin-top:.5rem;text-align:center;">
+    <button class="btn" id="grace-start-btn" onclick="graceStart()">▶ Start section</button>
+  </div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Task ══════════════════════════════════════════════ -->
+<div id="screen-subtask" class="screen">
+  <div style="max-width:900px;margin:0 auto;padding:2rem 2rem 1rem;display:flex;flex-direction:column;align-items:center;gap:1.5rem;">
+    <div id="st-instr">
+      <!-- Both children share identical padding/border/min-height box-model
+           (the normal one just has a transparent border) AND are both
+           flex-centered, so neither text wrapping to a second line nor the
+           swap between them ever changes #st-instr's height — nothing
+           below (grid, left panel) shifts position when the offer banner
+           appears, even on narrower viewports. -->
+      <div id="st-instr-normal" style="font-family:var(--mono);font-size:1.1rem;font-weight:600;text-align:center;color:var(--ink);border:1.5px solid transparent;border-radius:4px;padding:.8rem 1.2rem;min-height:5rem;box-sizing:border-box;display:flex;align-items:center;justify-content:center;">
+        Find and click all <span id="st-target" style="font-size:1.6rem;vertical-align:middle;"></span>
+      </div>
+      <div id="st-instr-offer" style="display:none;border:1.5px solid var(--blue);border-radius:4px;padding:.8rem 1.2rem;text-align:center;min-height:5rem;box-sizing:border-box;align-items:center;justify-content:center;">
+        <div id="offer-banner-heading" style="font-family:var(--mono);font-size:1.1rem;font-weight:600;color:var(--blue);">An alternative sequence is available!</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:2.5rem;align-items:flex-start;justify-content:center;width:100%;">
+      <!-- LEFT -->
+      <div id="st-left-panel" style="flex:0 0 200px;display:flex;flex-direction:column;gap:0;">
+        <!-- Wrapper clips to exactly N revealed rows' worth of height during
+             training, for the row-by-row reveal effect. -->
+        <div id="st-table-wrap" style="overflow:hidden;">
+        <table id="st-stat-table" style="width:100%;font-family:var(--mono);font-size:.82rem;">
+          <tbody>
+            <tr id="st-row-seq"><td style="padding:.5rem .7rem;color:var(--ink2);">Sequence</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;" id="s-seq">—</td></tr>
+            <tr id="st-row-done"><td style="padding:.5rem .7rem;color:var(--ink2);">Tasks done</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;" id="s-stask">0</td></tr>
+            <tr id="st-row-reward"><td style="padding:.5rem .7rem;color:var(--ink2);">Reward</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;" id="s-pay">—</td></tr>
+            <tr id="st-row-penalty"><td style="padding:.5rem .7rem;color:var(--ink2);">Penalty</td>
+                <td style="padding:.5rem .7rem;font-weight:600;text-align:right;color:var(--red);" id="s-penalty">£0.00</td></tr>
+          </tbody>
+        </table>
+        </div>
+        <div style="margin-top:1rem;display:flex;flex-direction:column;gap:.5rem;">
+          <button class="btn btn-blue" id="btn-switch-alt" onclick="openOfferScreen()"
+            style="width:100%;text-align:center;display:none;">⇄ Switch to alternative</button>
+          <button id="btn-forfeit-section" onclick="openForfeitConfirm()"
+            style="width:100%;text-align:center;font-family:var(--mono);font-size:.75rem;color:var(--ink2);background:none;border:1px solid var(--bdr);border-radius:3px;padding:.4rem;cursor:pointer;">✕ Forfeit section</button>
+        </div>
+      </div>
+      <!-- RIGHT -->
+      <div style="flex:0 0 300px;display:flex;flex-direction:column;align-items:center;gap:.75rem;">
+        <div id="st-grid-wrap" style="position:relative;width:100%;">
+          <div class="grid-outer" id="st-grid-outer"><div class="grid-box" id="st-grid"></div></div>
+          <div id="st-countdown" style="display:none;font-family:var(--mono);font-size:.8rem;color:var(--ink2);text-align:center;">
+            <span id="st-cd-label">Submitting</span> in <strong id="st-cd-n">3</strong>s
+          </div>
+          <div style="text-align:center;margin-top:.6rem;">
+            <button class="btn" id="btn-resume-now" onclick="decide('continue')" style="display:none;">▶ Resume now</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Training caption: a single fixed-size, fixed-position box, reused
+       across every step. It never resizes — only its position changes
+       (left of the table / centered / right of the grid), computed in JS
+       from the real column positions so it never overlaps whichever
+       element is newly introduced that step. -->
+  <div id="tgc-box" style="display:none;position:fixed;width:480px;height:270px;box-sizing:border-box;overflow:auto;background:var(--sur);border:1px solid var(--bdr);padding:1.1rem 1.3rem;z-index:210;flex-direction:column;">
+    <div class="lbl">Training section</div>
+    <h1 id="tgc-h" style="font-size:1.1rem;margin-bottom:.5rem;"></h1>
+    <p id="tgc-body" style="margin-bottom:.6rem;font-size:.88rem;"></p>
+    <!-- Pinned to the bottom of the fixed-height box regardless of how
+         short the body text is, instead of floating right under it. -->
+    <div style="margin-top:auto;">
+      <div class="inst-dots" id="tgc-dots" style="justify-content:center;margin:.5rem 0;"></div>
+      <div style="display:flex;justify-content:space-between;gap:.5rem;">
+        <button class="btn btn-outline" id="tgc-prev" onclick="trainNav(-1)">← Back</button>
+        <button class="btn" id="tgc-next" onclick="trainNav(1)">Continue →</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Switch confirm overlay -->
+<div id="confirm-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:420px;width:90%;font-family:var(--mono);">
+    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem;color:var(--ink);">Switch to alternative?</div>
+    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">This alternative sequence requires exactly <strong id="confirm-alt-n">—</strong> tasks.</p>
+    <div style="display:flex;gap:.75rem;">
+      <button class="btn btn-blue" style="flex:1;" onclick="confirmSwitch()">⇄ Confirm switch</button>
+      <button class="btn btn-outline" style="flex:1;" onclick="closeConfirm()">✕ Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ SCREEN: Section complete ══════════════════════════════════ -->
+<div id="screen-task-complete" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Task Result</div>
+  <h1 id="tc-h">Well done!</h1>
+  <p id="tc-msg"></p>
+  <div class="btn-row"><button class="btn" onclick="nextTask()">Next section →</button></div>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Results ═══════════════════════════════════════════ -->
+<div id="screen-results" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Study Complete</div>
+  <h1>Study complete</h1>
+  <p id="res-bonus-line" style="font-family:var(--mono);font-size:1.05rem;font-weight:600;margin-top:.8rem;"></p>
+  <p id="res-showup-line" style="font-family:var(--mono);font-size:1.05rem;font-weight:600;"></p>
+  <p style="font-size:.85rem;color:var(--ink2);margin-top:.7rem;">The bonus reward includes the training bonus and mistake penalties.</p>
+  <p style="font-size:.85rem;color:var(--ink2);">Your show up fee will be paid immediately. Bonus payments are manually approved so please allow a couple of weekdays as we process it.</p>
+
+  <!-- Save status -->
+  <div id="results-save-block" style="margin-top:1.5rem;border-top:1px solid var(--bdr);padding-top:1.2rem;">
+    <div id="results-saving" class="save-row">
+      <div class="save-spin"></div>
+      <span style="font-family:var(--mono);font-size:.78rem;color:var(--ink2);">Confirming your responses were saved…</span>
+    </div>
+    <div id="results-saved" style="display:none;font-family:var(--mono);font-size:.78rem;color:var(--grn);">
+      ✓ Your responses have been saved. Redirecting you to Prolific now — if nothing happens, your browser may have blocked the pop-up:
+      <a href="#" onclick="prolificRedirect_();return false;" style="color:var(--blue);">click here to continue</a>.
+    </div>
+    <div id="results-error" style="display:none;">
+      <p style="font-size:.85rem;color:var(--red);margin-bottom:.6rem;">We could not confirm your responses were saved. Please try the options below.</p>
+      <p style="font-size:.75rem;color:var(--ink2);margin-bottom:.8rem;">Reference code: <strong id="results-error-code" style="font-family:var(--mono);"></strong></p>
+      <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
+        <button class="btn btn-outline" onclick="retryComplete_()">Try again</button>
+        <button class="btn btn-outline" onclick="downloadDataBackup()">Download my responses</button>
+      </div>
+      <p style="font-size:.78rem;color:var(--ink);margin-top:.9rem;"><strong>Please download your responses using the button above, then contact the research team via Prolific messaging</strong> and attach the downloaded file along with the reference code shown above.</p>
+    </div>
+  </div>
+
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Already completed ════════════════════════════════ -->
+<div id="screen-already-done" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Status</div>
+  <h1>Thank You</h1>
+  <p>We have already received a complete response from you for this study.</p>
+  <p style="margin-top:.4rem;">You may safely close this page. If you believe this is an error, please contact the research team via Prolific.</p>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: Connection error ══════════════════════════════════ -->
+<div id="screen-conn-error" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Connection problem</div>
+  <h1>Something needs a second try</h1>
+  <p id="conn-error-msg">We couldn't reach our server to check your study status. To make sure we never overwrite any progress you've already made, we won't continue automatically.</p>
+  <div class="btn-row"><button class="btn" onclick="retryBootstrap()">Try again</button></div>
+</div></div>
+</div>
+
+<!-- Forfeit overlay -->
+<div id="forfeit-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
+    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Forfeit section</div>
+    <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Are you sure?</div>
+    <p style="font-size:.83rem;color:var(--ink2);margin-bottom:1.2rem;">You will not earn the reward for this section.</p>
+    <div style="display:flex;gap:.75rem;justify-content:center;">
+      <button class="btn btn-red" onclick="confirmForfeit()">✕ Yes, forfeit</button>
+      <button class="btn btn-outline" onclick="closeForfeitConfirm()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Debug bar -->
+<div id="debug-bar" style="display:none;position:fixed;bottom:0;left:0;width:100%;z-index:9999;background:#fffbe6;border-top:1px solid #e6c800;padding:.25rem .75rem;font-family:IBM Plex Mono,monospace;font-size:.68rem;color:#7a6000;line-height:1.5;box-sizing:border-box;">
+  <span id="debug-content"></span>
+  <span style="float:right;display:flex;gap:.5rem;">
+    <button onclick="debugSkipSurvey()" id="debug-skip-survey-btn" style="display:none;font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip survey</button>
+    <button onclick="debugSkipTraining()" id="debug-skip-training-btn" style="display:none;font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip training</button>
+    <button onclick="debugSkipTask()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip task</button>
+    <button onclick="debugSkipSection()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip section</button>
+    <button onclick="debugStop()" id="debug-stop-btn" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Stop</button>
+  </span>
+</div>
+
+<script>
+// ── URL PARAMS ────────────────────────────────────────────────────
+const _params     = new URLSearchParams(window.location.search);
+const _prolificID = _params.get('PROLIFIC_PID') || '';
+const _studyID    = _params.get('STUDY_ID')     || '';
+const _sessionID  = _params.get('SESSION_ID')   || '';
+const _demoMode   = parseInt(_params.get('demomode') || '0', 10);
+// 0 = production | 1 = debug bar (backend still active) | 2 = debug bar + no backend
+
+// ── BACKEND ───────────────────────────────────────────────────────
+// Paste your deployed Apps Script URL here after deploying backend.txt
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzWWrcxZNsZ4VtsHS4YVYgwWr3JE6-397daut5RfoPb5Z7HPricTZxhjy-Gqw5LAAov/exec';
+const COMPLETION_CODE  = 'C194BROI';
+const NO_CONSENT_CODE  = 'C1E6TYZR';
+const GRID_PAY_PER_TASK = 0.026; // scaled down from 0.03 proportionally to the 17.5s→15s task-time change
+const BONUS_RATE_PER_TASK = 0.0375; // £9/hr ÷ 3600s × 15s per task (was 0.043 at 17.5s)
+
+function backendConfigured_(){
+  return BACKEND_URL && !BACKEND_URL.startsWith('PASTE_');
+}
+
+async function fetchWithTimeout_(url, opts, ms){
+  const ctrl = new AbortController();
+  const id = setTimeout(()=>ctrl.abort(), ms);
+  try{ return await fetch(url, {...opts, signal:ctrl.signal}); }
+  finally{ clearTimeout(id); }
+}
+
+// ── GEOLOCATION (IP-based) ──────────────────────────────────────────
+// Apps Script's doGet/doPost never see the caller's IP, so this can't be
+// done on the backend — it's a client-side call to a third-party service
+// (ipapi.co) that geolocates whoever's IP the request itself arrives from.
+// Fired once, right after consent, for production + debug-bar mode only
+// (demomode=2 bypasses the backend entirely, so there'd be nowhere to send
+// this). Best-effort and non-blocking: any failure (rate limit, network,
+// CORS) just means no geo data for this respondent — never surfaced as an
+// error, never delays the study.
+async function fetchGeo_(){
+  if(_demoMode >= 2) return;
+  try{
+    const resp = await fetchWithTimeout_('https://ipapi.co/json/', {method:'GET'}, 8000);
+    if(!resp.ok) return;
+    SESSION.geo = await resp.json();
+    saveProgress(false); // persist as soon as it's back — doConsent() already saved once without it
+  } catch(e){ /* best-effort only, see comment above */ }
+}
+
+async function lookupBackend_(pid){
+  const url = BACKEND_URL + '?action=lookup&pid=' + encodeURIComponent(pid);
+  const resp = await fetchWithTimeout_(url, {method:'GET', cache:'no-store'}, 12000);
+  if(!resp.ok) throw new Error('HTTP ' + resp.status);
+  return resp.json();
+}
+
+async function postToBackend_(payload, maxAttempts){
+  maxAttempts = maxAttempts || 1;
+  if(!backendConfigured_() || _demoMode >= 2) return true; // skip in demo=2
+  for(let attempt=1; attempt<=maxAttempts; attempt++){
+    try{
+      const resp = await fetchWithTimeout_(BACKEND_URL, {
+        method:'POST',
+        headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify(payload)
+      }, 12000);
+      if(!resp.ok) throw new Error('HTTP ' + resp.status);
+      const json = await resp.json();
+      return json.ok !== false;
+    } catch(e){
+      if(attempt < maxAttempts) await new Promise(r=>setTimeout(r, 900*attempt));
+    }
+  }
+  return false;
+}
+
+// ── CONFIG ────────────────────────────────────────────────────────
+const CFG = {
+  numTasks:   5,
+  gridR:      5,
+  gridC:      5,
+  revealMs:   500, // per-cell reveal interval — unchanged; 25 cells × 500ms = 12.5s reveal phase
+  submitSecs: 2.5, // 12.5s reveal + 2.5s = 15s total per grid (was 5s/17.5s) — see showSubmit()/trainShowCountdown()/trainLiveShowSubmit_() for how a half-second grace is actually counted down
+  winLo: 7,
+  winHi: 15,
+  payLevels: [1.0,1.5,2.0,2.5,3.0,3.5,4.0,4.5,5.0,5.5,6.0,6.5,7.0,7.5,8.0,8.5,9.0,9.5,10.0],
+};
+
+const EMOJIS = [
+  "😃","😁","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😗","😋",
+  "😝","🤪","😐","😑","😶","😏","😒","🙄","😬","😔","🤤","😴","😷","🤒","🤕",
+  "🤧","🥵","🥴","😵","🤯","🤠","🥳","🤓","🧐","😕","☹️","😮","😳","🥺","😨",
+  "😢","😭","😱","😖","😞","😓","😫","😤","😠","😵‍💫","🤐","🤬","🥸","🤩","🫠","😎","🤑"
+];
+
+// ── SESSION ───────────────────────────────────────────────────────
+let SESSION = {
+  consentAt:    null,   // ISO; never overwritten after first set
+  reloadLog:    [],     // [{seq_index, at}]
+  totalReloads: 0,
+  trainingBonus: 0,     // £0.10 credited once the training walkthrough is completed
+  trainingChoice:   null, // 'switch' | 'continue' — the training walkthrough's one recorded practice decision
+  trainingChoiceAt: null, // ISO timestamp of the above
+  geo: null,            // IP-based geolocation (full ipapi.co response), fetched once right after consent
+  nSeqFrame:    null,   // 4 or 5 — hidden 50/50 treatment, drawn once at consent, never changes after
+  phase:        null,   // 'survey' | 'training' | 'experiment' — which part of the study the participant is in, for resume routing
+  regime:       null,   // 1, 2, or 3 — drawn once at consent, used for ALL 5 sections (not redrawn per section)
+};
+
+// Same-tab reload detection: sessionStorage survives a page refresh (F5)
+// but is cleared when the tab/browser is closed, so it's exactly the
+// signal we need to tell "accidental reload, resume the in-progress
+// section exactly as it was" apart from "came back later in a new tab,
+// restart the in-progress section fresh" (see applyResume_).
+const TAB_SESSION_KEY = 'wtstudy_tab_session';
+function isSameTabSession_(){
+  try{ return sessionStorage.getItem(TAB_SESSION_KEY) === (_prolificID||'anon'); }
+  catch(e){ return false; }
+}
+function markTabSession_(){
+  try{ sessionStorage.setItem(TAB_SESSION_KEY, _prolificID||'anon'); } catch(e){}
+}
+
+// ── SEQUENCE-COUNT FRAMING (hidden 4-vs-5 treatment) ────────────────
+// Participants are always run through all CFG.numTasks (5) sections
+// regardless of treatment. Half are told up front there are 5; the other
+// half are told there are 4, and the real 5th section is instead framed
+// as an unannounced final bonus round.
+function isBonusIdx_(taskIdx){
+  return SESSION.nSeqFrame===4 && taskIdx===CFG.numTasks-1;
+}
+function sectionLongLabel_(taskIdx){
+  return isBonusIdx_(taskIdx) ? 'Bonus section' : ('Section '+(taskIdx+1)+' of '+(SESSION.nSeqFrame||5));
+}
+function sectionShortLabel_(taskIdx){
+  return isBonusIdx_(taskIdx) ? 'Bonus' : ((taskIdx+1)+'/'+(SESSION.nSeqFrame||5));
+}
+
+// ── STATE ─────────────────────────────────────────────────────────
+let S = {
+  survey: {}, tasks: [], taskIdx: 0,
+  subtaskDone: 0, phase: 'main', offerShown: false, switchAvailable: false, altStartPos: 0,
+  penalty: 0,
+  debugMode: _demoMode >= 1,
+  altFlashing: false,
+  zoneHidden: false,
+  stickHidden: false,
+  log: [],          // completed section entries
+  handles: [],
+  grid: [],
+  target: '',
+  checked: new Set(),
+  mouseMoved: false,
+  firstMoveAt: null,
+  offerTimer: null,
+};
+
+// ── HELPERS ───────────────────────────────────────────────────────
+const rnd  = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const shuf = a => { const r=[...a]; for(let i=r.length-1;i>0;i--){const j=rnd(0,i);[r[i],r[j]]=[r[j],r[i]];} return r; };
+
+function kill(){
+  S.handles.forEach(h=>{ clearTimeout(h); clearInterval(h); });
+  S.handles=[];
+}
+function addTimer(h){ S.handles.push(h); return h; }
+
+function el(id){
+  const e=document.getElementById(id);
+  if(!e) console.error('el('+id+') is null');
+  return e;
+}
+
+// Draws a task count with the same distribution nReq uses for the given
+// regime. Called once for the real nReq and once more (independently) to
+// generate the bonus, so the bonus can't be used to infer the real nReq.
+function drawEndCount_(regime, pause, barLo, barHi, window){
+  // window distinct outcomes (0..window-1), matching barHi = barLo+window-1
+  // so [barLo,barHi] really does span exactly `window` task positions.
+  if(regime === 1) return barLo + rnd(0, window-1);
+  // pause+1: the offer must land strictly before the task can end (never
+  // simultaneously), otherwise the offer/decision has zero real runway —
+  // the participant would see it right as the task was already ending.
+  // pauseMax is always < barHi (window>=5 guarantees this), so pause+1
+  // <= barHi always holds here.
+  return (pause < barLo) ? barLo + rnd(0, window-1) : rnd(pause+1, barHi);
+}
+
+// pInside is drawn from a Normal(0.5, 0.20) distribution, clamped to
+// [PINSIDE_MIN,PINSIDE_MAX], then rounded to the nearest 5% so the disclosed
+// number itself reads clean — not a fixed discrete set. Centring the mass
+// at 50% means most sections land in the genuinely-uncertain range where
+// switching is a real decision; the clamped tails (~2% of draws land
+// exactly at 10% or 90%) are deliberately rare edge cases rather than a
+// full stratum of the design, since at the extremes it's basically always
+// rational to switch (or not) regardless.
+const PINSIDE_MIN = 0.10, PINSIDE_MAX = 0.90;
+const PINSIDE_MEAN = 0.5, PINSIDE_SD = 0.20;
+// Box-Muller transform — JS has no built-in normal RNG.
+function randNormal_(mean, sd){
+  const u1 = Math.random(), u2 = Math.random();
+  const z = Math.sqrt(-2*Math.log(u1)) * Math.cos(2*Math.PI*u2);
+  return mean + z*sd;
+}
+// Unified expected-end-of-task formula: renormalised weighted average of
+// (pInside × the in-window pmf shape, restricted to positions >= `from`)
+// plus (pOutside × the forced-outside point value, barHi+altDuration),
+// divided by whatever survives past `from`. Called with from<=barLo for the
+// unconditional ("at start") expectation, or from=pause for the
+// pause-conditional one — same function, same shape, both cases.
+function expectedEndGivenSurvival_(barLo, barHi, pmf, from, pInside, pOutside, altDur){
+  const eOutside = barHi + altDur;
+  const fromIdx = Math.max(0, from - barLo);
+  let sumProb = 0, sumWeighted = 0;
+  for(let k=fromIdx; k<pmf.length; k++){
+    const w = pInside*pmf[k];
+    sumWeighted += (barLo+k)*w;
+    sumProb += w;
+  }
+  sumWeighted += eOutside*pOutside;
+  sumProb += pOutside;
+  return sumProb>0 ? sumWeighted/sumProb : eOutside;
+}
+// DESCRIPTIVE ONLY — not used to pick the realised altDuration anymore (see
+// generateTasks(): altDuration is now a plain Uniform(barHi-pause, 2*window)
+// draw, independent of pInside). This solves for the altDuration at which a
+// participant would be exactly indifferent between switching and not, at
+// the moment the offer is shown: the value where altEnd (pause+altDuration)
+// exactly equals the section's own TRUE pause-conditional expected end,
+// E[end|pause] (i.e. expectedEndGivenSurvival_ evaluated at `pause`, using
+// the section's real, disclosed pInside/pOutside — not a fixed centre).
+// Logged per section (alt_duration_indifferent) purely for post-hoc
+// analysis — e.g. comparing the realised (random) altDuration against what
+// would have been the indifference point, or using the gap between them as
+// a regressor. altDuration enters expectedEndGivenSurvival_ only linearly
+// (via the pOutside branch), so this solves it directly rather than by
+// search — same derivation this repo used back when the realised
+// altDuration itself was chosen this way (see README §6, "Alternative
+// sequence duration", iterations 1-3).
+function computeIndifferentAltDuration_(barLo, barHi, pmf, pause, pInside, pOutside){
+  const fromIdx = Math.max(0, pause - barLo);
+  let sumProbIn = 0, sumWeightedIn = 0;
+  for(let k=fromIdx; k<pmf.length; k++){
+    const w = pInside*pmf[k];
+    sumWeightedIn += (barLo+k)*w;
+    sumProbIn += w;
+  }
+  if(sumProbIn <= 0) return null; // degenerate; shouldn't occur (pause<=pauseMax<barHi always)
+  return (sumWeightedIn + pOutside*barHi - pause*(sumProbIn+pOutside)) / sumProbIn;
+}
+
+// ── GENERATE TASKS ────────────────────────────────────────────────
+// regime is fixed once per respondent (SESSION.regime, drawn at consent) —
+// deliberately NOT redrawn per section, so a within-subject comparison
+// across a respondent's 5 sections isn't confounded by regime switching
+// under them (see README §6).
+function generateTasks(){
+  return Array.from({length:CFG.numTasks},(_,i)=>{
+    const inactive = rnd(0, 3);
+    const window   = rnd(CFG.winLo, CFG.winHi);
+    const barLo    = inactive + 1;
+    const barHi    = inactive + window; // [barLo,barHi] spans exactly `window` task positions
+    // Uniform-window completion shape, conditional on the task actually
+    // being inside the window — used only by expectedEndGivenSurvival_
+    // below (the display zone itself stays a flat highlighted box, since a
+    // uniform shape has no bar-height variation worth drawing).
+    const pmf = Array(window).fill(1/window);
+    // Capped at halfway through the window — a pause landing very late
+    // (close to barHi) leaves almost no window remaining, so staying in
+    // the main sequence barely costs anything and the switch decision
+    // stops being a real one. Shared by all three regimes below (each just
+    // draws pause ~ Uniform[0, pauseMax], or capped further by nReq-1 in
+    // regime 1's inside case), so this single cap applies consistently
+    // everywhere pause is drawn. (Reintroduces an earlier cap that had
+    // since been widened to barHi-1 — see README §6.)
+    const pauseMax = inactive + Math.ceil(window/2);
+
+    // P(inside window): whether this sequence's completion falls inside
+    // [barLo,barHi] at all is disclosed exactly as pInside/pOutside.
+    const pInsideRaw = Math.min(PINSIDE_MAX, Math.max(PINSIDE_MIN, randNormal_(PINSIDE_MEAN, PINSIDE_SD)));
+    const pInside  = Math.round(pInsideRaw*20)/20; // rounded to the nearest 5% — disclosed probabilities should read as clean multiples of 5, not raw normal-draw noise
+    const pOutside = 1 - pInside;
+
+    // Generation order matters: inside/outside and the task's actual
+    // position are causally upstream of the pause in regime 1 (nReq→pause),
+    // downstream of it in regime 2 (pause→nReq), and fully independent of
+    // it in regime 3 — three genuinely different generative procedures,
+    // not just reorderings of the same three draws. Regimes 1/2 exist in
+    // parallel with regime 3 as a check that participant behaviour doesn't
+    // depend on which of the (belief-equivalent, in regimes 1/2) reveal
+    // orders they happened to get.
+    const regime = SESSION.regime || 1;
+    let nReq, pause, isForcedOutside;
+    if(regime === 1){
+      // 1) inside/outside first (using the disclosed, unconditional
+      //    pInside — nothing has happened yet to condition on);
+      // 2) where it ends, if inside (drawn regardless, kept for internal
+      //    reference when outside — see backend note on n_req);
+      // 3) the pause — capped at nReq-1 only when that cap is meaningful
+      //    (inside); when outside there's no completion point to stay
+      //    before, so pause ranges over the full pauseMax.
+      isForcedOutside = Math.random() >= pInside;
+      nReq  = drawEndCount_(1, null, barLo, barHi, window);
+      pause = isForcedOutside ? rnd(0, pauseMax) : rnd(0, Math.min(nReq-1, pauseMax));
+    } else if(regime === 2){
+      // 1) the pause first;
+      // 2) THEN inside/outside — using pInside reduced to reflect that the
+      //    tasks up to and including `pause` can no longer be the end
+      //    point (we've survived past them without ending): the surviving
+      //    "inside" mass is pInside×(remaining in-window share), weighed
+      //    against the unconditional pOutside mass (an outside sequence
+      //    always survives any pause, by definition), renormalised. This
+      //    is the same survival-conditional logic already used for
+      //    expectedEndGivenSurvival_/computePMainFirst_, applied here to
+      //    decide the actual realisation rather than just to describe it;
+      // 3) if inside, the position is still uniform among what's left.
+      pause = rnd(0, pauseMax);
+      const nInsideRemaining = pause < barLo ? window : (barHi - pause);
+      const insideMass   = pInside * (nInsideRemaining / window);
+      const survivalMass = insideMass + pOutside;
+      const pInsideGivenPause = survivalMass > 0 ? insideMass / survivalMass : 0;
+      isForcedOutside = Math.random() >= pInsideGivenPause;
+      nReq = isForcedOutside
+        ? drawEndCount_(1, null, barLo, barHi, window) // kept for internal reference only — doesn't really end here
+        : drawEndCount_(2, pause, barLo, barHi, window); // uniform over the remaining possible tasks
+    } else {
+      // Regime 3: two truly independent flips — inside/outside (using the
+      // disclosed, unconditional pInside, exactly like regime 1) and the
+      // pause (drawn from the same pauseMax range, but never capped by
+      // nReq). It is genuinely possible here for the task to already have
+      // ended before the pause is reached — gameplay handles this without
+      // any special-casing, since proceedAfterSubmit()/startTask() already
+      // check nReq-completion independently of whether/when the pause
+      // point is reached; if nReq comes first, the offer for that pause
+      // simply never fires.
+      isForcedOutside = Math.random() >= pInside;
+      nReq  = drawEndCount_(1, null, barLo, barHi, window);
+      pause = rnd(0, pauseMax);
+    }
+
+    const switch_cost = pause;
+    const adjustment  = inactive - pause;
+
+    // Indifference-point altDuration — see computeIndifferentAltDuration_'s
+    // own comment. Purely descriptive/logged (alt_duration_indifferent);
+    // has no bearing on the realised altDuration rolled below.
+    const altDurationIndifferent = computeIndifferentAltDuration_(barLo, barHi, pmf, pause, pInside, pOutside);
+
+    // altDuration: a single, independent draw per sequence — drives BOTH
+    // the in-window voluntary alt (altEnd = pause+altDuration) and the
+    // forced alt if the task lands outside (forcedAltEnd = barHi+altDuration).
+    // Plain uniform integer draw, bounded by the actual geometry of this
+    // sequence rather than solved/calibrated against pInside (the previous
+    // solve-based approach — see git history — produced unstable altDuration
+    // values at extreme pInside draws). Low bound = (barHi-pause)+1, one more
+    // than the number of tasks still remaining from the pause to the end of
+    // the window (so the alternative always takes strictly longer than just
+    // riding out the rest of the window would); high bound = low+window, a
+    // full window's worth of additional spread on top of that floor. Width
+    // is always exactly `window`, regardless of pause.
+    const altDuration = rnd(barHi - pause + 1, barHi - pause + 1 + window);
+    const altEnd = pause + altDuration;
+    const forcedAltEnd = barHi + altDuration;
+
+    // Unconditional (at the very start, before any info) and pause-conditional
+    // expected end, both via the same formula.
+    const expectedStartEnd  = expectedEndGivenSurvival_(barLo, barHi, pmf, barLo, pInside, pOutside, altDuration);
+    const expectedMainEnd   = expectedEndGivenSurvival_(barLo, barHi, pmf, pause, pInside, pOutside, altDuration);
+    const expectedRemaining = expectedMainEnd - pause;
+
+    // Always drawn the regime-1 way (plain uniform over [barLo,barHi]),
+    // independent of pause — bonus pay must have the same distribution
+    // under both regimes, since regime is a between-subject randomization
+    // and no participant should earn systematically more/less because of
+    // which regime they were assigned.
+    // Rolled between the unconditional E[end] this section would have had
+    // at the lowest vs. highest pInside in the fixed set (same barLo/barHi/
+    // altDuration, only pInside/pOutside swapped) — ties the reward to the
+    // actual span the study's own pInside range can produce, rather than
+    // to an arbitrary trim of the window.
+    const eAtPInsideMin = expectedEndGivenSurvival_(barLo, barHi, pmf, barLo, PINSIDE_MIN, 1-PINSIDE_MIN, altDuration);
+    const eAtPInsideMax = expectedEndGivenSurvival_(barLo, barHi, pmf, barLo, PINSIDE_MAX, 1-PINSIDE_MAX, altDuration);
+    const payBandLo = Math.min(eAtPInsideMin, eAtPInsideMax);
+    const payBandHi = Math.max(eAtPInsideMin, eAtPInsideMax);
+    // Restrict to the middle 60% of that band (cut the top and bottom 20%)
+    // before rolling — keeps the reward off the extremes of what the
+    // pInside range could otherwise produce.
+    const payLo = payBandLo + 0.2*(payBandHi-payBandLo);
+    const payHi = payBandLo + 0.8*(payBandHi-payBandLo);
+    const payTasks = Math.round(payLo + Math.random()*(payHi-payLo));
+    const pay      = Math.round(payTasks * BONUS_RATE_PER_TASK * 100) / 100;
+
+    return { index:i, pay, regime,
+             inactive, pause, switch_cost, adjustment,
+             window, nReq, altEnd, altDuration, altDurationIndifferent, barLo, barHi, pmf, pauseMax,
+             pInside, pOutside, isForcedOutside, forcedAltEnd,
+             expectedStartEnd, expectedMainEnd, expectedRemaining,
+             switched:null, forfeited:null, completed:null, forcedOutside:false, earnings:0,
+             offerAtTask:null, offerAtTime:null,
+             switchTaken:false, switchTakenAtTask:null, switchTakenAtTime:null,
+             forfeitTaken:false, forfeitTakenAtTask:null, forfeitTakenAtTime:null,
+             startAt:null, grids:[] };
+  });
+}
+
+// ── TIMELINE CANVAS ───────────────────────────────────────────────
+function drawTimeline(canvasId, opts){
+  const canvas=document.getElementById(canvasId);
+  if(!canvas) return;
+  const dpr=window.devicePixelRatio||1;
+  const W=canvas.offsetWidth||600;
+  const H=canvas.offsetHeight||120;
+  canvas.width=W*dpr; canvas.height=H*dpr;
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+
+  const {barLo,barHi,offerPos,stickPos,altEnd,showSafe,offerActive,onAlt,pInside} = opts;
+  const maxK = opts.maxK || Math.max(barHi+2, altEnd ? altEnd+2 : 0);
+
+  const padL=10, padR=10;
+  const tickW = (W-padL-padR)/(maxK+1);
+  const tx = k => padL + k*tickW;
+
+  const FONT   = '8px IBM Plex Mono,monospace';
+  const LABCLR = '#5a5a54';
+
+  const mainBarH = showSafe ? 36 : 34;
+  const mainTop  = showSafe ? 14 :  6;
+  const mainBase = mainTop + mainBarH;
+  const mainLblY = mainBase + 9;
+  const numY     = mainLblY + 10;
+  const altBase  = numY + 6;
+  const altLblY  = altBase + 9;
+
+  if(showSafe && barLo>0){
+    const x0=tx(0), x1=tx(barLo)-tickW/2;
+    ctx.fillStyle='rgba(100,100,100,0.10)';
+    ctx.fillRect(x0, mainTop, x1-x0, mainBarH);
+    ctx.strokeStyle='#888'; ctx.lineWidth=1.2;
+    ctx.strokeRect(x0+0.5, mainTop+0.5, x1-x0-1, mainBarH-1);
+    ctx.fillStyle='#777'; ctx.font=FONT; ctx.textAlign='center';
+    ctx.fillText('The task cannot end here', (x0+x1)/2, mainTop+mainBarH/2+3);
+  }
+
+  if(!onAlt){
+    if(barLo && barHi && !(S && S.zoneHidden)){
+      const x0=tx(barLo)-tickW/2, x1=tx(barHi)+tickW/2;
+      ctx.fillStyle='#c84b2f'; ctx.globalAlpha=0.15;
+      ctx.fillRect(x0, mainTop, x1-x0, mainBarH);
+      ctx.globalAlpha=1;
+      ctx.strokeStyle='#c84b2f'; ctx.lineWidth=1.2;
+      ctx.strokeRect(x0+0.5, mainTop+0.5, x1-x0-1, mainBarH-1);
+      // Single, prominent probability label inside the zone box itself —
+      // participants need to see this before deciding anything, so it's
+      // the headline text in the box, not a caption off to the side.
+      ctx.fillStyle='#c84b2f'; ctx.textAlign='center';
+      if(pInside!=null){
+        ctx.font='bold 10px IBM Plex Mono,monospace';
+        ctx.fillText(Math.round(pInside*100)+'% chance the sequence ends here', (x0+x1)/2, mainTop+mainBarH/2+3);
+      } else {
+        ctx.font=FONT;
+        ctx.fillText('The task can end anywhere here', (x0+x1)/2, mainTop+mainBarH/2+3);
+      }
+    }
+    ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(tx(0),mainBase); ctx.lineTo(W-padR,mainBase); ctx.stroke();
+    ctx.fillStyle=LABCLR; ctx.font=FONT; ctx.textAlign='left';
+    ctx.fillText('Main sequence', tx(0), mainLblY);
+    for(let k=0;k<=maxK;k++){
+      const x=tx(k);
+      ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(x,mainBase); ctx.lineTo(x,mainBase+4); ctx.stroke();
+      if(tickW>12||k%2===0){
+        ctx.fillStyle=LABCLR; ctx.font=FONT; ctx.textAlign='center';
+        ctx.fillText(k, x, numY);
+      }
+    }
+    if(stickPos!=null && !(S && S.stickHidden)) drawStickman(ctx, tx(stickPos), mainBase-1, 10);
+  }
+
+  if((offerActive || onAlt) && altEnd){
+    const altColor = S && S.altFlashing ? '#c8dcf8' : '#2f6fc8';
+    const aBase = onAlt ? mainBase : altBase;
+    const aLblY = onAlt ? mainLblY : altLblY;
+    const aNumY = onAlt ? numY     : altLblY + 10;
+
+    ctx.strokeStyle=altColor; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(tx(0),aBase); ctx.lineTo(tx(altEnd),aBase); ctx.stroke();
+    for(let k=0;k<=altEnd;k++){
+      ctx.strokeStyle=altColor; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(tx(k),aBase); ctx.lineTo(tx(k),aBase+4); ctx.stroke();
+    }
+    ctx.strokeStyle=altColor; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(tx(altEnd),aBase-3); ctx.lineTo(tx(altEnd),aBase+6); ctx.stroke();
+    ctx.fillStyle=altColor; ctx.font=FONT; ctx.textAlign='left';
+    ctx.fillText('Alternative sequence', tx(0), aLblY);
+    for(let k=0;k<=altEnd;k++){
+      if(tickW>12||k%2===0){
+        ctx.fillStyle=altColor; ctx.font=FONT; ctx.textAlign='center';
+        ctx.fillText(k, tx(k), aNumY);
+      }
+    }
+    if(onAlt&&stickPos!=null) drawStickman(ctx, tx(stickPos), aBase-1, 10);
+  }
+}
+
+function drawStickman(ctx,cx,yBase,sz){
+  ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(cx,yBase-sz*1.8,sz*0.55,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,yBase-sz*1.25); ctx.lineTo(cx,yBase-sz*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-sz*0.6,yBase-sz); ctx.lineTo(cx+sz*0.6,yBase-sz); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,yBase-sz*0.5); ctx.lineTo(cx-sz*0.5,yBase);
+    ctx.moveTo(cx,yBase-sz*0.5); ctx.lineTo(cx+sz*0.5,yBase); ctx.stroke();
+}
+
+// ── PROGRESS BAR ─────────────────────────────────────────────────
+// The axis tick count itself would otherwise leak the REALISED altDuration
+// before the offer is ever shown (a wide axis implies a long alternative).
+// Fixed instead at the largest altDuration this sequence's window could EVER
+// have produced: altDuration ~ Uniform((barHi-pause)+1, (barHi-pause)+1+window)
+// (see generateTasks()) — its upper bound is maximised when pause=0 (the
+// earliest possible pause, which maximises barHi-pause), giving
+// barHi+1+window as the true worst case. This depends only on barHi/window —
+// never the section's real pause or realised altDuration — so there's
+// nothing for it to leak.
+function visMaxK_(task){
+  const worstAltDuration = task.barHi + 1 + task.window;
+  return Math.max(task.barHi+2, worstAltDuration+2);
+}
+
+function redrawProg(){
+  const pw=el('prog-wrap');
+  if(!pw) return;
+  const hideBar = ['screen-consent','screen-survey','screen-survey2'].some(id=>document.getElementById(id).classList.contains('active'));
+  if(hideBar){ pw.classList.remove('visible'); return; }
+  pw.classList.add('visible');
+
+  const task=S.tasks[S.taskIdx];
+  if(!task){
+    const cv=el('prog-canvas');
+    if(cv){ const dpr=window.devicePixelRatio||1; cv.width=cv.offsetWidth*dpr; cv.height=cv.offsetHeight*dpr; cv.getContext('2d').clearRect(0,0,cv.width,cv.height); }
+    return;
+  }
+  const stickPos = S.subtaskDone;
+  const maxK = visMaxK_(task);
+  drawTimeline('prog-canvas',{
+    barLo:task.barLo, barHi:task.barHi,
+    offerPos: S.offerShown ? task.pause : null,
+    stickPos, altEnd: task.altDuration,
+    offerActive: S.switchAvailable, onAlt: S.phase==='alt',
+    showSafe: false, maxK,
+    pInside: task.pInside,
+  });
+}
+
+// ── SCREEN ROUTING ────────────────────────────────────────────────
+function showScreen(name){
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  const sc = document.getElementById('screen-'+name);
+  if(sc) sc.classList.add('active');
+  window.scrollTo(0,0);
+  redrawProg();
+  updateDebugSurveySkipBtn_();
+}
+
+// ── SNAPSHOT / RESUME ─────────────────────────────────────────────
+// v2 carries enough state (phase, in-progress section params, position
+// within it) that a same-tab reload can resume exactly where it left off
+// instead of always restarting the current section — see applyResume_.
+function buildSnapshot_(){
+  return {
+    v: 2,
+    phase:        SESSION.phase,
+    taskIdx:      S.taskIdx,
+    tasks:        S.tasks,
+    subtaskDone:  S.subtaskDone,
+    seqPhase:     S.phase,       // 'main' | 'alt' — which leg of the current section
+    altStartPos:  S.altStartPos,
+    penalty:      S.penalty,
+    trainStep:    trainStep,
+    survey:       S.survey,
+    consentAt:    SESSION.consentAt,
+    sectionsLog:  S.log.slice(),
+    totalReloads: SESSION.totalReloads,
+    reloadLog:    SESSION.reloadLog.slice(),
+    trainingBonus: SESSION.trainingBonus,
+    nSeqFrame:    SESSION.nSeqFrame,
+    regime:       SESSION.regime,
+    trainingChoice:   SESSION.trainingChoice,
+    trainingChoiceAt: SESSION.trainingChoiceAt,
+    geo:          SESSION.geo,
+  };
+}
+
+let _lastSnapJson = null;
+function saveProgress(isHeartbeat){
+  const snap = buildSnapshot_();
+  const json = JSON.stringify(snap);
+  if(isHeartbeat && json === _lastSnapJson) return;
+  _lastSnapJson = json;
+  try{ localStorage.setItem('wtstudy_resume_' + (_prolificID||'anon'), json); } catch(e){}
+  if(!_prolificID || _demoMode >= 2 || !backendConfigured_()) return;
+  const {study_level, sections} = buildFullData_();
+  postToBackend_({
+    action: 'progress',
+    pid: _prolificID, study_id: _studyID, session_id: _sessionID,
+    study_level, sections, snapshot: snap
+  });
+}
+setInterval(()=>saveProgress(true), 25000);
+
+function buildFullData_(){
+  const totalEarnings  = S.log.reduce((a,r)=>a+(r.earnings||0), 0) + (SESSION.trainingBonus||0);
+  const totalGridPay   = S.log.reduce((a,r)=>a+(r.grid_pay||0), 0);
+  const totalGridsDone = S.log.reduce((a,r)=>a+(r.n_tasks_done||0), 0);
+  const totalPenalty   = S.log.reduce((a,r)=>a+(r.penalty||0), 0);
+  const study_level = {
+    demo_mode:             _demoMode,
+    consent_at:            SESSION.consentAt,
+    employment_status:     S.survey.employment,
+    labor_income:          S.survey.laborIncome,
+    marstat:               S.survey.marstat,
+    hh_others:             S.survey.hhOthers,
+    family_contributors:   S.survey.familyContrib,
+    education:             S.survey.education,
+    ends_meet_now:         S.survey.endsMeetNow,
+    ends_meet_past:        S.survey.endsMeetPast,
+    ends_meet_future:      S.survey.endsMeetFuture,
+    risk:                  S.survey.risk,
+    patience:              S.survey.patience,
+    sections_done:         S.log.length,
+    training_bonus:        Math.round((SESSION.trainingBonus||0)*100)/100,
+    training_choice:       SESSION.trainingChoice    || '',
+    training_choice_at:    SESSION.trainingChoiceAt  || '',
+    seq_frame_treatment:   SESSION.nSeqFrame || 5,
+    total_earnings:        Math.round(totalEarnings*100)/100,
+    total_grid_pay:        Math.round(totalGridPay*100)/100,
+    total_grids_completed: totalGridsDone,
+    total_penalty:         Math.round(totalPenalty*100)/100,
+    reload_count:          SESSION.totalReloads,
+    reload_log:            SESSION.reloadLog,
+    // IP-based geolocation (see fetchGeo_) — best-effort, may be blank if
+    // the lookup failed, was rate-limited, or demomode>=2 skipped it.
+    // Flat convenience fields plus the full raw API response for anything
+    // else (lat/long, timezone, ISP/org, currency, languages, asn, ...).
+    geo_country: (SESSION.geo && SESSION.geo.country_name) || '',
+    geo_region:  (SESSION.geo && SESSION.geo.region) || '',
+    geo_city:    (SESSION.geo && SESSION.geo.city) || '',
+    geo_ip:      (SESSION.geo && SESSION.geo.ip) || '',
+    geo_json:    JSON.stringify(SESSION.geo || {}),
+  };
+  // Map log entries to backend format; tasks_json = serialised per-grid array
+  const sections = S.log.map(r => ({
+    seq_n:           r.seq_n,
+    pay:             r.pay,
+    regime:          r.regime,
+    inactive:        r.inactive,
+    window:          r.window,
+    bar_lo:          r.bar_lo,
+    bar_hi:          r.bar_hi,
+    p_inside:        r.p_inside,
+    forced_outside:  r.forced_outside,
+    e_end_at_start:  r.e_end_at_start,
+    e_end_at_pause:  r.e_end_at_pause,
+    n_req:           r.n_req,
+    pause:           r.pause,
+    alt_duration:    r.alt_duration,
+    alt_end:         r.alt_end,
+    alt_duration_indifferent: r.alt_duration_indifferent,
+    p_main_first:    r.p_main_first,
+    p_main_at_switch: r.p_main_at_switch,
+    pause_secs:      r.pause_secs,
+    outcome:         r.outcome,
+    switch_offered:  r.switch_offered,
+    switch_at:       r.switch_at,
+    switch_offered_at_task: r.switch_offered_at_task,
+    switch_offered_at_time: r.switch_offered_at_time,
+    switch_taken:    r.switch_taken,
+    switch_taken_at_task: r.switch_taken_at_task,
+    switch_taken_at_time: r.switch_taken_at_time,
+    forfeit_taken:   r.forfeit_taken,
+    forfeit_taken_at_task: r.forfeit_taken_at_task,
+    forfeit_taken_at_time: r.forfeit_taken_at_time,
+    n_tasks_done:    r.n_tasks_done,
+    earnings:        r.earnings,
+    grid_pay:        r.grid_pay,
+    penalty:         r.penalty,
+    total_targets:   r.total_targets,
+    total_found:     r.total_found,
+    total_false_pos: r.total_false_pos,
+    total_missed:    r.total_missed,
+    seq_reload_count:r.seq_reload_count,
+    start_at:        r.start_at,
+    seq_start_at_time: r.seq_start_at_time,
+    end_at:          r.end_at,
+    tasks_json:      r.grids || [],
+    seq_frame_treatment: r.seq_frame_treatment,
+    seq_is_bonus:    r.seq_is_bonus,
+  }));
+  return {study_level, sections};
+}
+
+// ── BOOTSTRAP / RESUME ───────────────────────────────────────────
+async function bootstrapApp(){
+  try{ await bootstrapAppInner_(); }
+  finally{ el('boot-overlay').style.display='none'; }
+}
+
+async function bootstrapAppInner_(){
+  if(S.debugMode){
+    el('debug-bar').style.display='block';
+    el('debug-notice').style.display='block';
+  }
+  updateDebugSurveySkipBtn_();
+
+  // Same-tab check MUST happen before we mark this tab, and the mark must
+  // happen on every load (fresh or resumed) so a subsequent reload of THIS
+  // tab is correctly recognised as same-tab.
+  const sameTab = isSameTabSession_();
+  markTabSession_();
+
+  // demomode=2: bypass backend, start fresh
+  if(_demoMode >= 2){
+    showScreen('consent'); return;
+  }
+
+  // No PID or backend not configured: just show consent
+  if(!_prolificID || !backendConfigured_()){
+    showScreen('consent'); return;
+  }
+
+  let prior = null;
+  try{
+    prior = await lookupBackend_(_prolificID);
+  } catch(e){
+    // Backend unreachable: try local snapshot
+    if(tryLocalResume_(sameTab)) return;
+    showConnError_('We couldn\'t reach our server to check your study status. To make sure we never overwrite any progress you\'ve already made, we won\'t continue automatically.');
+    return;
+  }
+
+  if(prior.study_complete){
+    showScreen('already-done'); return;
+  }
+
+  if(prior.found && prior.resume_snapshot){
+    applyResume_(prior.resume_snapshot, sameTab); return;
+  }
+
+  // Not found but backend responded — try local as cross-device fallback
+  if(prior.found){
+    if(tryLocalResume_(sameTab)) return;
+  }
+
+  showScreen('consent');
+}
+
+function tryLocalResume_(sameTab){
+  try{
+    const raw = localStorage.getItem('wtstudy_resume_' + (_prolificID||'anon'));
+    if(!raw) return false;
+    applyResume_(JSON.parse(raw), sameTab);
+    return true;
+  } catch(e){ return false; }
+}
+
+// sameTab=true means this is a plain page reload within the same browser
+// tab (sessionStorage survived) — resume exactly where the participant
+// was, with the in-progress section's already-drawn parameters intact and
+// its progress preserved. sameTab=false means the participant is coming
+// back in a new tab/session (sessionStorage was empty — tab was closed, a
+// different browser/device, or the resume snapshot came from the backend
+// with no local session at all) — resume at the correct screen, but the
+// in-progress section (if any) restarts fresh with newly-drawn parameters,
+// exactly as before (prevents gaming nReq by abandoning and returning).
+function applyResume_(snap, sameTab){
+  if(!snap || !snap.v){ showScreen('consent'); return; }
+
+  // Restore session state from snapshot
+  S.survey           = snap.survey  || {};
+  SESSION.consentAt  = snap.consentAt || null;
+  SESSION.reloadLog  = (snap.reloadLog || []).slice();
+  SESSION.totalReloads = snap.totalReloads || 0;
+  SESSION.trainingBonus = snap.trainingBonus || 0;
+  SESSION.trainingChoice   = snap.trainingChoice   || null;
+  SESSION.trainingChoiceAt = snap.trainingChoiceAt || null;
+  SESSION.geo = snap.geo || null;
+  SESSION.nSeqFrame  = snap.nSeqFrame != null ? snap.nSeqFrame : 5; // pre-existing sessions default to the untreated framing
+  SESSION.regime     = snap.regime != null ? snap.regime : pick([1,2,3]); // pre-existing sessions never had a fixed regime — assign one now
+  // Snapshots saved before phase-tracking existed have no `phase` field —
+  // do NOT default that straight to 'experiment' (that was the actual bug:
+  // a participant who'd only ever reached the survey screen, saved under
+  // old code, got promoted straight into the real experiment on resume,
+  // skipping training entirely). Infer conservatively from what's actually
+  // present instead: completed sections or an awarded training bonus mean
+  // they truly reached the experiment; a populated `survey` object (only
+  // ever written by submitSurvey()) means they at least reached training;
+  // otherwise they never got past the survey.
+  if(snap.phase){
+    SESSION.phase = snap.phase;
+  } else if((snap.sectionsLog && snap.sectionsLog.length) || snap.trainingBonus){
+    SESSION.phase = 'experiment';
+  } else if(snap.survey && Object.keys(snap.survey).length){
+    SESSION.phase = 'training';
+  } else {
+    SESSION.phase = 'survey';
+  }
+  S.log              = (snap.sectionsLog || []).slice();
+  S.taskIdx          = snap.taskIdx || 0;
+
+  // Only count/log a genuine new-session reload, not a same-tab refresh —
+  // otherwise reload_count would climb on every accidental F5.
+  if(!sameTab){
+    SESSION.reloadLog.push({ seq_index: S.taskIdx, at: new Date().toISOString() });
+    SESSION.totalReloads++;
+  }
+
+  if(!SESSION.consentAt || SESSION.phase==='survey'){
+    showScreen('survey');
+    saveProgress(false);
+    return;
+  }
+
+  if(SESSION.phase==='training'){
+    trainStep = sameTab ? Math.max(1, Math.min(TRAIN_TOTAL, snap.trainStep||1)) : 1;
+    trainingActive = true;
+    updateDebugTrainingSkipBtn_();
+    showScreen('instructions');
+    renderTrainStep();
+    saveProgress(false);
+    return;
+  }
+
+  // phase === 'experiment'
+  if(sameTab && Array.isArray(snap.tasks) && snap.tasks.length===CFG.numTasks){
+    // Exact resume: keep the section's already-drawn parameters and pick
+    // up exactly where it left off instead of restarting it.
+    S.tasks       = snap.tasks;
+    S.phase       = snap.seqPhase==='alt' ? 'alt' : 'main';
+    S.altStartPos = snap.altStartPos || 0;
+    S.penalty     = snap.penalty || 0;
+    startTask(snap.subtaskDone || 0);
+  } else {
+    // New session (or a snapshot too old to trust) — current section
+    // restarts with freshly-drawn parameters, same as always.
+    S.tasks = generateTasks();
+    gracePeriod(()=>startTask());
+  }
+  saveProgress(false);
+}
+
+function showConnError_(msg){
+  el('conn-error-msg').textContent = msg || 'Connection error.';
+  showScreen('conn-error');
+}
+
+function retryBootstrap(){
+  el('boot-overlay').style.display='flex';
+  bootstrapApp();
+}
+
+// ── CONSENT ───────────────────────────────────────────────────────
+function doConsent(){
+  if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
+  if(SESSION.nSeqFrame == null) SESSION.nSeqFrame = Math.random()<0.5 ? 4 : 5;
+  if(SESSION.regime == null) SESSION.regime = pick([1,2,3]); // 1/3 each
+  SESSION.phase = 'survey';
+  showScreen('survey');
+  saveProgress(false);
+  fetchGeo_(); // fire-and-forget — never blocks moving on to the survey screen
+}
+
+function doNotConsent(){
+  window.location.href = 'https://app.prolific.com/submissions/complete?cc=' + NO_CONSENT_CODE;
+}
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.querySelectorAll('details summary').forEach(s=>{
+    s.addEventListener('click', ()=>{
+      setTimeout(()=>{
+        const open = s.parentElement.hasAttribute('open');
+        s.textContent = (open?'▾':'▸') + ' Consent form (click to read)';
+      }, 0);
+    });
+  });
+  buildEndsMeetSelects_();
+});
+
+// ── SURVEY ────────────────────────────────────────────────────────
+const ENDS_MEET_OPTIONS = [
+  ['very_easily',     'Very easily'],
+  ['easily',          'Easily'],
+  ['fairly_easily',   'Fairly easily'],
+  ['some_difficulty', 'With some difficulty'],
+  ['difficulty',      'With difficulty'],
+  ['great_difficulty','With great difficulty'],
+  ['dont_know',       "Don't know"],
+];
+function buildEndsMeetSelects_(){
+  ['s-ends-meet-now','s-ends-meet-past','s-ends-meet-future'].forEach(id=>{
+    const sel = el(id); if(!sel) return;
+    sel.innerHTML = '<option value="">— select —</option>' +
+      ENDS_MEET_OPTIONS.map(([v,label])=>`<option value="${v}">${label}</option>`).join('');
+  });
+}
+
+function onEmploymentChange_(){
+  const employed = ['ft','pt','se_solo','se_employer'].includes(el('s-employment').value);
+  el('row-labor-income').style.display = employed ? '' : 'none';
+}
+
+// £8,000/month after tax is an unusual figure for this population — far
+// more likely someone typed their ANNUAL income into a MONTHLY field.
+// Doesn't block the value outright (a few respondents genuinely do earn
+// this much), just requires an explicit "yes, this is right" confirmation
+// before it's treated as answered.
+const LABOR_INCOME_WARN_THRESHOLD = 8000;
+function onLaborIncomeInput_(input){
+  input.value = input.value.replace(/[^0-9]/g,''); // digits only — no letters, decimals, or signs
+  const n = parseInt(input.value, 10);
+  const showWarn = !isNaN(n) && n >= LABOR_INCOME_WARN_THRESHOLD;
+  el('labor-income-warn').style.display = showWarn ? 'block' : 'none';
+  if(!showWarn) el('labor-income-confirm').checked = false; // a lowered value no longer needs confirming
+}
+
+// Family contributors only makes sense once the household includes someone
+// besides the respondent — hidden until a positive number is entered.
+function onHhOthersChange_(){
+  const n = parseInt(el('s-hh-others').value, 10);
+  el('row-family-contrib').style.display = (n > 0) ? '' : 'none';
+}
+
+// Required unless in debug mode — a respondent must answer every question,
+// but demomode 1/2 exists precisely to let testing skip past that.
+function surveyScreen1Valid_(){
+  if(_demoMode>=1) return true;
+  if(!el('s-education').value) return false;
+  if(!el('s-employment').value) return false;
+  if(['ft','pt','se_solo','se_employer'].includes(el('s-employment').value)){
+    const incomeStr = el('s-labor-income').value.trim();
+    if(!incomeStr) return false;
+    const income = parseInt(incomeStr, 10);
+    if(income >= LABOR_INCOME_WARN_THRESHOLD && !el('labor-income-confirm').checked) return false;
+  }
+  if(!el('s-marstat').value) return false;
+  const hhOthersStr = el('s-hh-others').value;
+  if(hhOthersStr === '') return false; // household question left blank
+  if(parseInt(hhOthersStr,10) > 0 && !el('s-family-contrib').value) return false;
+  return true;
+}
+function goToSurvey2_(){
+  if(!surveyScreen1Valid_()){ el('survey1-error').style.display='block'; return; }
+  el('survey1-error').style.display='none';
+  showScreen('survey2');
+}
+
+// Range inputs always have a value (default 5) even if the respondent never
+// touches them — so an untouched slider would otherwise silently submit as
+// a real answer. Track actual interaction separately and require it.
+const sliderTouched = { risk:false, patience:false };
+function onSliderInput_(name){
+  sliderTouched[name] = true;
+  el('s-'+name+'-n').textContent = el('s-'+name).value;
+}
+
+function surveyScreen2Valid_(){
+  if(_demoMode>=1) return true;
+  if(!sliderTouched.risk || !sliderTouched.patience) return false;
+  return !!(el('s-ends-meet-now').value && el('s-ends-meet-past').value && el('s-ends-meet-future').value);
+}
+function submitSurveyGuarded_(){
+  if(!surveyScreen2Valid_()){ el('survey2-error').style.display='block'; return; }
+  el('survey2-error').style.display='none';
+  submitSurvey();
+}
+
+function submitSurvey(){
+  const employment = el('s-employment').value || '—';
+  const laborIncome = ['ft','pt','se_solo','se_employer'].includes(el('s-employment').value)
+    ? (el('s-labor-income').value.trim() || '—') : '';
+  const marstat = el('s-marstat').value || '—';
+
+  const hhOthers = parseInt(el('s-hh-others').value, 10) || 0;
+  const familyContrib = hhOthers > 0 ? (el('s-family-contrib').value || '—') : '';
+  const education = el('s-education').value || '—';
+
+  const endsMeetNow    = el('s-ends-meet-now').value    || '—';
+  const endsMeetPast   = el('s-ends-meet-past').value   || '—';
+  const endsMeetFuture = el('s-ends-meet-future').value || '—';
+  const risk     = parseInt(el('s-risk').value, 10);
+  const patience = parseInt(el('s-patience').value, 10);
+
+  S.survey = {
+    employment, laborIncome, marstat,
+    hhOthers,
+    familyContrib, education,
+    endsMeetNow, endsMeetPast, endsMeetFuture,
+    risk, patience,
+  };
+  trainStep=1;
+  trainingActive=true;
+  updateDebugTrainingSkipBtn_();
+  SESSION.phase='training';
+  showScreen('instructions');
+  renderTrainStep();
+  saveProgress(false);
+}
+
+// Debug-only: bypasses the survey entirely with whatever's currently filled
+// in (blank fields fall back to '—'/0, same as a real respondent leaving
+// them empty) — works from either survey screen.
+function debugSkipSurvey(){
+  if(!S.debugMode) return;
+  submitSurvey();
+}
+
+// ── TRAINING (static, hard-coded guided walkthrough) ───────────────
+// Fixed practice-sequence parameters — deliberately static so the training
+// task never varies between participants (or between reloads of the same
+// participant). Mirrors the real task-object shape (barLo/barHi/altDuration)
+// so it can drive the same drawTimeline()/top progress bar used live.
+const TRAIN = (function(){
+  const inactive=3, window=5, barLo=inactive+1, barHi=inactive+window, altDuration=9, pInside=0.7;
+  return { inactive, window, barLo, barHi, altDuration, pause:1, pay:0.10,
+           pInside, pOutside:1-pInside, forcedAltEnd:barHi+altDuration };
+})();
+
+// From TRAIN_FIRST_SUBTASK_STEP onward, the walkthrough runs on top of the
+// REAL #screen-subtask — same DOM, same CSS, same layout, nothing shifts —
+// revealing one real element at a time (grid, then each stat row, then each
+// button) exactly when it's explained. Before that, steps run on the plain
+// #screen-instructions (nothing to reveal there yet).
+const TRAIN_FIRST_SUBTASK_STEP = 4;
+
+// pos: where the fixed caption box sits for this step — 'left' (hangs left
+// of the table, out past the page margin), 'right' (hangs right of the
+// grid), or 'center'. Only meaningful for steps >= TRAIN_FIRST_SUBTASK_STEP.
+const TRAIN_STEPS = [
+  null, // 1-indexed
+  { h:'Before you begin',
+    body:'You\'re about to take part in a real-effort task. We\'ll teach you the ropes first.' },
+  { h:'This is a main sequence',
+    body:()=>'This is a <strong>main sequence</strong>. Completing it will earn you a <strong>random bonus reward</strong>. You\'ll complete '+(SESSION.nSeqFrame||5)+' sequences today.' },
+  { h:'Progressing through the sequence',
+    body:'A sequence is made of <strong>tasks</strong>. The bar above points to the tasks in a sequence. Completing a task moves you one step through the sequence. The stickman on the bar marks your progress.' },
+  { h:'This is a task',
+    pos:'left',
+    body:'A task is this 5×5 grid. <strong>Click</strong> every instance of the target emoji as the grid fills in. Press <strong>Reveal grid</strong> to try it.' },
+  { h:'Task complete',
+    plain:true,
+    body:'You have completed a task. The stickman <strong>moves forward</strong> by one task.' },
+  { h:'When does a main sequence end?',
+    plain:true,
+    body:()=>'A main sequence <strong>either ends within the window</strong> shown above <strong>or it never ends</strong>. In this case, there is a <strong>'+Math.round(TRAIN.pInside*100)+'% probability</strong> that the sequence ends between task '+TRAIN.barLo+' and task '+TRAIN.barHi+'. If the task ends in the window, every task in that window is just as likely to be the one where it ends.' },
+  { h:'The alternative sequence',
+    plain:true,
+    body:()=>'Sometimes we will give you the option to switch to a <strong>fixed-length alternative</strong>, shown as the blue line. Unlike the main sequence, the alternative <strong>always ends on time</strong>. Your progress will restart, but completing the alternative sequence counts as completing the main one and pays you the <strong>same reward</strong>. In this case, the alternative sequence lasts '+TRAIN.altDuration+' tasks.' },
+  { h:'Switching',
+    plain:true,
+    body:'Once an alternative sequence is available, we will <strong>pause</strong> your progress to give you some time to think, but the option to switch <strong>always remains available</strong>. If the main sequence does not end in the window, you will <strong>automatically</strong> switch to the alternative.' },
+  { h:'Your sequence',
+    pos:'right',
+    body:'This row tracks <strong>which sequence</strong> you\'re on, and how many there are in total.' },
+  { h:'Tasks done',
+    pos:'right',
+    body:'This row counts <strong>how many tasks</strong> you\'ve completed so far in this sequence. So far, you\'ve completed 1 task.' },
+  { h:'The bonus',
+    pos:'right',
+    body:'Finishing either the main or alternative sequence <strong>always pays</strong> this sequence\'s bonus. The bonus is <strong>always random</strong> and it\'s shown here. In this case, you earn £0.10.' },
+  { h:'Mistakes',
+    pos:'right',
+    body:'Mistakes cost a <strong>small penalty</strong> each (£0.01). Your accumulated penalty is shown here.' },
+  { h:'The switch button',
+    pos:'right',
+    body:'Once available, you can <strong>always switch</strong> to the alternative sequence by pressing this button.' },
+  { h:'Forfeiting',
+    pos:'right',
+    body:'This button lets you <strong>forfeit</strong> a sequence. If you forfeit a sequence, you will lose its bonus and move to the next sequence. You can always forfeit.' },
+  { h:'Let\'s give it a try',
+    plain:true,
+    startsLive:true, // this step's Continue button hands off to trainLiveStart_() instead of trainNav(1)
+    body:'Time to try it for real. The <strong style="color:var(--red)">main sequence</strong> has a <strong>70% chance</strong> of ending between <strong>task 4 and 8</strong>. After you finish <strong>1 task</strong>, you\'ll be offered the <strong style="color:var(--blue)">alternative sequence</strong>, which will take <strong>9 tasks</strong>. Whether you take it or keep working on the main sequence is up to you.' },
+  { h:'You\'re ready to go',
+    pos:'right',
+    body:()=>(SESSION.trainingChoice==='switch' ? 'You have chosen to switch.' : 'You have chosen to stay in the sequence.')+' We\'ll stop the practice here. This one\'s on us: you have earned <strong>£0.10</strong> for finishing the practice. Time for the real thing.',
+    final:true },
+];
+const TRAIN_TOTAL = TRAIN_STEPS.length - 1;
+
+let trainStep = 1;
+let trainingActive = false; // true from survey submit until finishTraining()
+let trainGridRevealed=false;
+let trainTarget='', trainGrid=[], trainHandles=[];
+let trainLive = null;           // {subtaskDone, phase, offerShown} while the live practice round (see trainLiveStart_) is active
+let trainLiveOfferTimer = null; // the live round's offer-countdown interval
+
+function trainAddTimer(h){ trainHandles.push(h); return h; }
+// Stops timers only — no DOM/offer-banner reset. Used between subtasks
+// *within* the live practice round, where the switch-button rebind and
+// offer-banner state must survive (see trainLiveRunSubtask_/trainLiveChoice_);
+// the full trainKill() below would otherwise stomp on both every time.
+function trainClearTimers_(){
+  trainHandles.forEach(h=>{ clearTimeout(h); clearInterval(h); }); trainHandles=[];
+  // A flash interval killed mid-blink (e.g. Continue pressed while the
+  // element happened to be in its hidden phase) would otherwise leave it
+  // stuck invisible forever after, since the "settle back to visible"
+  // reset only runs if the interval reaches its final tick naturally.
+  S.zoneHidden=false; S.stickHidden=false; S.altFlashing=false;
+}
+function trainKill(){
+  trainClearTimers_();
+  // Defensive reset for the live practice round (see trainLiveStart_):
+  // if the participant navigates away (e.g. clicks Back) before finishing
+  // it, the round state/offer banner/switch button must never leak into
+  // an unrelated step. Runs on every nav, harmless when nothing was showing.
+  trainLive = null;
+  trainLiveOfferTimer = null;
+  const offerBox=el('st-instr-offer'), normalBox=el('st-instr-normal');
+  if(offerBox) offerBox.style.display='none';
+  if(normalBox) normalBox.style.display='flex';
+  const cd=el('st-countdown'); if(cd) cd.style.display='none';
+  const resumeBtn=el('btn-resume-now'); if(resumeBtn) resumeBtn.style.display='none';
+  // The switch button is normally inert during training (#st-left-panel has
+  // pointer-events:none) — the live round overrides pointer-events on the
+  // button itself specifically (not the whole panel, so Forfeit stays inert
+  // — clicking it would crash, since S.tasks doesn't exist yet during
+  // training). Both the override and the onclick rebind must be undone the
+  // moment that step is left, in either direction.
+  const sw=el('btn-switch-alt');
+  if(sw){ sw.onclick=openOfferScreen; sw.style.pointerEvents=''; }
+}
+
+function buildTrainDotsInto(id){
+  const d=el(id); if(!d) return; d.innerHTML='';
+  for(let i=1;i<=TRAIN_TOTAL;i++){
+    const dot=document.createElement('div');
+    dot.className='inst-dot'+(i===trainStep?' active':'');
+    d.appendChild(dot);
+  }
+}
+
+// Drives the shared top progress bar (#prog-canvas) with the static
+// training parameters, revealing the end zone and alt line progressively
+// as the walkthrough explains them — same component, same drawTimeline()
+// call the real experiment uses. No safe-zone box; the end zone and the
+// alt line each flash briefly once, the moment they first appear.
+function drawTrainingProg(step){
+  const pw=el('prog-wrap'); if(pw) pw.classList.add('visible');
+  const s = TRAIN_STEPS[step];
+  const showZone = step>=6;
+  // On the live-round step, the alt line must not leak before the real
+  // offer is reached — mirrors production's offerActive:S.switchAvailable
+  // gating (see redrawProg). Every other step shows it as soon as it's
+  // introduced (step>=7), since that's the whole point of those steps.
+  const showAlt = s && s.startsLive ? !!(trainLive && trainLive.offerShown) : step>=7;
+  drawTimeline('prog-canvas',{
+    barLo: showZone ? TRAIN.barLo : 0,
+    barHi: showZone ? TRAIN.barHi : 0,
+    offerPos:null,
+    stickPos: s && s.startsLive ? (trainLive ? trainLive.subtaskDone : 0) : (step>=5 ? 1 : 0),
+    altEnd: showAlt ? TRAIN.altDuration : null,
+    offerActive: showAlt,
+    onAlt:false,
+    showSafe:false,
+    maxK: 12,
+    pInside: showZone ? TRAIN.pInside : null,
+  });
+}
+
+// Briefly flashes the just-revealed zone/stickman/alt line a few times, then
+// settles back to its normal steady (visible) appearance. The zone and
+// stickman flash between fully drawn and fully skipped (a real on/off
+// blink); the alt line keeps its own light/dark colour toggle.
+function flashTrainZone(){
+  let n=0;
+  const iv=trainAddTimer(setInterval(()=>{
+    S.zoneHidden=!S.zoneHidden; drawTrainingProg(trainStep); n++;
+    if(n>=6){ clearInterval(iv); S.zoneHidden=false; drawTrainingProg(trainStep); }
+  },150));
+}
+function flashTrainStick(){
+  let n=0;
+  const iv=trainAddTimer(setInterval(()=>{
+    S.stickHidden=!S.stickHidden; drawTrainingProg(trainStep); n++;
+    if(n>=6){ clearInterval(iv); S.stickHidden=false; drawTrainingProg(trainStep); }
+  },150));
+}
+function flashTrainAlt(){
+  let n=0;
+  const iv=trainAddTimer(setInterval(()=>{
+    S.altFlashing=!S.altFlashing; drawTrainingProg(trainStep); n++;
+    if(n>=6){ clearInterval(iv); S.altFlashing=false; drawTrainingProg(trainStep); }
+  },150));
+}
+
+// Reveals the real #screen-subtask elements one at a time, in the exact
+// step each is first explained. The stat table is revealed row-by-row by
+// clipping its wrapper to exactly N rows' worth of height. Buttons use
+// opacity:0 (not display:none) so their layout space stays reserved and
+// nothing on screen ever shifts.
+function revealTrainElements(step){
+  // The grid is only relevant while it's actually being introduced — hide
+  // it everywhere else so it doesn't linger and distract while the top
+  // bar (task complete / zone / alt line) or the table is being explained.
+  const gridOuter = el('st-grid-outer');
+  if(gridOuter) gridOuter.style.opacity = (step===TRAIN_FIRST_SUBTASK_STEP) ? '1' : '0';
+
+  // Row order: Sequence, Tasks done, Reward, Penalty — each gets its own
+  // dedicated step, matching "sequence, task done, reward, penalty,
+  // switch, forfeit".
+  const revealedRows = (step>=9?1:0) + (step>=10?1:0) + (step>=11?1:0) + (step>=12?1:0);
+  const table=el('st-stat-table'), wrap=el('st-table-wrap');
+  if(table && wrap){
+    const rowH = table.rows.length ? table.rows[0].getBoundingClientRect().height : 0;
+    wrap.style.height = Math.round(revealedRows*rowH) + 'px';
+  }
+  const sw=el('btn-switch-alt');
+  if(sw){ sw.style.display='block'; sw.style.opacity = step>=13 ? '1' : '0'; }
+  const show = (node, on) => { if(node) node.style.opacity = on ? '1' : '0'; };
+  show(el('btn-forfeit-section'), step>=14);
+
+  // Training-appropriate values (the real updateStats()/S.tasks-driven
+  // figures don't apply here — this is a static, ungraded practice run).
+  el('s-seq').textContent = sectionShortLabel_(0);
+  el('s-stask').textContent = '1';
+  el('s-pay').textContent = '£'+TRAIN.pay.toFixed(2);
+  el('s-penalty').textContent = '£0.00';
+}
+
+// The caption box is one fixed-size element (#tgc-box, 480x270) that only
+// ever moves — never resizes. Position is computed from the real column
+// positions so it always keeps exactly CAPTION_GAP clearance from whichever
+// element is newly introduced that step (the same gap value both ways, so
+// the box sits exactly as far from the grid in 'left' mode as it does from
+// the table in 'right' mode):
+//   'left'   -> stays CAPTION_GAP to the left of the grid (table's area,
+//               and further into the page margin, stay uncovered)
+//   'right'  -> stays CAPTION_GAP to the right of the table, so the table
+//               and its rows/buttons remain visible as they're revealed
+//   'center' -> centered in the viewport (used while explaining the top
+//               bar, before the table is being introduced at all)
+const CAPTION_GAP = 32;
+function positionCaptionBox(mode){
+  const box = el('tgc-box');
+  const boxW = box.offsetWidth, boxH = box.offsetHeight;
+  const leftPanel = el('st-left-panel').getBoundingClientRect();
+  const gridWrap  = el('st-grid-wrap').getBoundingClientRect();
+  const rowMid = (Math.min(leftPanel.top, gridWrap.top) + Math.max(leftPanel.bottom, gridWrap.bottom)) / 2;
+
+  let left;
+  if(mode==='left')       left = gridWrap.left - CAPTION_GAP - boxW;
+  else if(mode==='right') left = leftPanel.right + CAPTION_GAP;
+  else                    left = (window.innerWidth - boxW) / 2;
+
+  left = Math.max(8, Math.min(left, window.innerWidth - boxW - 8));
+  const top = Math.max(8, rowMid - boxH/2);
+
+  box.style.left = Math.round(left)+'px';
+  box.style.top  = Math.round(top)+'px';
+}
+
+// The action button doubles as "Reveal grid" (on the grid-intro step,
+// before it's been revealed) and "Continue"/"Start the real study"
+// everywhere else — they occupy the same slot rather than being two
+// separate buttons.
+function updateTgcActionButton(){
+  const s = TRAIN_STEPS[trainStep];
+  const btn = el('tgc-next');
+  btn.disabled=false; btn.style.opacity='1'; btn.style.cursor='pointer';
+  if(trainStep===TRAIN_FIRST_SUBTASK_STEP && !trainGridRevealed){
+    btn.textContent='▶ Reveal grid';
+    btn.onclick=revealTrainGrid;
+  } else if(s.final){
+    btn.textContent='Start the real study →';
+    btn.onclick=finishTraining;
+  } else {
+    btn.textContent='Continue →';
+    btn.onclick=()=>trainNav(1);
+  }
+}
+
+// usePlain covers both the intro steps (before the grid has ever been
+// introduced) and a handful of later conceptual steps (Task complete
+// through Switching) that deliberately step back OFF the live task screen
+// while they're being explained — so the grid/instruction row underneath
+// isn't still sitting there as distracting, irrelevant background.
+function renderTrainStep(){
+  const s = TRAIN_STEPS[trainStep];
+  const bodyText = typeof s.body==='function' ? s.body() : s.body;
+  const usePlain = trainStep < TRAIN_FIRST_SUBTASK_STEP || s.plain;
+
+  if(usePlain){
+    el('tgc-box').style.display='none';
+    showScreen('instructions');
+    el('tr-h').textContent = s.h;
+    el('tr-body').innerHTML = bodyText;
+    buildTrainDotsInto('tr-dots');
+    el('tr-prev').style.visibility = trainStep>1 ? 'visible' : 'hidden';
+    el('tr-next').textContent='Continue →';
+    // startsLive: this step's Continue button hands off into a real,
+    // interactive practice round (trainLiveStart_) instead of advancing to
+    // the next array-indexed step directly — trainLiveFinish_() advances
+    // trainStep itself once that round concludes.
+    el('tr-next').onclick = s.startsLive ? trainLiveStart_ : (()=>trainNav(1));
+    drawTrainingProg(trainStep);
+  } else {
+    // The real task screen, revealed piece by piece underneath a
+    // fixed-size caption that always hangs in the page margin, never over
+    // whatever is newly introduced this step.
+    showScreen('subtask');
+    drawTrainingProg(trainStep);
+    const lp=el('st-left-panel'); if(lp) lp.style.pointerEvents='none'; // inert during training
+    revealTrainElements(trainStep);
+
+    if(trainStep===TRAIN_FIRST_SUBTASK_STEP) buildTrainGrid();
+
+    const box=el('tgc-box');
+    box.style.display='flex';
+    el('tgc-h').textContent = s.h;
+    el('tgc-body').innerHTML = bodyText;
+    buildTrainDotsInto('tgc-dots');
+    el('tgc-prev').style.visibility = trainStep>1 ? 'visible' : 'hidden';
+    el('tgc-prev').onclick = ()=>trainNav(-1);
+    updateTgcActionButton();
+    positionCaptionBox(s.pos || 'right');
+  }
+
+  if(trainStep===5) trainAddTimer(setTimeout(flashTrainStick, 200));
+  if(trainStep===6) trainAddTimer(setTimeout(flashTrainZone, 200));
+  if(trainStep===7) trainAddTimer(setTimeout(flashTrainAlt, 200));
+}
+
+function trainNav(dir){
+  trainKill();
+  trainStep = Math.max(1, Math.min(TRAIN_TOTAL, trainStep+dir));
+  renderTrainStep();
+}
+
+// ── TRAINING LIVE ROUND ───────────────────────────────────────────
+// The training walkthrough's one real, recorded decision (see TRAIN_STEPS'
+// startsLive step). Unlike every other step, "Let's give it a try" hands
+// its Continue button off to trainLiveStart_ instead of trainNav(1): it
+// drops the participant onto the real #screen-subtask for a genuine,
+// ungraded practice round, starting a fresh task 1 — real grid reveal, real
+// autosubmit countdown, real switch button, real offer banner once
+// TRAIN.pause is reached — using TRAIN's fixed parameters in place of a real
+// S.tasks entry (S.tasks doesn't exist yet during training). trainStep
+// itself doesn't advance until the round concludes (trainLiveFinish_), at
+// which point it moves on to the final "You're ready to go" step with a
+// body reflecting the outcome.
+function trainLiveStart_(){
+  trainKill();
+  trainLive = { subtaskDone: 0, offerShown: false };
+
+  showScreen('subtask');
+  el('tgc-box').style.display='none'; // no caption overlay for this part — the genuine task screen
+  const lp=el('st-left-panel'); if(lp) lp.style.pointerEvents=''; // genuinely interactive now
+  const go=el('st-grid-outer'); if(go) go.style.opacity='1';
+  const tw=el('st-table-wrap'); if(tw) tw.style.height=''; // full stat table
+  const fb=el('btn-forfeit-section'); if(fb) fb.style.opacity='0'; // out of scope for this round — S.tasks doesn't exist, so it would crash
+
+  const sw=el('btn-switch-alt');
+  if(sw){
+    sw.style.display='block'; sw.style.pointerEvents='auto';
+    sw.disabled=true; sw.style.opacity='0.35'; sw.style.cursor='not-allowed'; // enabled once the offer is reached
+    sw.onclick=()=>trainLiveChoice_('switch');
+  }
+
+  updateTrainLiveStats_();
+  trainLiveRunSubtask_();
+}
+
+// Also redraws the top progress bar (stickman position, and — via
+// drawTrainingProg's own gating — the alt line only once the offer has
+// actually been reached, exactly like production's offerActive:S.switchAvailable).
+function updateTrainLiveStats_(){
+  el('s-seq').textContent = sectionShortLabel_(0);
+  el('s-stask').textContent = String(trainLive ? trainLive.subtaskDone : 0);
+  el('s-pay').textContent = '£'+TRAIN.pay.toFixed(2);
+  el('s-penalty').textContent = '£0.00'; // ungraded practice — no real penalty tracking
+  drawTrainingProg(trainStep);
+}
+
+// A genuine grid reveal + autosubmit countdown, exactly like the real
+// startSubtask()/showSubmit(), just ungraded (no scoring) and driving
+// trainLiveSubtaskComplete_() instead of the production nReq/pause checks.
+// Uses trainClearTimers_ (not the full trainKill) so the switch-button
+// rebind and offer-banner state set up by trainLiveStart_/trainLiveChoice_
+// survive between subtasks.
+function trainLiveRunSubtask_(){
+  trainClearTimers_();
+  const ROWS=CFG.gridR, COLS=CFG.gridC, TOTAL=ROWS*COLS;
+  const target=pick(EMOJIS);
+  const nT=rnd(3,6);
+  const pool=shuf(EMOJIS.filter(e=>e!==target)).slice(0,TOTAL-nT);
+  const gridVals=shuf([...Array(nT).fill(target), ...pool]);
+
+  el('st-target').textContent=target;
+  const cdEl=el('st-countdown'); if(cdEl) cdEl.style.display='none';
+
+  const gridEl=el('st-grid');
+  gridEl.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    const row=document.createElement('div');
+    row.className='grow-el';
+    for(let c=0;c<COLS;c++){
+      const cell=document.createElement('div');
+      cell.className='ecell ph'; cell.textContent='·';
+      row.appendChild(cell);
+    }
+    gridEl.appendChild(row);
+  }
+  for(let i=0;i<TOTAL;i++){
+    const _i=i, _r=Math.floor(i/COLS), _c=i%COLS;
+    trainAddTimer(setTimeout(()=>{
+      const row=gridEl.children[_r]; if(!row) return;
+      const cell=row.children[_c]; if(!cell) return;
+      cell.classList.remove('ph'); cell.classList.add('live');
+      cell.textContent=gridVals[_i];
+      cell.onclick=()=>{ cell.classList.toggle('selected'); }; // ungraded — no scoring
+      if(_i===TOTAL-1) trainLiveShowSubmit_();
+    }, (_i+1)*CFG.revealMs));
+  }
+}
+
+function trainLiveShowSubmit_(){
+  const cd=el('st-countdown'), cdn=el('st-cd-n');
+  const lbl=el('st-cd-label'); if(lbl) lbl.textContent='Submitting';
+  if(cd) cd.style.display='block';
+  let left=CFG.submitSecs;
+  if(cdn) cdn.textContent=Math.ceil(left);
+  // 500ms ticks — see showSubmit()'s comment on why (fractional CFG.submitSecs).
+  trainAddTimer(setInterval(()=>{
+    left-=0.5;
+    const e=el('st-cd-n'); if(e) e.textContent=Math.max(0,Math.ceil(left));
+    if(left<=0){
+      trainClearTimers_();
+      if(cd) cd.style.display='none';
+      trainLiveSubtaskComplete_();
+    }
+  },500));
+}
+
+function trainLiveSubtaskComplete_(){
+  if(!trainLive) return;
+  trainLive.subtaskDone++;
+  updateTrainLiveStats_();
+  if(!trainLive.offerShown && trainLive.subtaskDone===TRAIN.pause){
+    trainLive.offerShown = true;
+    const sw=el('btn-switch-alt');
+    if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
+    trainLiveShowOffer_();
+    return;
+  }
+  if(trainLive.offerShown){ trainLiveFinish_('continue'); return; } // one post-offer subtask ran its course (grid filled, autosubmit fired) without switching
+  trainLiveRunSubtask_();
+}
+
+// Same offer-banner UI as production (flash, countdown, Resume-now button),
+// just a fixed 10s pause instead of production's random 5-30s.
+function trainLiveShowOffer_(){
+  trainClearTimers_();
+  const offerBox=el('st-instr-offer');
+  el('st-instr-normal').style.display='none';
+  offerBox.style.display='flex';
+  offerBox.classList.remove('switch-flash');
+  void offerBox.offsetWidth; // restart the animation
+  offerBox.classList.add('switch-flash');
+  el('offer-banner-heading').textContent = 'An alternative sequence is available!';
+
+  // No subtask runs during the offer pause — clear the grid to placeholders,
+  // exactly as production's showOfferScreen does.
+  const gridEl=el('st-grid');
+  if(gridEl){
+    [...gridEl.querySelectorAll('.ecell')].forEach(c=>{ c.onclick=null; c.className='ecell ph'; c.textContent='·'; });
+  }
+
+  const cd=el('st-countdown'), lbl=el('st-cd-label');
+  if(lbl) lbl.textContent='The task will resume';
+  if(cd) cd.style.display='block';
+  const resumeBtn=el('btn-resume-now');
+  if(resumeBtn){ resumeBtn.style.display='inline-block'; resumeBtn.onclick=()=>trainLiveChoice_('continue'); }
+
+  let remaining = 10; // fixed for training, vs. production's random 5-30s
+  el('st-cd-n').textContent = remaining;
+  trainLiveOfferTimer = trainAddTimer(setInterval(()=>{
+    remaining--;
+    const n=el('st-cd-n'); if(n) n.textContent=Math.max(0,remaining);
+    if(remaining<=0){
+      clearInterval(trainLiveOfferTimer); trainLiveOfferTimer=null;
+      trainLiveChoice_('continue'); // waited out the autosubmit — recorded same as an explicit "continue"
+    }
+  },1000));
+}
+
+function trainLiveChoice_(choice){
+  if(trainLiveOfferTimer){ clearInterval(trainLiveOfferTimer); trainLiveOfferTimer=null; }
+  trainClearTimers_();
+  hideOfferBanner_(); // restores #st-instr-normal/countdown — leaves the switch-button rebind alone
+
+  if(choice==='switch'){
+    trainLiveFinish_('switch'); // switching is itself the terminal event — no alt-sequence playthrough needed for a quick practice round
+  } else {
+    trainLiveRunSubtask_(); // one more real subtask, then trainLiveSubtaskComplete_ ends the round
+  }
+}
+
+function trainLiveFinish_(outcome){
+  trainKill();
+  SESSION.trainingChoice = outcome; // 'switch' | 'continue' — recorded into the backend, see buildFullData_
+  SESSION.trainingChoiceAt = new Date().toISOString();
+  trainLive = null;
+  trainStep = Math.min(TRAIN_TOTAL, trainStep+1);
+  renderTrainStep();
+}
+
+function finishTraining(){
+  trainKill();
+  trainingActive=false;
+  updateDebugTrainingSkipBtn_();
+  SESSION.trainingBonus = TRAIN.pay;
+  SESSION.phase = 'experiment';
+  startExperiment(); // sets S.tasks — must run before saveProgress captures the snapshot
+  saveProgress(false);
+}
+
+// ── TRAINING GRID (real grid mechanic, ungraded, on the real #st-grid) ──
+function buildTrainGrid(){
+  trainKill();
+  trainGridRevealed=false;
+  trainTarget = pick(EMOJIS);
+  el('st-target').textContent = trainTarget;
+  const nT = rnd(3,6);
+  const others = shuf(EMOJIS.filter(e=>e!==trainTarget)).slice(0,25-nT);
+  trainGrid = shuf([...Array(nT).fill(trainTarget), ...others]);
+
+  const cd=el('st-countdown'); if(cd) cd.style.display='none';
+
+  const ROWS=CFG.gridR, COLS=CFG.gridC;
+  const gridEl=el('st-grid');
+  gridEl.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    const row=document.createElement('div');
+    row.className='grow-el';
+    for(let c=0;c<COLS;c++){
+      const cell=document.createElement('div');
+      cell.className='ecell ph'; cell.textContent='·';
+      row.appendChild(cell);
+    }
+    gridEl.appendChild(row);
+  }
+}
+
+function revealTrainGrid(){
+  if(trainGridRevealed) return;
+  trainGridRevealed=true;
+  updateTgcActionButton(); // action slot switches from "Reveal grid" to "Continue"
+  const ROWS=CFG.gridR, COLS=CFG.gridC, TOTAL=ROWS*COLS;
+  const gridEl=el('st-grid');
+  for(let i=0;i<TOTAL;i++){
+    const _i=i, _r=Math.floor(i/COLS), _c=i%COLS;
+    trainAddTimer(setTimeout(()=>{
+      const row=gridEl.children[_r]; if(!row) return;
+      const cell=row.children[_c]; if(!cell) return;
+      cell.classList.remove('ph'); cell.classList.add('live');
+      cell.textContent=trainGrid[_i];
+      cell.onclick=()=>{ cell.classList.toggle('selected'); };
+      if(_i===TOTAL-1) trainShowCountdown();
+    }, (_i+1)*CFG.revealMs));
+  }
+}
+
+function trainShowCountdown(){
+  const cd=el('st-countdown'), cdn=el('st-cd-n');
+  const lbl=el('st-cd-label'); if(lbl) lbl.textContent='Submitting';
+  if(cd) cd.style.display='block';
+  let left=CFG.submitSecs;
+  if(cdn) cdn.textContent=Math.ceil(left);
+  // 500ms ticks — see showSubmit()'s comment on why (fractional CFG.submitSecs).
+  trainAddTimer(setInterval(()=>{
+    left-=0.5;
+    const e=el('st-cd-n'); if(e) e.textContent=Math.max(0,Math.ceil(left));
+    if(left<=0){
+      trainKill();
+      if(cd) cd.style.display='none';
+      // The task simply stops when the timer ends — ungraded practice run.
+      const gridEl=el('st-grid');
+      if(gridEl) [...gridEl.querySelectorAll('.ecell')].forEach(c=>{ c.onclick=null; c.classList.remove('live'); });
+    }
+  },500));
+}
+
+// ── EXPERIMENT ────────────────────────────────────────────────────
+function startExperiment(){
+  S.tasks=generateTasks();
+  S.taskIdx=0;
+  gracePeriod(()=>startTask());
+}
+
+let _graceCallback=null;
+function gracePeriod(cb){
+  kill();
+  _graceCallback=cb;
+  S.switchAvailable=false; S.offerShown=false; S.altFlashing=false; S.phase='main';
+  showScreen('grace');
+
+  el('grace-lbl').textContent = sectionLongLabel_(S.taskIdx);
+  el('grace-pay-block').style.display='none';
+  el('grace-countdown-block').style.display='none';
+  el('grace-details-block').style.display='none';
+  el('grace-dist-txt').textContent='';
+  el('grace-dist-note').textContent='';
+
+  if(isBonusIdx_(S.taskIdx)){
+    el('grace-heading').textContent = 'A bonus round';
+    el('grace-bonus-block').style.display='';
+    return; // graceBonusContinue() reveals the rest, same as any other section
+  }
+  el('grace-heading').textContent = 'Get ready';
+  el('grace-bonus-block').style.display='none';
+  graceRevealRest_();
+}
+
+function graceBonusContinue(){
+  el('grace-bonus-block').style.display='none';
+  graceRevealRest_();
+}
+
+function graceRevealRest_(){
+  const task=S.tasks[S.taskIdx];
+  el('grace-details-block').style.display='';
+  el('grace-dist-txt').textContent='The task can end anywhere within this range:';
+  el('grace-dist-note').textContent='There is a '+Math.round(task.pInside*100)+'% probability that the sequence ends between task '+task.barLo+' and task '+task.barHi+'.';
+
+  addTimer(setTimeout(()=>{
+    drawTimeline('grace-hist',{
+      barLo:task.barLo, barHi:task.barHi,
+      offerPos:null, showSafe:true, stickPos:0,
+      altEnd:task.altDuration, offerActive:false, onAlt:false,
+      maxK:visMaxK_(task),
+      pInside: task.pInside,
+    });
+  },60));
+
+  addTimer(setTimeout(()=>{
+    el('grace-pay-block').style.display='';
+    el('grace-pay-txt').textContent='Completing this task earns you £'+task.pay.toFixed(2);
+  },2000));
+
+  addTimer(setTimeout(()=>{
+    el('grace-countdown-block').style.display='';
+  },3000));
+}
+
+function graceStart(){
+  el('grace-countdown-block').style.display='none';
+  kill();
+  if(_graceCallback){ const cb=_graceCallback; _graceCallback=null; cb(); }
+}
+
+// resumeSubtaskDone: when set (>0), or when S.phase is already 'alt', this
+// is a same-tab resume picking the section back up mid-way — its already-
+// drawn parameters and progress are kept as-is rather than restarting the
+// section from scratch. See applyResume_.
+function startTask(resumeSubtaskDone){
+  kill();
+  const startAt = resumeSubtaskDone || 0;
+  const resuming = startAt>0 || S.phase==='alt';
+  S.subtaskDone=startAt; S.offerShown=false; S.switchAvailable=false;
+  if(!resuming){ S.phase='main'; S.altStartPos=0; S.penalty=0; }
+  const task=S.tasks[S.taskIdx];
+  task.startAt = task.startAt || new Date().toISOString();
+  task.grids = task.grids || [];
+
+  const sw=el('btn-switch-alt');
+  if(sw){ sw.style.display='block'; sw.disabled=true; sw.style.opacity='0.35'; sw.style.cursor='not-allowed'; }
+  // Undo any state left over from the training walkthrough.
+  const lp=el('st-left-panel');
+  if(lp){ lp.style.display=''; lp.style.pointerEvents=''; }
+  const tw=el('st-table-wrap'); if(tw) tw.style.height='';
+  const fb=el('btn-forfeit-section'); if(fb) fb.style.opacity='1';
+  const go=el('st-grid-outer'); if(go) go.style.opacity='1';
+  el('tgc-box').style.display='none';
+  hideOfferBanner_();
+  el('s-seq').textContent = sectionShortLabel_(S.taskIdx);
+  showScreen('subtask');
+  updateStats();
+
+  if(S.phase==='main' && (task.switch_cost===0 || startAt>=task.switch_cost)){
+    S.switchAvailable=true;
+    if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
+    redrawProg();
+    if(!resuming) setTimeout(()=>{ flashSwitchAvailable(); }, 400);
+  }
+
+  if(S.phase==='alt' && startAt>=task.altDuration){ endTask('switched'); return; }
+  if(S.phase==='main' && !task.isForcedOutside && startAt>=task.nReq){ endTask('completed'); return; }
+  if(S.phase==='main' && task.isForcedOutside && startAt>=task.barHi){ triggerForcedSwitch(task); return; }
+
+  if(S.phase==='main' && !resuming && task.pause===0){
+    S.offerShown=true; task.offerAtTask=0; task.offerAtTime=new Date().toISOString();
+    redrawProg();
+    showOfferScreen(task, 0, 'first');
+    return;
+  }
+  if(S.phase==='main' && resuming && startAt>=task.pause){
+    // Pause point was already reached before the reload — treat it as
+    // already decided (defaults to "continue", same as the offer screen's
+    // own timeout behaviour) rather than forcing the offer screen open
+    // again with a brand new countdown.
+    S.offerShown = true;
+  }
+  startSubtask();
+}
+
+document.addEventListener('mousemove', ()=>{
+  S.mouseMoved=true;
+  if(!S.firstMoveAt) S.firstMoveAt = new Date().toISOString(); // first movement since startSubtask() reset it
+});
+
+function flashSwitchAvailable(){
+  const sw=el('btn-switch-alt');
+  if(sw){
+    sw.classList.remove('switch-flash');
+    void sw.offsetWidth;
+    sw.classList.add('switch-flash');
+    setTimeout(()=>{ sw.classList.remove('switch-flash'); }, 1500);
+  }
+  let _flashCount=0;
+  const _flashInt=setInterval(()=>{
+    S.altFlashing=!S.altFlashing; redrawProg(); _flashCount++;
+    if(_flashCount>=10){ clearInterval(_flashInt); S.altFlashing=false; redrawProg(); }
+  }, 150);
+}
+
+// ── SUBTASK (grid) ────────────────────────────────────────────────
+function startSubtask(){
+  kill();
+  S.checked=new Set();
+  S.mouseMoved=false;
+  S.firstMoveAt=null;
+
+  const ROWS=CFG.gridR, COLS=CFG.gridC, TOTAL=ROWS*COLS;
+  const target=pick(EMOJIS);
+  S.target=target;
+  const nT=rnd(3,6);
+  const pool=shuf(EMOJIS.filter(e=>e!==target)).slice(0,TOTAL-nT);
+  S.grid=shuf([...Array(nT).fill(target), ...pool]);
+
+  el('st-target').textContent=target;
+  const cdEl=el('st-countdown'); if(cdEl) cdEl.style.display='none';
+
+  const gridEl=el('st-grid');
+  gridEl.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    const row=document.createElement('div');
+    row.className='grow-el'; row.id='row'+r;
+    for(let c=0;c<COLS;c++){
+      const cell=document.createElement('div');
+      cell.className='ecell ph'; cell.textContent='·';
+      row.appendChild(cell);
+    }
+    gridEl.appendChild(row);
+  }
+
+  for(let i=0;i<TOTAL;i++){
+    const _i=i, _r=Math.floor(i/COLS), _c=i%COLS;
+    addTimer(setTimeout(()=>{
+      const rowEl=el('row'+_r); if(!rowEl) return;
+      const cell=rowEl.children[_c]; if(!cell) return;
+      cell.classList.remove('ph'); cell.classList.add('live');
+      cell.textContent=S.grid[_i];
+      cell.onclick=()=>{
+        if(S.checked.has(_i)){ S.checked.delete(_i); cell.classList.remove('selected'); }
+        else { S.checked.add(_i); cell.classList.add('selected'); }
+      };
+      if(_i===TOTAL-1) showSubmit();
+    }, (_i+1)*CFG.revealMs));
+  }
+}
+
+function showSubmit(){
+  const cd=el('st-countdown'), cdn=el('st-cd-n');
+  const lbl=el('st-cd-label'); if(lbl) lbl.textContent='Submitting';
+  if(cd) cd.style.display='block';
+  let left=CFG.submitSecs;
+  if(cdn) cdn.textContent=Math.ceil(left);
+  // Ticks every 500ms (not 1000ms) so a fractional CFG.submitSecs (2.5s)
+  // still ends at exactly the right moment — Math.ceil keeps the on-screen
+  // number a clean whole-second countdown regardless.
+  addTimer(setInterval(()=>{
+    left-=0.5;
+    const e=el('st-cd-n'); if(e) e.textContent=Math.max(0,Math.ceil(left));
+    if(left<=0){ kill(); if(cd) cd.style.display='none'; submitMatrix(); }
+  },500));
+}
+
+function updateStats(){
+  const task=S.tasks[S.taskIdx]; if(!task) return;
+  const eS=el('s-stask'), eP=el('s-pay'), ePen=el('s-penalty');
+  if(eS) eS.textContent=S.subtaskDone;
+  if(eP) eP.textContent='£'+task.pay.toFixed(2);
+  if(ePen) ePen.textContent=S.penalty>0?'-£'+S.penalty.toFixed(2):'£0.00';
+
+  if(S.debugMode){
+    const db=el('debug-bar'), dc=el('debug-content');
+    if(db) db.style.display='block';
+    if(dc){
+      const pMainFirst = task.pause!=null ? computePMainFirst_(task.pause, task.altDuration, task) : null;
+      const pPct = pMainFirst !== null ? (pMainFirst*100).toFixed(0)+'%' : '—';
+      const pAtSwitch = task.switchTaken ? computePMainFirst_(task.switchTakenAtTask, task.altDuration, task) : null;
+      dc.innerHTML=[
+        `Regime: <b>${task.regime}</b>`,
+        `Safe zone: <b>0–${task.inactive}</b>`,
+        `End zone: <b>[${task.barLo}, ${task.barHi}]</b>`,
+        `Window: <b>${task.window}</b>`,
+        `P(inside window): <b>${(task.pInside*100).toFixed(0)}%</b> ${task.isForcedOutside?'<b style="color:#c84b2f">[this seq: OUTSIDE]</b>':'<b style="color:green">[this seq: inside]</b>'}`,
+        `Pause at: <b>${task.pause===0?'immediately':task.pause}</b>`,
+        task.isForcedOutside
+          ? `Main ends at: <b style="color:#c84b2f">never (forced outside) — internal-only reference draw: ${task.nReq}</b>`
+          : `Main ends at: <b>${task.nReq}</b>`,
+        `Alt duration: <b>${task.altDuration}</b> (indifference point: <b>${task.altDurationIndifferent!=null ? task.altDurationIndifferent.toFixed(2) : 'n/a'}</b> — descriptive only, not used)`,
+        `Alt end (if switched @pause): <b>${task.altEnd}</b>`,
+        task.isForcedOutside
+          ? `Effective end (forced alt): <b style="color:#c84b2f">${task.forcedAltEnd}</b>`
+          : `Forced alt end (n/a, this seq is inside): <b>${task.forcedAltEnd}</b>`,
+        `E[end] @start / @pause: <b>${task.expectedStartEnd.toFixed(2)} / ${task.expectedMainEnd.toFixed(2)}</b>`,
+        `P(main ends before alt): <b style="color:${pMainFirst<0.5?'#c84b2f':'green'}">${pPct}</b>`,
+        `P(main first) @ switch: <b>${pAtSwitch!=null?(pAtSwitch*100).toFixed(0)+'%':'—'}</b>`,
+        `Pay: <b>£${task.pay.toFixed(2)}</b>`,
+        `Reloads this seq: <b>${SESSION.reloadLog.filter(r=>r.seq_index===task.index).length}</b>`,
+        `Seq frame: <b>${SESSION.nSeqFrame}</b>${isBonusIdx_(task.index)?' <b style="color:#2a7a4b">(bonus)</b>':''}`,
+      ].join(' &nbsp;|&nbsp; ');
+    }
+  }
+}
+
+// ── SUBMIT MATRIX ─────────────────────────────────────────────────
+function submitMatrix(){
+  kill();
+  closeConfirm();
+
+  // "No activity" is about the participant, not the answer — gated on
+  // whether the cursor moved at all during this subtask (a real, standard
+  // `mousemove` listener — see S.mouseMoved/S.firstMoveAt), not on whether
+  // any cell was checked (checking nothing can be a perfectly genuine,
+  // active submission). Takes precedence over everything else: the
+  // penalty still applies, but the section does not advance to whatever
+  // would come next (next subtask, offer, completion) until the
+  // participant acknowledges the "Are you still there?" screen below —
+  // it does not regenerate a new grid/target, it just holds here.
+  const noActivity = !S.mouseMoved;
+
+  const correctIdxs = S.grid.reduce((acc,v,i)=>{ if(v===S.target) acc.push(i); return acc; },[]);
+  const nFound    = [...S.checked].filter(i=>correctIdxs.includes(i)).length;
+  const nFalsePos = S.checked.size - nFound;
+  const nMissed   = correctIdxs.length - nFound;
+  const isCorrect = nMissed === 0 && nFalsePos === 0;
+
+  // Record this grid
+  const task=S.tasks[S.taskIdx];
+  if(task){
+    if(!task.grids) task.grids=[];
+    task.grids.push({
+      grid_n:     S.subtaskDone + 1,
+      phase:      S.phase,
+      target:     S.target,
+      all_emojis: S.grid.slice(),
+      n_targets:  correctIdxs.length,
+      n_found:    nFound,
+      n_false_pos:nFalsePos,
+      n_missed:   nMissed,
+      no_activity: noActivity,
+      first_move_at: S.firstMoveAt || null,
+    });
+  }
+
+  if(!isCorrect){
+    S.penalty = Math.round((S.penalty + (nMissed + nFalsePos) * 0.01)*100)/100;
+    // Flash feedback
+    const gridEl=el('st-grid');
+    if(gridEl){
+      for(let idx=0; idx<CFG.gridR*CFG.gridC; idx++){
+        const r=Math.floor(idx/CFG.gridC), c=idx%CFG.gridC;
+        const rowEl=el('row'+r); if(!rowEl) continue;
+        const cell=rowEl.children[c]; if(!cell) continue;
+        if(correctIdxs.includes(idx)){
+          cell.style.background = S.checked.has(idx) ? '#d4f4dd' : '#fde8e4';
+          cell.style.borderColor= S.checked.has(idx) ? '#2a7a4b' : '#c84b2f';
+        } else if(S.checked.has(idx)){
+          cell.style.background='#fde8e4'; cell.style.borderColor='#c84b2f';
+        }
+      }
+    }
+    updateStats();
+    addTimer(setTimeout(()=>{
+      if(noActivity) showNoActivityScreen_(); else proceedAfterSubmit();
+    }, 800));
+    return;
+  }
+
+  if(noActivity){ showNoActivityScreen_(); return; }
+  proceedAfterSubmit();
+}
+
+// Blocking "Are you still there?" screen — takes precedence over whatever
+// would normally happen next. Acknowledging it simply continues on from
+// the submission that was just scored (proceedAfterSubmit), exactly as if
+// this screen weren't there, just delayed until acknowledged — it never
+// regenerates a new grid/target.
+function showNoActivityScreen_(){
+  const gridEl=el('st-grid');
+  if(gridEl) gridEl.innerHTML='<div style="padding:2rem;text-align:center;font-family:var(--mono);">'+
+    '<div style="font-size:.85rem;color:var(--ink2);letter-spacing:.08em;text-transform:uppercase;margin-bottom:.5rem;">No activity detected</div>'+
+    '<div style="font-size:1.1rem;font-weight:600;color:var(--ink);margin-bottom:1.2rem;">Are you still there?</div>'+
+    '<button class="btn" onclick="acknowledgeNoActivity_()">Yes, continue</button></div>';
+}
+function acknowledgeNoActivity_(){
+  proceedAfterSubmit();
+}
+
+function proceedAfterSubmit(){
+  S.subtaskDone++;
+  const task=S.tasks[S.taskIdx];
+
+  if(S.phase==='alt' && S.subtaskDone>=task.altDuration){
+    endTask('switched'); return;
+  }
+
+  if(S.phase==='main' && !S.offerShown && task.pause>=1 && S.subtaskDone===task.pause){
+    S.switchAvailable=true;
+    const sw=el('btn-switch-alt');
+    if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
+    S.offerShown=true; task.offerAtTask=S.subtaskDone; task.offerAtTime=new Date().toISOString();
+    redrawProg();
+    showOfferScreen(task, S.subtaskDone, 'first');
+    return;
+  }
+
+  if(S.phase==='main' && !task.isForcedOutside && S.subtaskDone>=task.nReq){
+    endTask('completed'); return;
+  }
+
+  // The task never resolves inside the window for this sequence (the
+  // pOutside branch was realised) — no offer screen, no choice, no error:
+  // the participant is moved straight into the alternative at barHi.
+  if(S.phase==='main' && task.isForcedOutside && S.subtaskDone>=task.barHi){
+    triggerForcedSwitch(task); return;
+  }
+
+  updateStats(); redrawProg();
+  startSubtask();
+}
+
+// In-place offer: no separate screen — the instruction line is replaced by
+// a banner right where "Find and click all X" was, the grid is cleared to
+// placeholders (no subtask is running during the pause), and the existing
+// below-grid countdown is relabeled to count down to resumption instead of
+// submission. Same default-to-continue-on-timeout behaviour as before.
+function showOfferScreen(task, subtaskDone, frameType){
+  kill();
+  const isFirst = frameType==='first';
+  el('st-instr-normal').style.display='none';
+  const offerBox=el('st-instr-offer');
+  offerBox.style.display='flex';
+  offerBox.classList.remove('switch-flash');
+  void offerBox.offsetWidth; // restart the animation even if it's still mid-run
+  offerBox.classList.add('switch-flash');
+  el('offer-banner-heading').textContent = isFirst
+    ? 'An alternative sequence is available!'
+    : 'Reminder: an alternative sequence is still available!';
+
+  const gridEl=el('st-grid');
+  if(gridEl){
+    [...gridEl.querySelectorAll('.ecell')].forEach(c=>{ c.onclick=null; c.className='ecell ph'; c.textContent='·'; });
+  }
+  const cd=el('st-countdown'), lbl=el('st-cd-label');
+  if(lbl) lbl.textContent='The task will resume';
+  if(cd) cd.style.display='block';
+  const resumeBtn=el('btn-resume-now'); if(resumeBtn) resumeBtn.style.display='inline-block';
+
+  const secs = 5 + Math.floor(Math.random()*26);
+  task.pauseSecs = secs;
+  let remaining = secs;
+  el('st-cd-n').textContent = remaining;
+  const tick = setInterval(()=>{
+    remaining--;
+    const n = el('st-cd-n');
+    if(n) n.textContent = Math.max(0, remaining);
+    if(remaining <= 0){
+      clearInterval(tick);
+      if(S.offerTimer===tick) decide('continue');
+    }
+  }, 1000);
+  S.offerTimer = tick;
+}
+
+// Restores the subtask screen to its normal (non-offer) appearance —
+// called before resuming/switching, so the banner and resume-countdown
+// never linger once the decision (or its timeout) has been acted on.
+function hideOfferBanner_(){
+  el('st-instr-offer').style.display='none';
+  el('st-instr-normal').style.display='flex';
+  const cd=el('st-countdown'), lbl=el('st-cd-label');
+  if(lbl) lbl.textContent='Submitting';
+  if(cd) cd.style.display='none';
+  const resumeBtn=el('btn-resume-now'); if(resumeBtn) resumeBtn.style.display='none';
+}
+
+// ── FORFEIT ───────────────────────────────────────────────────────
+function openForfeitConfirm(){
+  kill();
+  el('forfeit-overlay').style.display='flex';
+}
+function closeForfeitConfirm(){
+  el('forfeit-overlay').style.display='none';
+  startSubtask();
+}
+function confirmForfeit(){
+  el('forfeit-overlay').style.display='none';
+  decide('forfeit');
+}
+
+// ── CONFIRM OVERLAY ───────────────────────────────────────────────
+function openOfferScreen(){
+  if(!S.switchAvailable) return;
+  const task=S.tasks[S.taskIdx];
+  if(!S.offerShown){ S.offerShown=true; task.offerAtTask=S.subtaskDone; task.offerAtTime=new Date().toISOString(); }
+  el('confirm-alt-n').textContent=task.altDuration;
+  el('confirm-overlay').style.display='flex';
+}
+function closeConfirm(){
+  el('confirm-overlay').style.display='none';
+}
+function confirmSwitch(){
+  closeConfirm();
+  decide('switch');
+}
+
+// ── DECIDE ────────────────────────────────────────────────────────
+// Current total tasks completed so far this section, across both legs —
+// used for forfeit bookkeeping and (via S.altStartPos) for n_tasks_done.
+function totalTasksSoFar_(){
+  return S.phase==='alt' ? S.altStartPos + S.subtaskDone : S.subtaskDone;
+}
+
+function decide(choice){
+  const task=S.tasks[S.taskIdx];
+  if(S.offerTimer){ clearInterval(S.offerTimer); S.offerTimer=null; }
+  if(choice==='continue'){
+    kill();
+    hideOfferBanner_();
+    if(!task.isForcedOutside && S.subtaskDone >= task.nReq){ endTask('completed'); return; }
+    if(task.isForcedOutside && S.subtaskDone >= task.barHi){ triggerForcedSwitch(task); return; }
+    showScreen('subtask');
+    startSubtask();
+  } else if(choice==='switch'){
+    kill();
+    hideOfferBanner_();
+    // switchTaken/At* persist even if the participant later forfeits the
+    // alt sequence — outcome alone can't represent "switched, then
+    // forfeited" (task.switched used to get silently overwritten false).
+    task.switchTaken=true;
+    task.switchTakenAtTask=S.subtaskDone; // true main-phase progress, NOT task.switch_cost — a participant can decline the first offer and switch later via the persistent button, at which point these differ
+    task.switchTakenAtTime=new Date().toISOString();
+    S.phase='alt'; S.altStartPos=S.subtaskDone; S.subtaskDone=0;
+    const sw=el('btn-switch-alt');
+    if(sw) sw.style.display='none';
+    updateStats(); redrawProg();
+    showScreen('subtask');
+    startSubtask();
+  } else if(choice==='forfeit'){
+    task.forfeitTaken=true;
+    task.forfeitTakenAtTask=totalTasksSoFar_();
+    task.forfeitTakenAtTime=new Date().toISOString();
+    endTask('forfeited');
+  }
+}
+
+// The task never resolved inside the window for this sequence (the
+// pOutside branch was realised) — no offer screen, no choice, no error
+// state: the participant is moved straight into the alternative once
+// barHi is reached. Distinct from a voluntary switch (task.switchTaken
+// stays false here) — forced vs. chosen have different causal meaning
+// for the analysis, so they must never be conflated in the logged data.
+function triggerForcedSwitch(task){
+  kill();
+  task.forcedOutside=true;
+  S.phase='alt'; S.altStartPos=S.subtaskDone; S.subtaskDone=0;
+  const sw=el('btn-switch-alt');
+  if(sw) sw.style.display='none';
+  updateStats(); redrawProg();
+  showScreen('subtask');
+  startSubtask();
+}
+
+// P(main sequence finishes before the alt would, evaluated from the
+// information set visible to the participant at task `atTask`) — shared by
+// p_main_first (evaluated at the offer) and p_main_at_switch (evaluated at
+// the actual switch moment, which can be later if the first offer was
+// declined and the persistent switch button was used afterward instead).
+// Accounts for pInside/pOutside: the "surviving" probability mass at atTask
+// is pInside×(share of the in-window pmf still ahead) + pOutside (an
+// outside sequence never finishes inside the window at all, so it always
+// "survives" past atTask) — without this, the ratio could hit 100% purely
+// because altDur is large relative to the window, even when a real chance
+// of going outside means the main sequence is nowhere near certain to beat
+// the alt.
+function computePMainFirst_(atTask, altDur, task){
+  const finishPos = atTask + altDur - 1;
+  const start = Math.max(atTask, task.barLo);
+  const nInsideRemaining = Math.max(0, task.barHi - start + 1);
+  const nDoneByFinish    = Math.max(0, Math.min(finishPos, task.barHi) - start + 1);
+  const insideSurvival = task.pInside * (nInsideRemaining / task.window);
+  const doneMass        = task.pInside * (nDoneByFinish / task.window);
+  const totalSurvival   = insideSurvival + task.pOutside;
+  return totalSurvival > 0 ? doneMass / totalSurvival : 0;
+}
+
+// ── END TASK ──────────────────────────────────────────────────────
+function endTask(outcome){
+  kill();
+  const task=S.tasks[S.taskIdx];
+  task.completed = outcome==='completed';
+  task.switched  = outcome==='switched';
+  task.forfeited = outcome==='forfeited';
+  task.earnings  = (task.completed || task.switched) ? task.pay : 0;
+  if(task.offerAtTask==null) task.offerAtTask=S.subtaskDone;
+
+  // Total tasks done across main + alt paths. S.altStartPos is the TRUE
+  // number of main-phase tasks completed at the moment of switching (set
+  // in decide()) — NOT task.pause, which is only where the offer first
+  // appeared and can predate an actual (delayed) switch.
+  const nTasksDone = totalTasksSoFar_();
+  const gridPay = Math.round(nTasksDone * GRID_PAY_PER_TASK * 100) / 100;
+
+  const pMainFirst    = computePMainFirst_(task.pause, task.altDuration, task);
+  const pMainAtSwitch = task.switchTaken ? computePMainFirst_(task.switchTakenAtTask, task.altDuration, task) : null;
+
+  // Aggregate grid stats
+  const grids = task.grids || [];
+  const totalTargets  = grids.reduce((a,g)=>a+g.n_targets,  0);
+  const totalFound    = grids.reduce((a,g)=>a+g.n_found,    0);
+  const totalFalsePos = grids.reduce((a,g)=>a+g.n_false_pos,0);
+  const totalMissed   = grids.reduce((a,g)=>a+g.n_missed,   0);
+  const seqReloads    = SESSION.reloadLog.filter(r=>r.seq_index===task.index).length;
+
+  S.log.push({
+    seq_n:         task.index + 1,
+    pay:           task.pay,
+    regime:        task.regime,
+    inactive:      task.inactive,
+    window:        task.window,
+    bar_lo:        task.barLo,
+    bar_hi:        task.barHi,
+    p_inside:      task.pInside,
+    forced_outside: task.forcedOutside ? 1 : 0,
+    e_end_at_start: Math.round(task.expectedStartEnd*1000)/1000,
+    e_end_at_pause: Math.round(task.expectedMainEnd*1000)/1000,
+    n_req:         task.nReq,
+    pause:         task.pause,
+    alt_duration:  task.altDuration,
+    alt_end:       task.altEnd,
+    // Descriptive-only — see computeIndifferentAltDuration_. Not used to
+    // pick the realised alt_duration above; logged purely for post-hoc
+    // analysis (e.g. comparing the realised, random alt_duration against
+    // the value that would have made a participant exactly indifferent
+    // between switching and not, at the moment the offer was shown).
+    alt_duration_indifferent: task.altDurationIndifferent != null ? Math.round(task.altDurationIndifferent*1000)/1000 : null,
+    p_main_first:  Math.round(pMainFirst*1000)/1000,
+    p_main_at_switch: pMainAtSwitch!=null ? Math.round(pMainAtSwitch*1000)/1000 : null,
+    pause_secs:    task.pauseSecs || null,
+    outcome,
+    switch_offered: S.offerShown ? 1 : 0,
+    switch_at:      S.offerShown ? task.offerAtTask : null, // kept for backward compat — same value as switch_offered_at_task
+    switch_offered_at_task: S.offerShown ? task.offerAtTask : null,
+    switch_offered_at_time: S.offerShown ? task.offerAtTime : null,
+    switch_taken:   task.switchTaken ? 1 : 0,
+    switch_taken_at_task: task.switchTaken ? task.switchTakenAtTask : null,
+    switch_taken_at_time: task.switchTaken ? task.switchTakenAtTime : null,
+    forfeit_taken:  task.forfeitTaken ? 1 : 0,
+    forfeit_taken_at_task: task.forfeitTaken ? task.forfeitTakenAtTask : null,
+    forfeit_taken_at_time: task.forfeitTaken ? task.forfeitTakenAtTime : null,
+    n_tasks_done:  nTasksDone,
+    earnings:      task.earnings,
+    grid_pay:      gridPay,
+    penalty:       S.penalty,
+    total_targets: totalTargets,
+    total_found:   totalFound,
+    total_false_pos: totalFalsePos,
+    total_missed:  totalMissed,
+    seq_reload_count: seqReloads,
+    start_at:      task.startAt || null,
+    seq_start_at_time: task.startAt || null, // explicit alias of start_at, requested by name
+    end_at:        new Date().toISOString(),
+    grids:         grids,
+    seq_frame_treatment: SESSION.nSeqFrame || 5,
+    seq_is_bonus:  isBonusIdx_(task.index) ? 1 : 0,
+  });
+
+  const H={ completed:'✓ Task complete!', switched:'Sequence complete', forfeited:'Task forfeited.' };
+  const M={
+    completed: `You completed the main sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
+    switched:  task.forcedOutside
+      ? `The main sequence didn't end within the window, so you were automatically switched to the alternative — which you've now completed. You earned <strong>£${task.pay.toFixed(2)}</strong>.`
+      : `You completed the alternative sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
+    forfeited: `No bonus earned for this task.`,
+  };
+  el('tc-h').textContent  = H[outcome];
+  el('tc-msg').innerHTML  = M[outcome];
+  showScreen('task-complete');
+
+  saveProgress(false);
+}
+
+function nextTask(){
+  S.taskIdx++;
+  S.subtaskDone=0; S.phase='main'; S.offerShown=false; S.switchAvailable=false;
+  S.altFlashing=false; S.altStartPos=0;
+  if(S.taskIdx>=CFG.numTasks){ showResults(); }
+  else { gracePeriod(()=>startTask()); }
+}
+
+// ── RESULTS ───────────────────────────────────────────────────────
+const SHOW_UP_FEE = 1.50; // fixed Prolific base payment — never varies with performance
+
+function showResults(){
+  const trainingBonus = SESSION.trainingBonus||0;
+  let totalSectionBonus=0, totalPenalty=0;
+
+  S.log.forEach(r=>{
+    totalSectionBonus += r.earnings;
+    totalPenalty += (r.penalty||0);
+  });
+
+  // Two separate payment streams: the bonus reward (training bonus +
+  // section completion bonuses, net of mistake penalties — manually
+  // approved) and the show-up fee (fixed Prolific base pay, paid
+  // immediately, untouched by penalties or performance).
+  const bonusReward = Math.round((trainingBonus + totalSectionBonus - totalPenalty)*100)/100;
+  const showUpFee   = SHOW_UP_FEE;
+
+  el('res-bonus-line').textContent = 'Your bonus reward: £'+bonusReward.toFixed(2);
+  el('res-showup-line').textContent = 'Your show up fee: £'+showUpFee.toFixed(2);
+
+  showScreen('results');
+  completeStudy_();
+}
+
+// ── COMPLETION FLOW ───────────────────────────────────────────────
+async function completeStudy_(){
+  el('results-saving').style.display='flex';
+  el('results-saved').style.display='none';
+  el('results-error').style.display='none';
+
+  const {study_level, sections} = buildFullData_();
+  const ok = await postToBackend_({
+    action: 'complete',
+    pid: _prolificID, study_id: _studyID, session_id: _sessionID,
+    study_level, sections
+  }, 5);
+
+  el('results-saving').style.display='none';
+  if(ok){
+    el('results-saved').style.display='block';
+    try{ localStorage.removeItem('wtstudy_resume_' + (_prolificID||'anon')); } catch(e){}
+    prolificRedirect_();
+  } else {
+    el('results-error-code').textContent = 'ERR-' + Date.now().toString(36).toUpperCase();
+    el('results-error').style.display='block';
+  }
+}
+
+function retryComplete_(){
+  completeStudy_();
+}
+
+function prolificRedirect_(){
+  if(_demoMode >= 2){
+    console.log('[Demo] Would redirect to Prolific cc=' + COMPLETION_CODE);
+    return;
+  }
+  window.open('https://app.prolific.com/submissions/complete?cc=' + COMPLETION_CODE, '_blank');
+}
+
+function downloadDataBackup(){
+  const data = buildFullData_();
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='wt_study_backup_' + (_prolificID||'unknown') + '.json';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ── DEBUG ─────────────────────────────────────────────────────────
+// Lives in the shared debug bar (not inline on the survey screens) — shown
+// only while one of the two survey screens is actually active, updated from
+// showScreen() so it tracks navigation automatically.
+function updateDebugSurveySkipBtn_(){
+  const btn = el('debug-skip-survey-btn');
+  if(!btn) return;
+  const onSurvey = document.getElementById('screen-survey').classList.contains('active')
+    || document.getElementById('screen-survey2').classList.contains('active');
+  btn.style.display = (S.debugMode && onSurvey) ? 'inline-block' : 'none';
+}
+
+// Skips the entire training walkthrough (any step — before the live round,
+// during it, doesn't matter) straight into the real experiment, independent
+// of debugSkipSurvey() — the two are separate testing shortcuts, so either
+// can be skipped without the other.
+function updateDebugTrainingSkipBtn_(){
+  const btn = el('debug-skip-training-btn');
+  if(btn) btn.style.display = (S.debugMode && trainingActive) ? 'inline-block' : 'none';
+}
+function debugSkipTraining(){
+  if(!S.debugMode || !trainingActive) return;
+  finishTraining();
+}
+
+function debugSkipTask(){
+  if(!S.debugMode) return;
+  if(trainLive){ trainLiveFinish_('continue'); return; } // training's live practice round — S.tasks doesn't exist yet, so skip straight to the end instead
+  kill(); proceedAfterSubmit();
+}
+function debugSkipSection(){
+  if(!S.debugMode) return;
+  if(trainLive){ trainLiveFinish_('continue'); return; } // no separate "section" concept in training — same as Skip task
+  kill(); endTask('completed');
+}
+let _debugStopped=false;
+function debugStop(){
+  if(!S.debugMode || trainLive) return; // training's timers aren't tracked by kill()/startSubtask() — not supported here
+  _debugStopped=!_debugStopped;
+  if(_debugStopped){ kill(); el('debug-stop-btn').textContent='Resume'; el('debug-stop-btn').style.background='#ffd'; }
+  else{ el('debug-stop-btn').textContent='Stop'; el('debug-stop-btn').style.background='#fff7cc'; startSubtask(); }
+}
+
+// ── INIT ─────────────────────────────────────────────────────────
+window.addEventListener('load', ()=>{
+  redrawProg();
+  bootstrapApp();
+});
+window.addEventListener('resize', ()=>{
+  if(trainingActive){
+    drawTrainingProg(trainStep);
+    if(trainStep>=TRAIN_FIRST_SUBTASK_STEP) positionCaptionBox(TRAIN_STEPS[trainStep].pos || 'right');
+  } else redrawProg();
+});
+</script>
+</body>
+</html>

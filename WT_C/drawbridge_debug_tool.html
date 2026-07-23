@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Drawbridge — Sequence Designer / Debug Tool</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+:root{
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b; --warn:#d4860a; --bdr:#d8d4c8;
+  --mono:'IBM Plex Mono',ui-monospace,monospace; --sans:-apple-system,'Segoe UI',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;}
+#app{max-width:1400px;margin:0 auto;padding:1rem;}
+h1{font-family:var(--mono);font-size:1.15rem;margin-bottom:.15rem;}
+.sub{font-family:var(--mono);font-size:.7rem;color:var(--ink2);margin-bottom:.9rem;}
+.grid{display:grid;grid-template-columns:340px 1fr;gap:1rem;align-items:start;}
+@media(max-width:980px){.grid{grid-template-columns:1fr;}}
+.card{background:var(--sur);border:1px solid var(--bdr);padding:.9rem 1rem;position:relative;margin-bottom:1rem;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--red);}
+.card h2{font-family:var(--mono);font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin-bottom:.6rem;border-bottom:1px solid var(--bdr);padding-bottom:.4rem;}
+.frow{display:flex;align-items:center;gap:.4rem;margin-bottom:.45rem;}
+.frow label{font-family:var(--mono);font-size:.68rem;width:88px;flex-shrink:0;color:var(--ink2);}
+.frow input[type=number]{width:64px;font-family:var(--mono);font-size:.75rem;padding:.25rem .35rem;border:1.5px solid var(--bdr);background:var(--bg);color:var(--ink);}
+.frow input[type=range]{flex:1;}
+.frow .lockwrap{display:flex;align-items:center;gap:.25rem;font-family:var(--mono);font-size:.6rem;color:var(--ink2);margin-left:.3rem;}
+.radio-row{display:flex;gap:1rem;font-family:var(--mono);font-size:.72rem;margin-bottom:.5rem;}
+.radio-row label{display:flex;align-items:center;gap:.3rem;}
+.btn{font-family:var(--mono);font-size:.68rem;letter-spacing:.04em;padding:.4rem .8rem;
+  border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;
+  text-transform:uppercase;margin:.15rem .25rem .15rem 0;display:inline-block;}
+.btn:hover:not(:disabled){background:transparent;color:var(--ink);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--ink);}
+.btn-outline:hover:not(:disabled){background:var(--ink);color:var(--bg);}
+.btn-red{border-color:var(--red);background:var(--red);color:#fff;}
+.btn-red:hover:not(:disabled){background:transparent;color:var(--red);}
+.btn-blue{border-color:var(--blue);background:var(--blue);color:#fff;}
+.btn-blue:hover:not(:disabled){background:transparent;color:var(--blue);}
+.btn-grn{border-color:var(--grn);background:var(--grn);color:#fff;}
+.btn-grn:hover:not(:disabled){background:transparent;color:var(--grn);}
+.btn-warn{border-color:var(--warn);background:var(--warn);color:#fff;}
+.btn-warn:hover:not(:disabled){background:transparent;color:var(--warn);}
+table.derived{width:100%;border-collapse:collapse;font-family:var(--mono);font-size:.68rem;}
+table.derived td{padding:.22rem .3rem;border-bottom:1px solid var(--bdr);}
+table.derived td:first-child{color:var(--ink2);}
+table.derived td:last-child{text-align:right;font-weight:600;}
+tr.warn td{color:var(--warn);}
+tr.bad td{color:var(--red);}
+canvas#diagram{width:100%;height:230px;display:block;border:1px solid var(--bdr);background:var(--sur);}
+.scrub-row{display:flex;align-items:center;gap:.5rem;margin-top:.5rem;}
+.scrub-row label{font-family:var(--mono);font-size:.65rem;color:var(--ink2);white-space:nowrap;}
+.scrub-info{font-family:var(--mono);font-size:.62rem;color:var(--ink2);margin-top:.3rem;line-height:1.5;}
+.badge{display:inline-block;font-family:var(--mono);font-size:.6rem;padding:.1rem .4rem;border:1px solid var(--bdr);border-radius:2px;margin-right:.3rem;}
+.badge.on{background:var(--blue);color:#fff;border-color:var(--blue);}
+.pill-row{display:flex;flex-wrap:wrap;gap:.3rem;margin-top:.4rem;}
+
+/* run screen */
+#runArea{display:none;}
+#runArea.active{display:block;}
+.stats-strip{display:flex;border:1px solid var(--bdr);margin-bottom:.8rem;}
+.sc{flex:1;padding:.4rem .55rem;border-right:1px solid var(--bdr);}
+.sc:last-child{border-right:none;}
+.sv{font-family:var(--mono);font-size:.85rem;font-weight:600;}
+.sl{font-family:var(--mono);font-size:.55rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);}
+.grid-outer{display:flex;justify-content:center;margin:.8rem 0;}
+.grid-box{border:1px solid var(--bdr);padding:8px;background:var(--sur);display:inline-block;}
+.grow-el{display:flex;gap:4px;margin-bottom:4px;}
+.grow-el:last-child{margin-bottom:0;}
+.ecell{width:38px;height:38px;display:flex;align-items:center;justify-content:center;
+  font-size:1.15rem;border:1px solid var(--bdr);background:var(--sur);border-radius:3px;
+  cursor:default;line-height:1;user-select:none;}
+.ecell.ph{color:#ccc;font-size:.8rem;}
+.ecell.live{cursor:pointer;}
+.ecell.live:hover{border-color:var(--ink);}
+.ecell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
+.target-line{font-family:var(--mono);font-size:.8rem;text-align:center;margin-bottom:.3rem;}
+.countdown{font-family:var(--mono);font-size:.7rem;text-align:center;color:var(--red);margin-top:.4rem;}
+.offer-box{border:1.5px solid var(--blue);padding:.9rem 1.1rem;margin:.7rem 0;}
+.offer-box h3{font-family:var(--mono);font-size:.8rem;margin-bottom:.4rem;}
+.log-box{max-height:180px;overflow-y:auto;font-family:var(--mono);font-size:.62rem;
+  border:1px solid var(--bdr);padding:.5rem;background:var(--bg);line-height:1.6;}
+.log-box div.evt-offer{color:var(--blue);}
+.log-box div.evt-decision{color:var(--red);font-weight:600;}
+.log-box div.evt-end{color:var(--grn);font-weight:600;}
+.result-box{border:1.5px solid var(--grn);padding:.9rem 1.1rem;margin-top:.7rem;}
+.warn-note{font-family:var(--mono);font-size:.65rem;color:var(--warn);margin-top:.3rem;}
+select{font-family:var(--mono);font-size:.7rem;padding:.25rem .4rem;border:1.5px solid var(--bdr);background:var(--bg);}
+
+.bin-editor{display:flex;gap:5px;overflow-x:auto;padding:.6rem .1rem;align-items:flex-end;border:1px solid var(--bdr);background:var(--bg);}
+.bin-col{display:flex;flex-direction:column;align-items:center;gap:.25rem;min-width:24px;}
+.bin-slider{-webkit-appearance:slider-vertical;writing-mode:vertical-lr;direction:rtl;width:8px;height:100px;accent-color:var(--red);}
+.bin-pct{font-family:var(--mono);font-size:.56rem;color:var(--ink2);white-space:nowrap;}
+.bin-pos{font-family:var(--mono);font-size:.58rem;color:var(--ink);font-weight:600;}
+.dist-row{display:flex;gap:1rem;font-family:var(--mono);font-size:.7rem;margin:.5rem 0;}
+.dist-row label{display:flex;align-items:center;gap:.3rem;}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Drawbridge — Sequence Designer / Debug Tool</h1>
+
+  <div class="grid">
+    <!-- LEFT: PARAMETERS -->
+    <div>
+      <div class="card">
+        <h2>Primitive Parameters</h2>
+        <div class="frow"><label>inactive</label><input type="number" id="p-inactive" value="2" min="0" step="1"></div>
+        <div class="frow"><label>window</label><input type="number" id="p-window" value="10" min="1" max="20" step="1"></div>
+        <div class="frow"><label>betaA</label><input type="number" id="p-betaA" value="3" min="1.5" max="5" step="0.1"></div>
+        <div class="frow"><label>betaB</label><input type="number" id="p-betaB" value="3" min="1.5" max="5" step="0.1"></div>
+        <div class="frow"><label>P(inside window) %</label><input type="number" id="p-pinside" value="70" min="0" max="100" step="1"></div>
+        <div class="scrub-info" id="poutside-note">P(outside window) = <span id="poutside-val">30</span>%. If the task doesn't finish inside the window, the participant is forced to take the full alternative (forced switch at barHi).</div>
+        <div class="dist-row">
+          <label><input type="radio" name="distmode" value="beta" checked> Beta (auto)</label>
+          <label><input type="radio" name="distmode" value="manual"> Manual (edit cells)</label>
+        </div>
+        <div id="bin-editor-wrap" style="display:none;">
+          <div class="pill-row">
+            <button class="btn btn-outline" id="btn-bin-equalize">Equalize</button>
+            <button class="btn btn-outline" id="btn-bin-bimodal">Bimodal</button>
+            <button class="btn btn-outline" id="btn-bin-gap">Gap</button>
+            <button class="btn btn-outline" id="btn-bin-random">Randomize</button>
+          </div>
+          <div class="bin-editor" id="bin-editor"></div>
+        </div>
+        <div class="radio-row">
+          <label><input type="radio" name="regime" value="1" checked> Regime 1 (nReq→pause)</label>
+          <label><input type="radio" name="regime" value="2"> Regime 2 (pause→nReq)</label>
+        </div>
+        <div class="pill-row">
+          <button class="btn btn-outline" id="btn-recompute">Recompute</button>
+          <button class="btn" id="btn-randomize">Full Randomize</button>
+          <button class="btn btn-outline" id="btn-reset">Reset Defaults</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Computed Values</h2>
+        <table class="derived" id="derived-table"></table>
+      </div>
+
+      <div class="card">
+        <h2>Debug Options</h2>
+        <div class="frow"><label>Speed</label>
+          <select id="dbg-speed">
+            <option value="normal">Normal timing</option>
+            <option value="fast" selected>Fast (4x)</option>
+            <option value="instant">Instant (no reveal)</option>
+          </select>
+        </div>
+        <div class="pill-row">
+          <button class="btn btn-grn" id="btn-start-run">▶ Run Sequence</button>
+          <button class="btn btn-outline" id="btn-skip-subtask" disabled>Skip Subtask</button>
+          <button class="btn btn-outline" id="btn-jump-offer" disabled>Jump to Offer</button>
+          <button class="btn btn-outline" id="btn-jump-end" disabled>Jump to End</button>
+          <button class="btn btn-warn" id="btn-stop-resume" disabled>Stop</button>
+          <button class="btn btn-red" id="btn-reset-run" disabled>Reset Run</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Export</h2>
+        <div class="pill-row">
+          <button class="btn btn-blue" id="btn-export-diagram">Export Diagram PNG</button>
+          <button class="btn btn-blue" id="btn-export-screen">Export Full Screen PNG</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT: DIAGRAM + RUN -->
+    <div>
+      <div class="card">
+        <h2>Sequence Diagram</h2>
+        <canvas id="diagram"></canvas>
+        <div class="scrub-row">
+          <label>Scrub position</label>
+          <input type="range" id="scrub" min="0" max="20" value="0" step="1">
+          <span class="lockwrap" style="font-family:var(--mono);font-size:.65rem;" id="scrub-val">0</span>
+        </div>
+        <div class="scrub-info" id="scrub-info"></div>
+        <div class="pill-row" id="legend">
+          <span class="badge">grey = histogram (P(end=k))</span>
+          <span class="badge">red bar highlight = mode</span>
+          <span class="badge">grey dashed = E[end] at start (unconditional)</span>
+          <span class="badge">blue tick = pause</span>
+          <span class="badge">green dashed = true nReq (hidden from ppt)</span>
+          <span class="badge">orange dotted = E[end | info at pause]</span>
+          <span class="badge">blue line = alt sequence</span>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Derived / Overridable</h2>
+        <div class="frow"><label>pause</label><input type="number" id="v-pause" value="0" min="0" step="1">
+          <span class="lockwrap"><input type="checkbox" id="m-pause"> lock</span></div>
+        <div class="frow"><label>nReq</label><input type="number" id="v-nreq" value="0" min="0" step="1">
+          <span class="lockwrap"><input type="checkbox" id="m-nreq"> lock</span></div>
+        <div class="frow"><label>altDuration</label><input type="number" id="v-alt" value="5" min="1" step="1"></div>
+        <div class="frow"><label>payTasks</label><input type="number" id="v-pay" value="0" min="0" step="1">
+          <span class="lockwrap"><input type="checkbox" id="m-pay"> lock</span></div>
+        <div class="warn-note" id="warn-note" style="display:none;"></div>
+      </div>
+
+      <div class="card" id="runArea">
+        <h2>Live Run</h2>
+        <div class="stats-strip">
+          <div class="sc"><div class="sv" id="run-phase">—</div><div class="sl">phase</div></div>
+          <div class="sc"><div class="sv" id="run-subtask">0</div><div class="sl">subtask done</div></div>
+          <div class="sc"><div class="sv" id="run-target">nReq: —</div><div class="sl">true end</div></div>
+          <div class="sc"><div class="sv" id="run-pause">pause: —</div><div class="sl">offer point</div></div>
+        </div>
+
+        <div id="run-task-block">
+          <div class="target-line">Find and click: <span id="st-target" style="font-size:1.2rem;"></span></div>
+          <div class="grid-outer"><div class="grid-box"><div id="st-grid"></div></div></div>
+          <div class="countdown" id="st-countdown" style="display:none;">Auto-submit in <span id="st-cd-n"></span>s</div>
+        </div>
+
+        <div id="run-offer-block" style="display:none;">
+          <div class="offer-box">
+            <h3>Switch offer</h3>
+            <p style="font-family:var(--mono);font-size:.72rem;line-height:1.6;color:var(--ink2);">
+              You have completed <strong id="offer-sunk">0</strong> subtasks on the main sequence.<br>
+              The alternative sequence takes <strong id="offer-alt">0</strong> more subtasks to complete.
+            </p>
+            <div class="pill-row">
+              <button class="btn btn-outline" id="btn-continue">Continue main task</button>
+              <button class="btn btn-blue" id="btn-switch">Switch to alternative</button>
+              <button class="btn btn-red" id="btn-forfeit">Forfeit section</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="run-result-block" style="display:none;">
+          <div class="result-box">
+            <h3 style="font-family:var(--mono);font-size:.85rem;" id="result-title">—</h3>
+            <p style="font-family:var(--mono);font-size:.72rem;color:var(--ink2);margin-top:.4rem;" id="result-detail"></p>
+          </div>
+        </div>
+
+        <h2 style="margin-top:1rem;">Event log</h2>
+        <div class="log-box" id="log-box"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── CONFIG (mirrors CFG in drawbridge_v6) ──────────────────────────
+const CFG = { gridR:5, gridC:5, revealMs:500, submitSecs:5, winLo:7, winHi:15, BONUS_RATE_PER_TASK:0.043 };
+const EMOJIS = ["😃","😁","😅","😂","🤣","😊","😇","🙂","🙃","😉","😌","😍","🥰","😗","😋",
+  "😝","🤪","😐","😑","😶","😏","😒","🙄","😬","😔","🤤","😴","😷","🤒","🤕",
+  "🤧","🥵","🥴","😵","🤯","🤠","🥳","🤓","🧐","😕","☹️","😮","😳","🥺","😨",
+  "😢","😭","😱","😖","😞","😓","😫","😤","😠","😵‍💫","🤐","🤬","🥸","🤩","🫠","😎","🤑"];
+
+const rnd  = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const shuf = a => { const r=[...a]; for(let i=r.length-1;i>0;i--){const j=rnd(0,i);[r[i],r[j]]=[r[j],r[i]];} return r; };
+
+// ── EXACT MATH FUNCTIONS FROM drawbridge_v6 ────────────────────────
+function lgamma_(z){
+  const g=7, c=[0.99999999999980993,676.5203681218851,-1259.1392167224028,
+    771.32342877765313,-176.61502916214059,12.507343278686905,
+    -0.13857109526572012,9.9843695780195716e-6,1.5056327351493116e-7];
+  if(z<0.5) return Math.log(Math.PI/Math.sin(Math.PI*z)) - lgamma_(1-z);
+  z-=1; let x=c[0]; const t=z+g+0.5;
+  for(let i=1;i<g+2;i++) x+=c[i]/(z+i);
+  return 0.5*Math.log(2*Math.PI) + (z+0.5)*Math.log(t) - t + Math.log(x);
+}
+function betaPDF_(x, a, b, lnB){
+  if(x<=0 || x>=1) return 0;
+  return Math.exp((a-1)*Math.log(x) + (b-1)*Math.log(1-x) - lnB);
+}
+function discretizeBeta_(a, b, nBins){
+  const lnB = lgamma_(a) + lgamma_(b) - lgamma_(a+b);
+  const SUB = 40;
+  const arr = new Array(nBins).fill(0);
+  for(let k=0;k<nBins;k++){
+    let s=0;
+    for(let j=0;j<SUB;j++) s += betaPDF_((k+(j+0.5)/SUB)/nBins, a, b, lnB);
+    arr[k]=s;
+  }
+  const tot = arr.reduce((p,v)=>p+v,0);
+  return tot>0 ? arr.map(v=>v/tot) : arr.map(()=>1/nBins);
+}
+function pmfSample_(pmf){
+  let r=Math.random();
+  for(let k=0;k<pmf.length;k++){ r-=pmf[k]; if(r<=1e-12) return k; }
+  return pmf.length-1;
+}
+function pmfMean_(pmf){
+  let m=0; for(let k=0;k<pmf.length;k++) m+=k*pmf[k];
+  return m;
+}
+function pmfMedianIdx_(pmf){
+  let c=0; for(let k=0;k<pmf.length;k++){ c+=pmf[k]; if(c>=0.5) return k; }
+  return pmf.length-1;
+}
+function pmfTruncateFrom_(pmf, from){
+  const tail = pmf.slice(Math.max(0,from));
+  const s = tail.reduce((p,v)=>p+v,0);
+  return s>0 ? tail.map(v=>v/s) : tail.map(()=>1/tail.length);
+}
+function drawFromPmf_(barLo, pmf){
+  return barLo + pmfSample_(pmf);
+}
+
+// Single formula for "expected task end given survival past position `from`":
+// sums positions barLo..barHi weighted by P(inside)*pmf(bin), plus the forced
+// outside branch (barHi+altDur) weighted by P(outside), renormalized over
+// whatever survives past `from`. Called with from<=barLo to get the
+// unconditional ("at start") expectation, or from=pause for the pause-conditional one.
+function expectedEndGivenSurvival_(barLo, barHi, pmf, from, pInside, pOutside, altDur){
+  const eOutside = barHi + altDur;
+  const fromIdx = Math.max(0, from - barLo);
+  let sumProb = 0, sumWeighted = 0;
+  for(let k=fromIdx; k<pmf.length; k++){
+    const w = pInside*pmf[k];
+    sumWeighted += (barLo+k)*w;
+    sumProb += w;
+  }
+  sumWeighted += eOutside*pOutside;
+  sumProb += pOutside;
+  return sumProb>0 ? sumWeighted/sumProb : eOutside;
+}
+
+// ── SEQUENCE COMPUTATION (mirrors generateTasks() for a single task) ─
+// pInside/pOutside: probability mass that the task resolves inside the
+// window vs. never resolves (forcing a full switch to the alternative at
+// barHi). altDuration is now a single, fully independent parameter (no
+// formula derives it) — it drives BOTH the in-window voluntary-switch
+// alternative AND the forced alt end (barHi + altDuration) if the task
+// never finishes inside the window.
+function computeSequence(prim, manual, locks, pmf){
+  const {inactive, window, betaA, betaB, regime, pInside} = prim;
+  const pOutside = 1 - pInside;
+  const barLo = inactive+1, barHi = inactive+window;
+  const pauseMax = barLo + pmfMedianIdx_(pmf);
+
+  const altDuration = manual.alt;
+  const eOutside = barHi + altDuration;
+
+  let pause, nReq;
+  if(regime===1){
+    nReq  = locks.nReq  ? manual.nReq  : drawFromPmf_(barLo, pmf);
+    pause = locks.pause ? manual.pause : rnd(0, Math.min(nReq, pauseMax));
+  } else {
+    pause = locks.pause ? manual.pause : rnd(0, pauseMax);
+    if(locks.nReq){
+      nReq = manual.nReq;
+    } else if(pause < barLo){
+      nReq = drawFromPmf_(barLo, pmf);
+    } else {
+      const truncPmf = pmfTruncateFrom_(pmf, pause - barLo);
+      nReq = pause + pmfSample_(truncPmf);
+    }
+  }
+
+  // If a (typically manually-entered) nReq falls beyond the window, the task
+  // never actually finishes inside it — the participant is automatically
+  // forced into the alternative at barHi. Rather than flag this as an error,
+  // the effective/true end is shifted to that forced-alt-end point.
+  const isForcedOutside = nReq > barHi;
+  const nReqEffective = isForcedOutside ? eOutside : nReq;
+
+  const switch_cost = pause, adjustment = inactive - pause;
+
+  // Unconditional (at the very start, before any info) and pause-conditional
+  // expectations, both via the same formula.
+  const expectedStartEnd = expectedEndGivenSurvival_(barLo, barHi, pmf, barLo, pInside, pOutside, altDuration);
+  const expectedMainEnd  = expectedEndGivenSurvival_(barLo, barHi, pmf, pause, pInside, pOutside, altDuration);
+  const expectedRemaining = expectedMainEnd - pause;
+
+  const altEnd = pause + altDuration;
+
+  const payTasks = locks.pay ? manual.pay : drawFromPmf_(barLo, pmf);
+  const pay = Math.round(payTasks * CFG.BONUS_RATE_PER_TASK * 100) / 100;
+
+  let modeIdx=0, modeP=pmf[0]||0;
+  for(let k=1;k<pmf.length;k++) if(pmf[k]>modeP){ modeP=pmf[k]; modeIdx=k; }
+  const modeTask = barLo + modeIdx;
+
+  return {inactive, window, betaA, betaB, regime, barLo, barHi, pmf, pauseMax,
+    pInside, pOutside, eOutside,
+    pause, nReq, nReqEffective, isForcedOutside, switch_cost, adjustment,
+    expectedStartEnd, expectedMainEnd, expectedRemaining,
+    altDuration, altEnd, payTasks, pay, modeTask, modeP};
+}
+
+// ── STATE ───────────────────────────────────────────────────────────
+let seq = null;
+let DIST_MODE = 'beta'; // 'beta' | 'manual'
+let manualWeights = [];
+let lastBinWindow = -1;
+function el(id){ return document.getElementById(id); }
+
+function getPmf(prim){
+  if(DIST_MODE==='manual'){
+    ensureManualWeights(prim.window);
+    buildBinEditorIfNeeded(prim.window);
+    const sum = manualWeights.reduce((a,b)=>a+b,0);
+    return sum>0 ? manualWeights.map(w=>w/sum) : manualWeights.map(()=>1/manualWeights.length);
+  }
+  return discretizeBeta_(prim.betaA, prim.betaB, prim.window);
+}
+function ensureManualWeights(window){
+  if(manualWeights.length !== window){
+    const old = manualWeights;
+    manualWeights = Array.from({length:window}, (_,i)=> old[i]!=null ? old[i] : 1);
+  }
+}
+function buildBinEditorIfNeeded(window){
+  if(lastBinWindow === window) return;
+  lastBinWindow = window;
+  const container = el('bin-editor');
+  container.innerHTML='';
+  for(let i=0;i<window;i++){
+    const col=document.createElement('div'); col.className='bin-col';
+    const pct=document.createElement('div'); pct.className='bin-pct'; pct.id='bin-pct-'+i; pct.textContent='0%';
+    const slider=document.createElement('input');
+    slider.type='range'; slider.min='0'; slider.max='100'; slider.value=manualWeights[i];
+    slider.className='bin-slider';
+    slider.addEventListener('input', ()=>{ manualWeights[i]=+slider.value; recompute(); });
+    const pos=document.createElement('div'); pos.className='bin-pos'; pos.id='bin-pos-'+i; pos.textContent=i;
+    col.appendChild(pct); col.appendChild(slider); col.appendChild(pos);
+    container.appendChild(col);
+  }
+}
+function refreshBinSliderValues(){
+  const container = el('bin-editor');
+  Array.from(container.children).forEach((col,i)=>{
+    const slider = col.querySelector('.bin-slider');
+    if(slider && manualWeights[i]!=null) slider.value = manualWeights[i];
+  });
+}
+function updateBinEditorLabels(barLo, pmf){
+  for(let i=0;i<pmf.length;i++){
+    const posEl=el('bin-pos-'+i); if(posEl) posEl.textContent = barLo+i;
+    const pctEl=el('bin-pct-'+i); if(pctEl) pctEl.textContent = (pmf[i]*100).toFixed(1)+'%';
+  }
+}
+
+function readPrimitives(){
+  const rawWindow = +el('p-window').value;
+  const rawPInside = +el('p-pinside').value;
+  const pInsidePct = Math.max(0, Math.min(100, rawPInside));
+  return {
+    inactive: +el('p-inactive').value,
+    window:   Math.max(1, rawWindow),
+    betaA:    +el('p-betaA').value,
+    betaB:    +el('p-betaB').value,
+    regime:   +document.querySelector('input[name=regime]:checked').value,
+    pInside:  pInsidePct/100,
+  };
+}
+function readManual(){
+  return { pause:+el('v-pause').value, nReq:+el('v-nreq').value, alt:+el('v-alt').value, pay:+el('v-pay').value };
+}
+function readLocks(){
+  return { pause:el('m-pause').checked, nReq:el('m-nreq').checked, pay:el('m-pay').checked };
+}
+
+function recompute(){
+  const prim = readPrimitives();
+  const manual = readManual();
+  const locks = readLocks();
+  const pmf = getPmf(prim);
+  seq = computeSequence(prim, manual, locks, pmf);
+  // sync manual fields to reflect computed values (so unlocked fields show current draw)
+  el('v-pause').value = seq.pause;
+  el('v-nreq').value  = seq.nReq;
+  el('v-pay').value   = seq.payTasks;
+  el('poutside-val').textContent = (seq.pOutside*100).toFixed(0);
+  renderDerived();
+  const maxK = Math.max(seq.barHi+2, seq.altEnd+2, seq.eOutside+2);
+  el('scrub').max = maxK;
+  if(+el('scrub').value > maxK) el('scrub').value = 0;
+  renderScrubInfo();
+  renderDiagram();
+  if(DIST_MODE==='manual') updateBinEditorLabels(seq.barLo, seq.pmf);
+}
+
+function fullRandomize(){
+  el('p-inactive').value = rnd(0,5);
+  el('p-window').value   = rnd(1, 20);
+  el('p-betaA').value    = (1.5 + Math.random()*3.5).toFixed(2);
+  el('p-betaB').value    = (1.5 + Math.random()*3.5).toFixed(2);
+  recompute();
+}
+
+function resetDefaults(){
+  el('p-inactive').value=2; el('p-window').value=10; el('p-betaA').value=3; el('p-betaB').value=3;
+  el('p-pinside').value=70;
+  el('v-alt').value=5;
+  document.querySelector('input[name=regime][value="1"]').checked = true;
+  document.querySelector('input[name=distmode][value="beta"]').checked = true;
+  DIST_MODE='beta'; el('p-betaA').disabled=false; el('p-betaB').disabled=false;
+  el('bin-editor-wrap').style.display='none';
+  ['m-pause','m-nreq','m-pay'].forEach(id=>el(id).checked=false);
+  recompute();
+}
+
+function renderDerived(){
+  const rows = [
+    ['barLo', seq.barLo], ['barHi', seq.barHi],
+    ['pauseMax', seq.pauseMax],
+    ['P(inside window)', (seq.pInside*100).toFixed(0)+'%'],
+    ['P(outside window)', (seq.pOutside*100).toFixed(0)+'%'],
+    ['value if outside (barHi+altDuration)', seq.eOutside],
+    ['E[end] at start (unconditional)', seq.expectedStartEnd.toFixed(2)],
+    ['modeTask', seq.modeTask], ['modeP', (seq.modeP*100).toFixed(1)+'%'],
+    ['switch_cost (=pause)', seq.switch_cost],
+    ['adjustment (inactive-pause)', seq.adjustment],
+    ['E[main end | info@pause]', seq.expectedMainEnd.toFixed(2)],
+    ['E[remaining]', seq.expectedRemaining.toFixed(2)],
+    ['altEnd (pause+altDur)', seq.altEnd],
+    ['nReq (true draw)', seq.nReq + (seq.isForcedOutside ? ' → forced outside' : '')],
+    ['effective end (capped)', seq.nReqEffective],
+    ['pay', '£'+seq.pay.toFixed(2)+' ('+seq.payTasks+' tasks)'],
+  ];
+  const tbl = el('derived-table');
+  tbl.innerHTML = rows.map(([k,v])=>`<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+
+  const warns = [];
+  if(seq.nReq < seq.pause) warns.push('nReq < pause: task would already have ended before the offer — inconsistent.');
+  if(seq.pause > seq.pauseMax) warns.push('pause > pauseMax: exceeds the median-position cap normally enforced by generateTasks().');
+  const wn = el('warn-note');
+  if(warns.length){ wn.style.display='block'; wn.textContent = '⚠ ' + warns.join(' '); }
+  else wn.style.display='none';
+}
+
+// ── DIAGRAM ─────────────────────────────────────────────────────────
+function drawStickman(ctx,cx,yBase,sz){
+  ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.arc(cx,yBase-sz*1.8,sz*0.55,0,Math.PI*2); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,yBase-sz*1.25); ctx.lineTo(cx,yBase-sz*0.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx-sz*0.6,yBase-sz); ctx.lineTo(cx+sz*0.6,yBase-sz); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx,yBase-sz*0.5); ctx.lineTo(cx-sz*0.5,yBase);
+    ctx.moveTo(cx,yBase-sz*0.5); ctx.lineTo(cx+sz*0.5,yBase); ctx.stroke();
+}
+
+function renderDiagram(liveStick){
+  const canvas = el('diagram');
+  const dpr = window.devicePixelRatio||1;
+  const W = canvas.clientWidth||600, H = 230;
+  canvas.width = W*dpr; canvas.height = H*dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+  ctx.clearRect(0,0,W,H);
+  if(!seq) return;
+
+  const {barLo,barHi,pmf,pause,nReq,nReqEffective,isForcedOutside,altEnd,pauseMax,expectedMainEnd,modeTask,pInside,pOutside,altDuration} = seq;
+  const outsideEndPos = barHi + altDuration;
+  const maxK = Math.max(barHi+2, altEnd+2, outsideEndPos+2);
+  const padL=14, padR=14;
+  const tickW = (W-padL-padR)/(maxK+1);
+  const tx = k => padL + k*tickW;
+
+  const FONT='9px monospace', LABCLR='#5a5a54';
+  const mainTop=30, mainBarH=70, mainBase=mainTop+mainBarH;
+  const numY = mainBase+16;
+  const altBase = numY+22, altLblY = altBase+12;
+
+  // histogram — bar heights reflect the shape WITHIN the window only
+  // (pmf[k], conditional on being inside). The window box as a whole is
+  // labeled with the overall P(inside) so the two pieces of information
+  // (shape vs. total mass) don't get conflated in a single bar height.
+  let maxP=0, modeK=0;
+  for(let k=0;k<pmf.length;k++) if(pmf[k]>maxP){ maxP=pmf[k]; modeK=k; }
+  for(let k=0;k<pmf.length;k++){
+    const bx0=tx(barLo+k)-tickW/2, bx1=tx(barLo+k)+tickW/2;
+    const h = maxP>0 ? Math.max(1,(pmf[k]/maxP)*mainBarH) : 0;
+    ctx.fillStyle='#c84b2f'; ctx.globalAlpha = (k===modeK) ? 0.42 : 0.16;
+    ctx.fillRect(bx0, mainBase-h, Math.max(1,bx1-bx0-1), h);
+  }
+  ctx.globalAlpha=1;
+  ctx.strokeStyle='#c84b2f'; ctx.lineWidth=1;
+  ctx.strokeRect(tx(barLo)-tickW/2+0.5, mainTop+0.5, tx(barHi)-tx(barLo)+tickW-1, mainBarH-1);
+  ctx.fillStyle='#c84b2f'; ctx.font=FONT; ctx.textAlign='center';
+  ctx.fillText(Math.round(maxP*100)+'% likely @ '+modeTask, tx(barLo+modeK), mainTop-8);
+  ctx.fillStyle='#c84b2f'; ctx.font='9px monospace'; ctx.textAlign='right';
+  ctx.fillText('P(inside window)='+Math.round(pInside*100)+'%', tx(barHi)+tickW/2, mainTop-20);
+
+  // forced alt end marker: if the task never finishes inside the window, the
+  // participant is forced into the alternative at barHi. Always shown as a
+  // structural reference point (not a probability visual).
+  ctx.strokeStyle='#7a4fae'; ctx.lineWidth=1.5; ctx.setLineDash([1,3]);
+  ctx.beginPath(); ctx.moveTo(tx(outsideEndPos),mainTop-6); ctx.lineTo(tx(outsideEndPos),mainBase+8); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#7a4fae'; ctx.font='8px monospace'; ctx.textAlign='center';
+  ctx.fillText('forced alt end='+outsideEndPos, tx(outsideEndPos), mainBase+44);
+
+  // base axis
+  ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(tx(0),mainBase); ctx.lineTo(W-padR,mainBase); ctx.stroke();
+  ctx.fillStyle=LABCLR; ctx.font=FONT; ctx.textAlign='left';
+  ctx.fillText('Main sequence', tx(0), mainTop-8);
+  for(let k=0;k<=maxK;k++){
+    ctx.strokeStyle='#1a1a18'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(tx(k),mainBase); ctx.lineTo(tx(k),mainBase+4); ctx.stroke();
+    if(tickW>12||k%2===0){ ctx.fillStyle=LABCLR; ctx.font=FONT; ctx.textAlign='center'; ctx.fillText(k, tx(k), numY); }
+  }
+
+  // expected end at start (unconditional), dashed grey
+  ctx.strokeStyle='#888'; ctx.lineWidth=1.5; ctx.setLineDash([2,2]);
+  ctx.beginPath(); ctx.moveTo(tx(seq.expectedStartEnd),mainTop-14); ctx.lineTo(tx(seq.expectedStartEnd),mainBase); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#777'; ctx.font='8px monospace'; ctx.textAlign='center';
+  ctx.fillText('E[end]@start='+seq.expectedStartEnd.toFixed(1), tx(seq.expectedStartEnd), mainTop-16);
+
+  // pause: blue solid tick
+  ctx.strokeStyle='#2f6fc8'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(tx(pause),mainTop-6); ctx.lineTo(tx(pause),mainBase+8); ctx.stroke();
+  ctx.fillStyle='#2f6fc8'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('pause='+pause, tx(pause), mainBase+20);
+
+  // nReq: green dashed (true end, hidden from participant). If the raw draw
+  // falls beyond barHi, the task never finished inside the window — shift
+  // the marker to the forced alt end instead of erroring.
+  ctx.strokeStyle='#2a7a4b'; ctx.lineWidth=2; ctx.setLineDash([4,3]);
+  ctx.beginPath(); ctx.moveTo(tx(nReqEffective),mainTop-6); ctx.lineTo(tx(nReqEffective),mainBase+8); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#2a7a4b'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText(isForcedOutside ? 'forced (nReq='+nReq+')' : 'nReq='+nReq, tx(nReqEffective), mainTop-24);
+
+  // expected main end: orange dotted
+  ctx.strokeStyle='#d4860a'; ctx.lineWidth=1.5; ctx.setLineDash([1,3]);
+  ctx.beginPath(); ctx.moveTo(tx(expectedMainEnd),mainTop-6); ctx.lineTo(tx(expectedMainEnd),mainBase+8); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#d4860a'; ctx.font='8px monospace'; ctx.textAlign='center';
+  ctx.fillText('E[end]', tx(expectedMainEnd), mainBase+30);
+
+  // stick figure (scrub or live)
+  const stickPos = liveStick!=null ? liveStick : +el('scrub').value;
+  if(stickPos<=Math.max(nReq,pause,barHi)){
+    if(stickPos<=barHi || stickPos<=nReq) drawStickman(ctx, tx(Math.min(stickPos,maxK)), mainBase-1, 9);
+  }
+
+  // alt sequence
+  ctx.strokeStyle='#2f6fc8'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(tx(pause),altBase); ctx.lineTo(tx(altEnd),altBase); ctx.stroke();
+  for(let k=pause;k<=altEnd;k++){
+    ctx.strokeStyle='#2f6fc8'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(tx(k),altBase); ctx.lineTo(tx(k),altBase+4); ctx.stroke();
+  }
+  ctx.strokeStyle='#2f6fc8'; ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(tx(altEnd),altBase-3); ctx.lineTo(tx(altEnd),altBase+6); ctx.stroke();
+  ctx.fillStyle='#2f6fc8'; ctx.font=FONT; ctx.textAlign='left';
+  ctx.fillText('Alternative sequence (from pause)', tx(0), altLblY);
+  ctx.fillStyle='#2f6fc8'; ctx.font='9px monospace'; ctx.textAlign='center';
+  ctx.fillText('altEnd='+altEnd, tx(altEnd), altBase+16);
+}
+
+function renderScrubInfo(){
+  const k = +el('scrub').value;
+  el('scrub-val').textContent = k;
+  if(!seq) return;
+  const parts = [];
+  parts.push('At subtask '+k+': ');
+  if(k < seq.pause) parts.push('before the offer point (no offer yet).');
+  else if(k === seq.pause) parts.push('this is the OFFER point — switch screen would appear here.');
+  else parts.push('after the offer point.');
+  if(k >= seq.nReq) parts.push(' Main task would already have ENDED (true nReq='+seq.nReq+', hidden from participant).');
+  if(k >= seq.pause && k <= seq.altEnd) parts.push(' Alt sequence remaining if switched at pause: '+(seq.altEnd-k)+' subtasks.');
+  el('scrub-info').textContent = parts.join('');
+}
+
+// ── WIRING: parameter panel ─────────────────────────────────────────
+['p-inactive','p-window','p-betaA','p-betaB','p-pinside'].forEach(id=>el(id).addEventListener('input', recompute));
+document.querySelectorAll('input[name=regime]').forEach(r=>r.addEventListener('change', recompute));
+
+// ── DISTRIBUTION SOURCE: beta vs manual per-cell density ────────────
+document.querySelectorAll('input[name=distmode]').forEach(r=>r.addEventListener('change', ()=>{
+  DIST_MODE = document.querySelector('input[name=distmode]:checked').value;
+  const manual = DIST_MODE==='manual';
+  el('p-betaA').disabled = manual; el('p-betaB').disabled = manual;
+  el('bin-editor-wrap').style.display = manual ? 'block' : 'none';
+  if(manual) lastBinWindow = -1; // force rebuild so positions/count are current
+  recompute();
+}));
+el('btn-bin-equalize').addEventListener('click', ()=>{
+  const w = readPrimitives().window;
+  ensureManualWeights(w);
+  manualWeights = manualWeights.map(()=>1);
+  refreshBinSliderValues(); recompute();
+});
+el('btn-bin-bimodal').addEventListener('click', ()=>{
+  const w = readPrimitives().window;
+  ensureManualWeights(w);
+  const peak1=w*0.25, peak2=w*0.75, spread=Math.max(0.6, w*0.12);
+  manualWeights = Array.from({length:w},(_,i)=>{
+    const g1=Math.exp(-0.5*((i-peak1)/spread)**2), g2=Math.exp(-0.5*((i-peak2)/spread)**2);
+    return Math.max(1, Math.round((g1+g2)*100));
+  });
+  refreshBinSliderValues(); recompute();
+});
+el('btn-bin-gap').addEventListener('click', ()=>{
+  const w = readPrimitives().window;
+  ensureManualWeights(w);
+  manualWeights = Array.from({length:w},(_,i)=>{
+    const inGap = i > w*0.35 && i < w*0.65;
+    return inGap ? 0 : 20;
+  });
+  refreshBinSliderValues(); recompute();
+});
+el('btn-bin-random').addEventListener('click', ()=>{
+  const w = readPrimitives().window;
+  ensureManualWeights(w);
+  manualWeights = Array.from({length:w},()=>rnd(0,100));
+  refreshBinSliderValues(); recompute();
+});
+el('v-alt').addEventListener('input', recompute);
+[['v-pause','m-pause'],['v-nreq','m-nreq'],['v-pay','m-pay']].forEach(([vid,mid])=>{
+  el(vid).addEventListener('input', ()=>{ el(mid).checked = true; recompute(); });
+});
+['m-pause','m-nreq','m-pay'].forEach(id=>el(id).addEventListener('change', recompute));
+el('btn-recompute').addEventListener('click', recompute);
+el('btn-randomize').addEventListener('click', fullRandomize);
+el('btn-reset').addEventListener('click', resetDefaults);
+
+el('scrub').addEventListener('input', ()=>{ renderScrubInfo(); renderDiagram(); });
+window.addEventListener('resize', ()=>{ if(seq) renderDiagram(RUN? RUN.stickPos : null); });
+
+// ── LIVE RUN ────────────────────────────────────────────────────────
+let RUN = null;
+let timers = [];
+function addTimer(h){ timers.push(h); return h; }
+function killTimers(){ timers.forEach(h=>{clearTimeout(h); clearInterval(h);}); timers=[]; }
+
+function speedParams(){
+  const mode = el('dbg-speed').value;
+  if(mode==='instant') return {revealMs:0, submitSecs:0};
+  if(mode==='fast')    return {revealMs:Math.round(CFG.revealMs/4), submitSecs:1};
+  return {revealMs:CFG.revealMs, submitSecs:CFG.submitSecs};
+}
+
+function log(msg, cls){
+  const box = el('log-box');
+  const d = document.createElement('div');
+  if(cls) d.className = cls;
+  const t = new Date().toLocaleTimeString();
+  d.textContent = '['+t+'] '+msg;
+  box.appendChild(d);
+  box.scrollTop = box.scrollHeight;
+}
+
+function setRunUIEnabled(running){
+  ['p-inactive','p-window','p-betaA','p-betaB','p-pinside','v-pause','v-nreq','v-alt','v-pay',
+   'm-pause','m-nreq','m-pay','btn-recompute','btn-randomize','btn-reset']
+    .forEach(id=>el(id).disabled = running);
+  document.querySelectorAll('input[name=regime]').forEach(r=>r.disabled=running);
+  el('btn-start-run').disabled = running;
+  el('btn-skip-subtask').disabled = !running;
+  el('btn-jump-offer').disabled = !running;
+  el('btn-jump-end').disabled = !running;
+  el('btn-stop-resume').disabled = !running;
+  el('btn-reset-run').disabled = !running;
+}
+
+function startRun(){
+  if(!seq) recompute();
+  RUN = { phase:'main', subtaskDone:0, altDone:0, offerShown:false, stopped:false, stickPos:0 };
+  el('runArea').classList.add('active');
+  el('run-offer-block').style.display='none';
+  el('run-result-block').style.display='none';
+  el('run-task-block').style.display='block';
+  el('log-box').innerHTML='';
+  el('run-target').textContent = 'nReq: '+seq.nReq;
+  el('run-pause').textContent = 'pause: '+seq.pause;
+  setRunUIEnabled(true);
+  log('Run started. inactive='+seq.inactive+' window='+seq.window+' regime='+seq.regime+
+      ' barLo='+seq.barLo+' barHi='+seq.barHi+' pause='+seq.pause+' nReq='+seq.nReq+' altDuration='+seq.altDuration);
+  updateRunStats();
+  if(seq.pause===0){ RUN.offerShown=true; log('pause=0 → immediate offer', 'evt-offer'); showOffer(); }
+  else runStartSubtask();
+}
+
+function updateRunStats(){
+  el('run-phase').textContent = RUN.phase;
+  el('run-subtask').textContent = RUN.phase==='alt' ? RUN.altDone : RUN.subtaskDone;
+  RUN.stickPos = RUN.phase==='alt' ? seq.pause + RUN.altDone : RUN.subtaskDone;
+  renderDiagram(RUN.stickPos);
+}
+
+function runStartSubtask(){
+  killTimers();
+  if(RUN.stopped) return;
+  const {revealMs, submitSecs} = speedParams();
+  const ROWS=CFG.gridR, COLS=CFG.gridC, TOTAL=ROWS*COLS;
+  const target = pick(EMOJIS);
+  const nT = rnd(3,6);
+  const pool = shuf(EMOJIS.filter(e=>e!==target)).slice(0, TOTAL-nT);
+  const gridVals = shuf([...Array(nT).fill(target), ...pool]);
+  el('st-target').textContent = target;
+  el('st-countdown').style.display='none';
+
+  const gridEl = el('st-grid');
+  gridEl.innerHTML='';
+  for(let r=0;r<ROWS;r++){
+    const row=document.createElement('div'); row.className='grow-el'; row.id='rrow'+r;
+    for(let c=0;c<COLS;c++){ const cell=document.createElement('div'); cell.className='ecell ph'; cell.textContent='·'; row.appendChild(cell); }
+    gridEl.appendChild(row);
+  }
+
+  if(revealMs===0){
+    for(let i=0;i<TOTAL;i++){
+      const r=Math.floor(i/COLS), c=i%COLS;
+      const cell = el('rrow'+r).children[c];
+      cell.classList.remove('ph'); cell.classList.add('live'); cell.textContent = gridVals[i];
+      cell.onclick=()=>cell.classList.toggle('selected');
+    }
+    runShowSubmit(submitSecs);
+  } else {
+    for(let i=0;i<TOTAL;i++){
+      const _i=i, _r=Math.floor(i/COLS), _c=i%COLS;
+      addTimer(setTimeout(()=>{
+        const rowEl=el('rrow'+_r); if(!rowEl) return;
+        const cell=rowEl.children[_c]; if(!cell) return;
+        cell.classList.remove('ph'); cell.classList.add('live'); cell.textContent = gridVals[_i];
+        cell.onclick=()=>cell.classList.toggle('selected');
+        if(_i===TOTAL-1) runShowSubmit(submitSecs);
+      }, (_i+1)*revealMs));
+    }
+  }
+}
+
+function runShowSubmit(submitSecs){
+  if(submitSecs<=0){ runSubtaskComplete(); return; }
+  const cd=el('st-countdown'), cdn=el('st-cd-n');
+  cd.style.display='block'; let left=submitSecs; cdn.textContent=left;
+  addTimer(setInterval(()=>{
+    left--; cdn.textContent=left;
+    if(left<=0){ killTimers(); cd.style.display='none'; runSubtaskComplete(); }
+  },1000));
+}
+
+function runSubtaskComplete(){
+  if(RUN.stopped) return;
+  if(RUN.phase==='main'){
+    RUN.subtaskDone++;
+    log('Main subtask '+RUN.subtaskDone+' complete.');
+    updateRunStats();
+    if(!RUN.offerShown && RUN.subtaskDone===seq.pause){
+      RUN.offerShown=true; log('Offer point reached (subtask '+RUN.subtaskDone+').', 'evt-offer'); showOffer(); return;
+    }
+    if(RUN.subtaskDone>=seq.nReq){ endRun('completed'); return; }
+    runStartSubtask();
+  } else if(RUN.phase==='alt'){
+    RUN.altDone++;
+    log('Alt subtask '+RUN.altDone+' complete.');
+    updateRunStats();
+    if(RUN.altDone>=seq.altDuration){ endRun('switched'); return; }
+    runStartSubtask();
+  }
+}
+
+function showOffer(){
+  killTimers();
+  el('run-task-block').style.display='none';
+  el('run-offer-block').style.display='block';
+  el('offer-sunk').textContent = RUN.subtaskDone;
+  el('offer-alt').textContent = seq.altDuration;
+  el('btn-forfeit').disabled = RUN.subtaskDone < seq.barLo;
+  updateRunStats();
+}
+
+el('btn-continue').addEventListener('click', ()=>{
+  log('Decision: CONTINUE main task.', 'evt-decision');
+  el('run-offer-block').style.display='none';
+  el('run-task-block').style.display='block';
+  runStartSubtask();
+});
+el('btn-switch').addEventListener('click', ()=>{
+  log('Decision: SWITCH to alternative.', 'evt-decision');
+  RUN.phase='alt'; RUN.altDone=0;
+  el('run-offer-block').style.display='none';
+  el('run-task-block').style.display='block';
+  updateRunStats();
+  runStartSubtask();
+});
+el('btn-forfeit').addEventListener('click', ()=>{
+  log('Decision: FORFEIT section.', 'evt-decision');
+  endRun('forfeited');
+});
+
+function endRun(outcome){
+  killTimers();
+  RUN.phase='done';
+  el('run-task-block').style.display='none';
+  el('run-offer-block').style.display='none';
+  el('run-result-block').style.display='block';
+  const earn = outcome==='completed' ? seq.pay : 0;
+  el('result-title').textContent = 'Outcome: '+outcome.toUpperCase();
+  el('result-detail').textContent = 'Main subtasks done: '+RUN.subtaskDone+
+    (RUN.phase==='alt'||outcome==='switched' ? (' | Alt subtasks done: '+RUN.altDone) : '') +
+    ' | Earnings: £'+earn.toFixed(2);
+  log('Run ended: '+outcome+'.', 'evt-end');
+  updateRunStats();
+  setRunUIEnabled(false);
+  el('btn-reset-run').disabled = false;
+  el('btn-stop-resume').disabled = true;
+}
+
+el('btn-start-run').addEventListener('click', startRun);
+el('btn-skip-subtask').addEventListener('click', ()=>{
+  if(!RUN || RUN.phase==='done') return;
+  log('DEBUG: skip subtask.');
+  killTimers();
+  el('st-countdown').style.display='none';
+  runSubtaskComplete();
+});
+el('btn-jump-offer').addEventListener('click', ()=>{
+  if(!RUN || RUN.offerShown || RUN.phase!=='main') return;
+  log('DEBUG: jump to offer.');
+  killTimers();
+  RUN.subtaskDone = seq.pause; RUN.offerShown = true;
+  updateRunStats();
+  showOffer();
+});
+el('btn-jump-end').addEventListener('click', ()=>{
+  if(!RUN || RUN.phase==='done') return;
+  log('DEBUG: jump to end.');
+  killTimers();
+  if(RUN.phase==='alt'){ RUN.altDone = seq.altDuration; endRun('switched'); }
+  else { RUN.subtaskDone = seq.nReq; endRun('completed'); }
+});
+el('btn-stop-resume').addEventListener('click', ()=>{
+  if(!RUN || RUN.phase==='done') return;
+  RUN.stopped = !RUN.stopped;
+  if(RUN.stopped){ killTimers(); el('btn-stop-resume').textContent='Resume'; log('DEBUG: stopped.'); }
+  else{ el('btn-stop-resume').textContent='Stop'; log('DEBUG: resumed (subtask restarted).');
+    if(RUN.phase!=='done') runStartSubtask(); }
+});
+el('btn-reset-run').addEventListener('click', ()=>{
+  killTimers(); RUN=null;
+  el('runArea').classList.remove('active');
+  setRunUIEnabled(false);
+  ['btn-skip-subtask','btn-jump-offer','btn-jump-end','btn-stop-resume','btn-reset-run'].forEach(id=>el(id).disabled=true);
+  el('btn-stop-resume').textContent='Stop';
+  renderDiagram();
+});
+
+// ── EXPORT ──────────────────────────────────────────────────────────
+function downloadDataURL(dataURL, filename){
+  const a=document.createElement('a'); a.href=dataURL; a.download=filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+el('btn-export-diagram').addEventListener('click', ()=>{
+  const canvas = el('diagram');
+  downloadDataURL(canvas.toDataURL('image/png'), 'drawbridge_diagram_'+Date.now()+'.png');
+});
+el('btn-export-screen').addEventListener('click', ()=>{
+  if(typeof html2canvas === 'undefined'){
+    alert('html2canvas failed to load (no internet access?). Diagram-only export still works.');
+    return;
+  }
+  html2canvas(document.getElementById('app'), {backgroundColor:'#f5f2eb', scale:2}).then(canvas=>{
+    downloadDataURL(canvas.toDataURL('image/png'), 'drawbridge_screen_'+Date.now()+'.png');
+  });
+});
+
+// ── INIT ────────────────────────────────────────────────────────────
+recompute();
+</script>
+</body>
+</html>
