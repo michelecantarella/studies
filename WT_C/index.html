@@ -437,6 +437,19 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   </div>
 </div>
 
+<!-- Forced-switch notification overlay — blocking, same pattern as
+     confirm-overlay above. Shown the instant triggerForcedSwitch() fires;
+     the alternative sequence does not actually start (no grid, no timer)
+     until this is acknowledged. -->
+<div id="forced-switch-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:100;align-items:center;justify-content:center;">
+  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:420px;width:90%;font-family:var(--mono);">
+    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
+    <div style="font-size:1.1rem;font-weight:700;margin-bottom:1rem;color:var(--ink);">You've been switched to the alternative sequence</div>
+    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1.2rem;">The main sequence didn't end within the window, so you were automatically moved to the alternative — which requires exactly <strong id="forced-switch-alt-n">—</strong> tasks.</p>
+    <button class="btn btn-blue" style="width:100%;" onclick="acknowledgeForcedSwitch_()">Continue →</button>
+  </div>
+</div>
+
 <!-- ═══ SCREEN: Section complete ══════════════════════════════════ -->
 <div id="screen-task-complete" class="screen">
 <div class="wrap"><div class="card">
@@ -576,7 +589,7 @@ if(!_prolificID && _studyID === 'pilot'){
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw1wlhjdJo_68-qWaEiCshFg3ncKoNUo_-nVDKsXeDhjoF_zAyr6roQt-6JOaG77qZA/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxONMKB927ESNu_20VIPkeJCcCayWWrjeduQqAOLnI67rwBsfgLYIP-vC9QnBRUP_Mm/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.026; // scaled down from 0.03 proportionally to the 17.5s→15s task-time change
@@ -1282,6 +1295,10 @@ function buildFullData_(){
     switch_taken:    r.switch_taken,
     switch_taken_at_task: r.switch_taken_at_task,
     switch_taken_at_time: r.switch_taken_at_time,
+    switch_pressed_at_task: r.switch_pressed_at_task,
+    switch_pressed_at_time: r.switch_pressed_at_time,
+    switch_decision_secs: r.switch_decision_secs,
+    alt_phase_started_at: r.alt_phase_started_at,
     forfeit_taken:   r.forfeit_taken,
     forfeit_taken_at_task: r.forfeit_taken_at_task,
     forfeit_taken_at_time: r.forfeit_taken_at_time,
@@ -2350,7 +2367,7 @@ function startTask(resumeSubtaskDone){
     if(!resuming) setTimeout(()=>{ flashSwitchAvailable(); }, 400);
   }
 
-  if(S.phase==='alt' && startAt>=task.altDuration){ endTask('switched'); return; }
+  if(S.phase==='alt' && startAt>=task.altDuration){ endTask(task.forcedOutside ? 'forced switch' : 'switched'); return; }
   if(S.phase==='main' && !task.isForcedOutside && startAt>=task.nReq){ endTask('completed'); return; }
   if(S.phase==='main' && task.isForcedOutside && startAt>=task.barHi){ triggerForcedSwitch(task); return; }
 
@@ -2495,7 +2512,7 @@ function updateStats(){
 // ── SUBMIT MATRIX ─────────────────────────────────────────────────
 function submitMatrix(){
   kill();
-  closeConfirm();
+  hideConfirmOverlay_(); // defensive cleanup only — must not resume via closeConfirm(), see its comment
 
   // "No activity" is about the participant, not the answer — gated on
   // whether the cursor moved at all during this subtask (a real, standard
@@ -2581,7 +2598,7 @@ function proceedAfterSubmit(){
   const task=S.tasks[S.taskIdx];
 
   if(S.phase==='alt' && S.subtaskDone>=task.altDuration){
-    endTask('switched'); return;
+    endTask(task.forcedOutside ? 'forced switch' : 'switched'); return;
   }
 
   if(S.phase==='main' && !S.offerShown && task.pause>=1 && S.subtaskDone===task.pause){
@@ -2679,18 +2696,48 @@ function confirmForfeit(){
 }
 
 // ── CONFIRM OVERLAY ───────────────────────────────────────────────
+// Mirrors openForfeitConfirm()/closeForfeitConfirm() below — kill() the
+// instant the dialog opens, so nothing can auto-progress underneath it
+// while the participant is deciding. Without this, the running subtask's
+// autosubmit timer kept ticking in the background: if it fired before the
+// participant clicked "Confirm switch" — most likely right near the end of
+// a forced-outside section's window — triggerForcedSwitch() could fire
+// first, silently moving them into the forced alt phase and hiding the
+// switch button, while this now-stale confirm dialog stayed on screen.
+// From the participant's side that reads as "I tried to switch and it just
+// didn't work" / "the switch option disappeared" — confirmed from an actual
+// respondent report. The switch offer's own cap (pauseMax = window-3, see
+// generateTasks()) only limits when the automatic banner first appears —
+// once offered, the participant must always be able to act on it for the
+// rest of the section, with no race against the underlying window ending.
 function openOfferScreen(){
   if(!S.switchAvailable) return;
+  kill();
   const task=S.tasks[S.taskIdx];
   if(!S.offerShown){ S.offerShown=true; task.offerAtTask=S.subtaskDone; task.offerAtTime=new Date().toISOString(); }
+  // Recorded every time this opens (not just once), so if the participant
+  // cancels and presses the button again later, this always reflects the
+  // press that actually led to confirming (if they follow through) — see
+  // switch_pressed_at_task/_time and switch_decision_secs in endTask().
+  task.switchPressedAtTask = S.subtaskDone;
+  task.switchPressedAtTime = new Date().toISOString();
   el('confirm-alt-n').textContent=task.altDuration;
   el('confirm-overlay').style.display='flex';
 }
-function closeConfirm(){
+// Hides the overlay only, no resume side-effect — used by confirmSwitch()
+// (decide('switch') itself handles the actual transition) and by
+// submitMatrix()'s defensive cleanup call (which fires on every single
+// grid submission, not just when this overlay happens to be open, so it
+// must never trigger closeConfirm()'s resume-with-a-fresh-subtask below).
+function hideConfirmOverlay_(){
   el('confirm-overlay').style.display='none';
 }
+function closeConfirm(){ // Cancel button only
+  hideConfirmOverlay_();
+  startSubtask(); // resume with a fresh subtask, same as closeForfeitConfirm()
+}
 function confirmSwitch(){
-  closeConfirm();
+  hideConfirmOverlay_();
   decide('switch');
 }
 
@@ -2721,6 +2768,9 @@ function decide(choice){
     task.switchTakenAtTask=S.subtaskDone; // true main-phase progress, NOT task.switch_cost — a participant can decline the first offer and switch later via the persistent button, at which point these differ
     task.switchTakenAtTime=new Date().toISOString();
     S.phase='alt'; S.altStartPos=S.subtaskDone; S.subtaskDone=0;
+    // Unified "alt phase actually began" timestamp — same field triggerForcedSwitch()
+    // sets, so alt_phase_started_at means the same thing regardless of voluntary vs forced.
+    task.altPhaseStartedAt = task.switchTakenAtTime;
     const sw=el('btn-switch-alt');
     if(sw) sw.style.display='none';
     updateStats(); redrawProg();
@@ -2744,10 +2794,20 @@ function triggerForcedSwitch(task){
   kill();
   task.forcedOutside=true;
   S.phase='alt'; S.altStartPos=S.subtaskDone; S.subtaskDone=0;
+  task.altPhaseStartedAt = new Date().toISOString(); // see decide('switch')'s comment — same field, unified across voluntary/forced
   const sw=el('btn-switch-alt');
   if(sw) sw.style.display='none';
   updateStats(); redrawProg();
   showScreen('subtask');
+  // Blocking notification — the alt sequence itself (grid, timer) does not
+  // start until this is acknowledged (acknowledgeForcedSwitch_()), so the
+  // participant always sees an explicit "you've been switched" moment
+  // instead of the grid just silently changing underneath them.
+  el('forced-switch-alt-n').textContent = task.altDuration;
+  el('forced-switch-overlay').style.display='flex';
+}
+function acknowledgeForcedSwitch_(){
+  el('forced-switch-overlay').style.display='none';
   startSubtask();
 }
 
@@ -2779,7 +2839,12 @@ function endTask(outcome){
   kill();
   const task=S.tasks[S.taskIdx];
   task.completed = outcome==='completed';
-  task.switched  = outcome==='switched';
+  // 'forced switch' is its own outcome value (see the two triggerForcedSwitch-
+  // driven callers), distinct from 'switched' — but earnings-wise it's the
+  // same case (bonus earned, alt sequence completed), so task.switched must
+  // count both. task.forcedOutside is still the authoritative flag for
+  // forced-vs-voluntary elsewhere; this is only about the earnings check.
+  task.switched  = outcome==='switched' || outcome==='forced switch';
   task.forfeited = outcome==='forfeited';
   task.earnings  = (task.completed || task.switched) ? task.pay : 0;
   if(task.offerAtTask==null) task.offerAtTask=S.subtaskDone;
@@ -2793,6 +2858,14 @@ function endTask(outcome){
 
   const pMainFirst    = computePMainFirst_(task.pause, task.altDuration, task);
   const pMainAtSwitch = task.switchTaken ? computePMainFirst_(task.switchTakenAtTask, task.altDuration, task) : null;
+
+  // Real elapsed time between pressing "Switch to alternative" (opening the
+  // confirm dialog) and actually confirming — only meaningful when they
+  // followed through (switch_taken=1); null otherwise (e.g. they pressed it,
+  // then cancelled, then the section ended some other way).
+  const switchDecisionSecs = (task.switchTaken && task.switchPressedAtTime && task.switchTakenAtTime)
+    ? Math.round((new Date(task.switchTakenAtTime) - new Date(task.switchPressedAtTime)) / 100) / 10
+    : null;
 
   // Aggregate grid stats
   const grids = task.grids || [];
@@ -2835,6 +2908,17 @@ function endTask(outcome){
     switch_taken:   task.switchTaken ? 1 : 0,
     switch_taken_at_task: task.switchTaken ? task.switchTakenAtTask : null,
     switch_taken_at_time: task.switchTaken ? task.switchTakenAtTime : null,
+    // Only meaningful once they've actually followed through (switch_taken=1)
+    // — see openOfferScreen()/the switchDecisionSecs comment above.
+    switch_pressed_at_task: task.switchTaken ? task.switchPressedAtTask : null,
+    switch_pressed_at_time: task.switchTaken ? task.switchPressedAtTime : null,
+    switch_decision_secs: switchDecisionSecs,
+    // When the alt phase actually began — set uniformly by both decide('switch')
+    // and triggerForcedSwitch(), so this means the same thing (and is always
+    // populated) regardless of voluntary vs. forced. Blank if the alt phase
+    // was never reached at all (a 'completed' or 'forfeited'-while-still-in-
+    // main outcome).
+    alt_phase_started_at: task.altPhaseStartedAt || null,
     forfeit_taken:  task.forfeitTaken ? 1 : 0,
     forfeit_taken_at_task: task.forfeitTaken ? task.forfeitTakenAtTask : null,
     forfeit_taken_at_time: task.forfeitTaken ? task.forfeitTakenAtTime : null,
@@ -2855,12 +2939,11 @@ function endTask(outcome){
     seq_is_bonus:  isBonusIdx_(task.index) ? 1 : 0,
   });
 
-  const H={ completed:'✓ Task complete!', switched:'Sequence complete', forfeited:'Task forfeited.' };
+  const H={ completed:'✓ Task complete!', switched:'Sequence complete', 'forced switch':'Sequence complete', forfeited:'Task forfeited.' };
   const M={
     completed: `You completed the main sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
-    switched:  task.forcedOutside
-      ? `The main sequence didn't end within the window, so you were automatically switched to the alternative — which you've now completed. You earned <strong>£${task.pay.toFixed(2)}</strong>.`
-      : `You completed the alternative sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
+    switched:  `You completed the alternative sequence and earned <strong>£${task.pay.toFixed(2)}</strong>.`,
+    'forced switch': `The main sequence didn't end within the window, so you were automatically switched to the alternative — which you've now completed. You earned <strong>£${task.pay.toFixed(2)}</strong>.`,
     forfeited: `No bonus earned for this task.`,
   };
   el('tc-h').textContent  = H[outcome];
