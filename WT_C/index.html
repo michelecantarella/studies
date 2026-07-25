@@ -557,20 +557,47 @@ async function fetchWithTimeout_(url, opts, ms){
 // ── GEOLOCATION (IP-based) ──────────────────────────────────────────
 // Apps Script's doGet/doPost never see the caller's IP, so this can't be
 // done on the backend — it's a client-side call to a third-party service
-// (ipapi.co) that geolocates whoever's IP the request itself arrives from.
-// Fired once, right after consent, for production + debug-bar mode only
-// (demomode=2 bypasses the backend entirely, so there'd be nowhere to send
-// this). Best-effort and non-blocking: any failure (rate limit, network,
-// CORS) just means no geo data for this respondent — never surfaced as an
-// error, never delays the study.
+// that geolocates whoever's IP the request itself arrives from. Fired once,
+// right after consent, for production + debug-bar mode only (demomode=2
+// bypasses the backend entirely, so there'd be nowhere to send this).
+//
+// Tries each provider in turn and validates the actual response body, not
+// just the HTTP status — ipapi.co in particular returns HTTP 200 even when
+// rate-limited, with a body like {error:true, reason:'RateLimited'} instead
+// of real geo fields; treating any 200 as success silently stored that
+// error object as "the" geolocation, which is why every flat geo_* column
+// came back blank (there's no .country_name on an error object). A second,
+// independent provider (ipwho.is) also guards against the single-domain
+// case where ipapi.co specifically is blocked by an ad-blocker/privacy
+// extension — common on Prolific's participant pool — without affecting
+// the other provider at all.
+//
+// GEO_PROVIDERS[].map returns a normalised {country,region,city,ip} object
+// on success (used for the flat backend columns) or null on failure/rate-
+// limit (falls through to the next provider); .raw is kept as-is and logged
+// in full to geo_json regardless of provider, for anything the flat fields
+// don't cover (lat/long, timezone, ISP/org, currency, languages, asn, ...).
+const GEO_PROVIDERS = [
+  { name: 'ipapi.co', url: 'https://ipapi.co/json/',
+    map: g => (g && !g.error && g.country_name) ? { country: g.country_name, region: g.region, city: g.city, ip: g.ip } : null },
+  { name: 'ipwho.is', url: 'https://ipwho.is/',
+    map: g => (g && g.success !== false && g.country) ? { country: g.country, region: g.region, city: g.city, ip: g.ip } : null },
+];
 async function fetchGeo_(){
   if(_demoMode >= 2) return;
-  try{
-    const resp = await fetchWithTimeout_('https://ipapi.co/json/', {method:'GET'}, 8000);
-    if(!resp.ok) return;
-    SESSION.geo = await resp.json();
-    saveProgress(false); // persist as soon as it's back — doConsent() already saved once without it
-  } catch(e){ /* best-effort only, see comment above */ }
+  for(const provider of GEO_PROVIDERS){
+    try{
+      const resp = await fetchWithTimeout_(provider.url, {method:'GET'}, 8000);
+      if(!resp.ok) continue;
+      const body = await resp.json();
+      const normalised = provider.map(body);
+      if(!normalised) continue; // error/rate-limit response, or unexpected shape — try the next provider
+      SESSION.geo = { ...normalised, provider: provider.name, raw: body };
+      saveProgress(false); // persist as soon as it's back — doConsent() already saved once without it
+      return;
+    } catch(e){ /* network/timeout/CORS — try the next provider */ }
+  }
+  // Every provider failed — SESSION.geo stays null, geo_* columns stay blank. Best-effort only, never surfaced as an error, never delays the study.
 }
 
 async function lookupBackend_(pid){
@@ -1172,14 +1199,16 @@ function buildFullData_(){
     reload_count:          SESSION.totalReloads,
     reload_log:            SESSION.reloadLog,
     // IP-based geolocation (see fetchGeo_) — best-effort, may be blank if
-    // the lookup failed, was rate-limited, or demomode>=2 skipped it.
-    // Flat convenience fields plus the full raw API response for anything
-    // else (lat/long, timezone, ISP/org, currency, languages, asn, ...).
-    geo_country: (SESSION.geo && SESSION.geo.country_name) || '',
-    geo_region:  (SESSION.geo && SESSION.geo.region) || '',
-    geo_city:    (SESSION.geo && SESSION.geo.city) || '',
-    geo_ip:      (SESSION.geo && SESSION.geo.ip) || '',
-    geo_json:    JSON.stringify(SESSION.geo || {}),
+    // every provider failed/rate-limited, or demomode>=2 skipped it.
+    // Flat convenience fields (normalised across whichever provider
+    // actually answered) plus the full raw response for anything else
+    // (lat/long, timezone, ISP/org, currency, languages, asn, ...).
+    geo_country:  (SESSION.geo && SESSION.geo.country) || '',
+    geo_region:   (SESSION.geo && SESSION.geo.region) || '',
+    geo_city:     (SESSION.geo && SESSION.geo.city) || '',
+    geo_ip:       (SESSION.geo && SESSION.geo.ip) || '',
+    geo_provider: (SESSION.geo && SESSION.geo.provider) || '',
+    geo_json:     JSON.stringify((SESSION.geo && SESSION.geo.raw) || {}),
   };
   // Map log entries to backend format; tasks_json = serialised per-grid array
   const sections = S.log.map(r => ({
@@ -1976,14 +2005,24 @@ function trainLiveShowSubmit_(){
 function trainLiveSubtaskComplete_(){
   if(!trainLive) return;
   trainLive.subtaskDone++;
-  updateTrainLiveStats_();
+  // Set offerShown (if this is the moment) BEFORE the one updateTrainLiveStats_()
+  // call below, not after — updateTrainLiveStats_() is what actually draws the
+  // top bar's alt line (drawTrainingProg() gates it on trainLive.offerShown),
+  // so drawing before flipping the flag would silently skip it. That was the
+  // bug: the offer banner flashed correctly (it manages its own CSS
+  // animation/redraw in trainLiveShowOffer_ independent of this), but the alt
+  // line on the progress bar never got a redraw with offerShown=true at all —
+  // not even once — so it stayed invisible for the rest of the round,
+  // "Resume" or not, since nothing else redraws that canvas in between.
   if(!trainLive.offerShown && trainLive.subtaskDone===TRAIN.pause){
     trainLive.offerShown = true;
     const sw=el('btn-switch-alt');
     if(sw){ sw.disabled=false; sw.style.opacity='1'; sw.style.cursor='pointer'; }
+    updateTrainLiveStats_();
     trainLiveShowOffer_();
     return;
   }
+  updateTrainLiveStats_();
   if(trainLive.offerShown){ trainLiveFinish_('continue'); return; } // one post-offer subtask ran its course (grid filled, autosubmit fired) without switching
   trainLiveRunSubtask_();
 }
