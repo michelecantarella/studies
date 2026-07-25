@@ -41,7 +41,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 /* ── SCREENS ─────────────────────────────────────────────────── */
 .screen{display:none;padding-top:116px;min-height:100vh;}
 .screen.active{display:block;}
-#screen-consent,#screen-already-done,#screen-conn-error,#screen-survey,#screen-survey2{padding-top:0;}
+#screen-consent,#screen-already-done,#screen-conn-error,#screen-survey,#screen-survey2,#screen-enter-pid{padding-top:0;}
 .wrap{max-width:700px;margin:0 auto;padding:2rem 1.5rem 3rem;}
 .wrap-wide{max-width:860px;margin:0 auto;padding:2rem 1.5rem 3rem;}
 
@@ -481,6 +481,18 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 </div></div>
 </div>
 
+<!-- ═══ SCREEN: Enter Prolific ID (no PROLIFIC_PID in the link) ═══ -->
+<div id="screen-enter-pid" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">One more thing</div>
+  <h1>What's your Prolific ID?</h1>
+  <p>The link you used to open this study didn't include your Prolific ID. Please enter it below so we can record your responses correctly.</p>
+  <div class="frow"><label>Prolific ID</label><input type="text" id="manual-pid-input" placeholder="e.g. 5f2a1b3c4d5e6f7a8b9c0d1e"></div>
+  <p id="manual-pid-error" style="display:none;color:var(--red);font-size:.8rem;">Please enter your Prolific ID before continuing.</p>
+  <div class="btn-row"><button class="btn" onclick="submitManualPid_()">Continue →</button></div>
+</div></div>
+</div>
+
 <!-- ═══ SCREEN: Already completed ════════════════════════════════ -->
 <div id="screen-already-done" class="screen">
 <div class="wrap"><div class="card">
@@ -529,15 +541,42 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 <script>
 // ── URL PARAMS ────────────────────────────────────────────────────
 const _params     = new URLSearchParams(window.location.search);
-const _prolificID = _params.get('PROLIFIC_PID') || '';
+let   _prolificID = _params.get('PROLIFIC_PID') || '';
 const _studyID    = _params.get('STUDY_ID')     || '';
 const _sessionID  = _params.get('SESSION_ID')   || '';
 const _demoMode   = parseInt(_params.get('demomode') || '0', 10);
 // 0 = production | 1 = debug bar (backend still active) | 2 = debug bar + no backend
 
+// Same-tab reload detection & recovery slot — declared early because the
+// PID recovery immediately below needs it, well before its other use sites
+// (isSameTabSession_()/markTabSession_() further down). sessionStorage
+// survives a page refresh (F5) but is cleared when the tab/browser closes.
+const TAB_SESSION_KEY = 'wtstudy_tab_session';
+
+// _prolificID is `let`, not `const`, because it can be filled in after the
+// fact — either auto-generated for the pilot study, or manually entered by
+// the participant right after consent (see doConsent()/submitManualPid_()).
+// _pidMissingFromLink records which (if either) happened THIS load, used
+// once in doConsent() to set the durable SESSION.pidMissingFromLink copy
+// that's actually sent to the backend (see SESSION's own declaration).
+let _pidMissingFromLink = false;
+if(!_prolificID){
+  // Same-tab reload: recover whatever was filled in last time BEFORE
+  // deciding whether to auto-generate/ask for one again — otherwise a
+  // pilot reload would mint a brand new random ID on every single load.
+  try{
+    const stored = sessionStorage.getItem(TAB_SESSION_KEY);
+    if(stored && stored !== 'anon') _prolificID = stored;
+  } catch(e){}
+}
+if(!_prolificID && _studyID === 'pilot'){
+  _prolificID = 'pilot_' + Math.random().toString(36).slice(2,10);
+  _pidMissingFromLink = true;
+}
+
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyyCUCZGO2JCdiIqE5Lk9oSiNbBFofOLSA-8rJh9iuw22E7MjX4NEcbojZHOz2nvY5b/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbw1wlhjdJo_68-qWaEiCshFg3ncKoNUo_-nVDKsXeDhjoF_zAyr6roQt-6JOaG77qZA/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.026; // scaled down from 0.03 proportionally to the 17.5s→15s task-time change
@@ -658,14 +697,16 @@ let SESSION = {
   nSeqFrame:    null,   // 4 or 5 — hidden 50/50 treatment, drawn once at consent, never changes after
   phase:        null,   // 'survey' | 'training' | 'experiment' — which part of the study the participant is in, for resume routing
   regime:       null,   // 1, 2, or 3 — drawn once at consent, used for ALL 5 sections (not redrawn per section)
+  pidMissingFromLink: false, // true if PROLIFIC_PID was missing from the URL (pilot auto-gen or manual entry) — set once, never cleared; must persist across reloads, unlike the top-level _pidMissingFromLink flag which only reflects the CURRENT page load
 };
 
-// Same-tab reload detection: sessionStorage survives a page refresh (F5)
-// but is cleared when the tab/browser is closed, so it's exactly the
-// signal we need to tell "accidental reload, resume the in-progress
-// section exactly as it was" apart from "came back later in a new tab,
-// restart the in-progress section fresh" (see applyResume_).
-const TAB_SESSION_KEY = 'wtstudy_tab_session';
+// Same-tab reload detection (TAB_SESSION_KEY is declared up top, near the
+// URL params — the PID-recovery logic there needs it before this point):
+// sessionStorage survives a page refresh (F5) but is cleared when the tab/
+// browser is closed, so it's exactly the signal we need to tell "accidental
+// reload, resume the in-progress section exactly as it was" apart from
+// "came back later in a new tab, restart the in-progress section fresh"
+// (see applyResume_).
 function isSameTabSession_(){
   try{ return sessionStorage.getItem(TAB_SESSION_KEY) === (_prolificID||'anon'); }
   catch(e){ return false; }
@@ -1090,7 +1131,7 @@ function visMaxK_(task){
 function redrawProg(){
   const pw=el('prog-wrap');
   if(!pw) return;
-  const hideBar = ['screen-consent','screen-survey','screen-survey2'].some(id=>document.getElementById(id).classList.contains('active'));
+  const hideBar = ['screen-consent','screen-survey','screen-survey2','screen-enter-pid'].some(id=>document.getElementById(id).classList.contains('active'));
   if(hideBar){ pw.classList.remove('visible'); return; }
   pw.classList.add('visible');
 
@@ -1148,6 +1189,7 @@ function buildSnapshot_(){
     trainingChoice:   SESSION.trainingChoice,
     trainingChoiceAt: SESSION.trainingChoiceAt,
     geo:          SESSION.geo,
+    pidMissingFromLink: SESSION.pidMissingFromLink,
   };
 }
 
@@ -1176,6 +1218,7 @@ function buildFullData_(){
   const study_level = {
     demo_mode:             _demoMode,
     consent_at:            SESSION.consentAt,
+    pid_missing_from_link: SESSION.pidMissingFromLink ? 1 : 0,
     employment_status:     S.survey.employment,
     labor_income:          S.survey.laborIncome,
     marstat:               S.survey.marstat,
@@ -1276,7 +1319,11 @@ async function bootstrapAppInner_(){
 
   // Same-tab check MUST happen before we mark this tab, and the mark must
   // happen on every load (fresh or resumed) so a subsequent reload of THIS
-  // tab is correctly recognised as same-tab.
+  // tab is correctly recognised as same-tab. (_prolificID recovery for a
+  // same-tab reload — manually-entered or pilot-generated — already
+  // happened at the very top of the script, before this function even
+  // runs, so isSameTabSession_()'s comparison against _prolificID here is
+  // already using the recovered value, not a stale empty one.)
   const sameTab = isSameTabSession_();
   markTabSession_();
 
@@ -1346,6 +1393,7 @@ function applyResume_(snap, sameTab){
   SESSION.trainingChoice   = snap.trainingChoice   || null;
   SESSION.trainingChoiceAt = snap.trainingChoiceAt || null;
   SESSION.geo = snap.geo || null;
+  SESSION.pidMissingFromLink = snap.pidMissingFromLink || false;
   SESSION.nSeqFrame  = snap.nSeqFrame != null ? snap.nSeqFrame : 5; // pre-existing sessions default to the untreated framing
   SESSION.regime     = snap.regime != null ? snap.regime : pick([1,2,3]); // pre-existing sessions never had a fixed regime — assign one now
   // Snapshots saved before phase-tracking existed have no `phase` field —
@@ -1425,10 +1473,48 @@ function doConsent(){
   if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
   if(SESSION.nSeqFrame == null) SESSION.nSeqFrame = Math.random()<0.5 ? 4 : 5;
   if(SESSION.regime == null) SESSION.regime = pick([1,2,3]); // 1/3 each
+  // _pidMissingFromLink only reflects THIS page load (true here for the
+  // pilot auto-gen case) — SESSION.pidMissingFromLink is the durable copy
+  // that actually gets sent to the backend, set once and never cleared, so
+  // it survives every reload/heartbeat afterward (see buildSnapshot_/
+  // applyResume_). Without this, a later reload — where _pidMissingFromLink
+  // resets to false since the URL still has no PROLIFIC_PID — would
+  // overwrite the backend field back to 0 on the next save.
+  if(_pidMissingFromLink) SESSION.pidMissingFromLink = true;
+  fetchGeo_(); // fire-and-forget — never blocks moving on to the next screen, works regardless of whether _prolificID is known yet
+
+  // No PROLIFIC_PID in the link (pilot studies auto-generate one before this
+  // point ever runs — see the top-level _pidMissingFromLink block — so this
+  // only actually happens for non-pilot studies): ask for it right here,
+  // right after consent, instead of silently proceeding with no way to
+  // identify or save progress for this respondent.
+  if(!_prolificID){
+    showScreen('enter-pid');
+    return;
+  }
+  proceedToSurvey_();
+}
+
+function proceedToSurvey_(){
   SESSION.phase = 'survey';
   showScreen('survey');
   saveProgress(false);
-  fetchGeo_(); // fire-and-forget — never blocks moving on to the survey screen
+}
+
+// The manual-entry counterpart of a PROLIFIC_PID arriving in the URL —
+// same continuation (proceedToSurvey_()) either way, just reached via a
+// typed-in value instead. Re-marks the tab session under the real ID (it
+// was marked 'anon' at bootstrap, before any ID was known) so a same-tab
+// reload from here on recovers correctly — see bootstrapAppInner_().
+function submitManualPid_(){
+  const val = el('manual-pid-input').value.trim();
+  if(!val){ el('manual-pid-error').style.display='block'; return; }
+  el('manual-pid-error').style.display='none';
+  _prolificID = val;
+  _pidMissingFromLink = true;
+  SESSION.pidMissingFromLink = true; // durable copy — see doConsent()'s comment
+  markTabSession_();
+  proceedToSurvey_();
 }
 
 function doNotConsent(){
