@@ -792,15 +792,19 @@ function generateTasks(){
     // below (the display zone itself stays a flat highlighted box, since a
     // uniform shape has no bar-height variation worth drawing).
     const pmf = Array(window).fill(1/window);
-    // Capped at halfway through the window — a pause landing very late
-    // (close to barHi) leaves almost no window remaining, so staying in
-    // the main sequence barely costs anything and the switch decision
-    // stops being a real one. Shared by all three regimes below (each just
-    // draws pause ~ Uniform[0, pauseMax], or capped further by nReq-1 in
-    // regime 1's inside case), so this single cap applies consistently
-    // everywhere pause is drawn. (Reintroduces an earlier cap that had
-    // since been widened to barHi-1 — see README §6.)
-    const pauseMax = inactive + Math.ceil(window/2);
+    // Capped at window-3 — a pause landing very late (close to barHi) leaves
+    // almost no window remaining, so staying in the main sequence barely
+    // costs anything and the switch decision stops being a real one. At the
+    // shortest possible window (7) this lands exactly at the halfway point
+    // (inactive+4); wider windows get a proportionally looser (later-landing)
+    // cap, which is fine — the halfway guarantee only needs to hold at the
+    // minimum. Shared by all three regimes below (each just draws
+    // pause ~ Uniform[0, pauseMax], or capped further by nReq-1 in regime 1's
+    // inside case), so this single cap applies consistently everywhere pause
+    // is drawn. (Superseded an even earlier `inactive+ceil(window/2)` cap,
+    // which held the halfway property at every window instead of just the
+    // minimum — see README §6.)
+    const pauseMax = inactive + window - 3;
 
     // P(inside window): whether this sequence's completion falls inside
     // [barLo,barHi] at all is disclosed exactly as pInside/pOutside.
