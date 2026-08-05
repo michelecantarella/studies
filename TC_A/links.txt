@@ -1,4 +1,4 @@
-https://michelecantarella.github.io/studies/TC/?PROLIFIC_PID=dummyid&STUDY_ID=phase1&demomode=1
+https://michelecantarella.github.io/studies/TC_A/?PROLIFIC_PID=dummyid&STUDY_ID=phase1&demomode=1
 
 Per generare una nuova risposta cambiate il campo PROLIFIC_PID=[dummyid]
 
@@ -6,6 +6,6 @@ per cambiare la fase, STUDY_ID=[phase1,phase2]
 
 per togliere la demomode basta rimuovere il blocco &demomode=1
 
-
+Nel vero esperimento:
 6a4254b1946dcd0009ab1ea3, get to phase 1
 6a4254fe8105ec33679c63c2, get to phase 2
