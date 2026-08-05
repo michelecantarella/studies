@@ -1,0 +1,116 @@
+{
+  "_meta": {
+    "description": "Item pool for the second normative-dimension stability/recognition task. Replaces the emoji/THINGS memory probe in its entirety. Domain A is always included in domain sampling; two further domains are sampled at random from B, D, E, F.",
+    "domain_sampling_rule": "domains_selected = ['A'] + random.sample(['B','D','E','F'], 2)",
+    "row_sampling_rule": "for each selected domain, row_tested = random.choice(domain_rows)",
+    "side_sampling_rule": "for each row_tested, side_tested = random.choice(['a','b'])",
+    "foil_rule": {
+      "similar": "the untested side of the same row_tested (same topic, different statement)",
+      "foil_pair": "both sides of one additional row, randomly drawn from the SAME domain as the tested row (excluding the tested row itself). Foils are same-domain, not cross-domain: drawing the foil from an unselected domain let participants solve the trial by topic-exclusion (recognizing they were never asked about that domain at all) rather than by recalling the specific statement. Foils also now come as a matched pair (both sides of their row), not a single lone statement, so the recognition screen presents two structurally symmetric pairs (target+similar vs foil_a+foil_b) rather than one real pair against one obviously unrelated odd-one-out."
+    },
+    "test_format": "Blocked sequence, not per-item interleaved: (1) claimed_recall_step1 asked first; (2) framing_recall asked only if claimed_recall_step1 == 'Yes'; (3) recognition test for all 3 items, 4AFC per item (target / similar / foil_a / foil_b, order randomized, all same domain) plus a 5th 'I don't remember' option shown separately below the four statements, run BEFORE any reveal, so recognition is never contaminated by feedback; (4) reveal screen shows all 3 correct target statements together, with no right/wrong feedback on the recognition answers; (5) re-measurement for all 3 items, now based on the revealed (confirmed) statements; (6) redistribution-study frequency question is appended to the final survey block, not the memory task itself.",
+    "backend_variables": {
+      "domains_selected": "array of 3 domain codes, e.g. ['A','D','F']",
+      "rows_tested": "array of 3 objects {domain, row_id}",
+      "sides_tested": "array of 3 objects {row_id, side, item_id, item_text}",
+      "phase1_responses": "map row_id -> integer 1-10",
+      "foils_similar": "map row_id -> {item_id, item_text} (the sibling side)",
+      "foils_new": "map row_id -> {domain, row_id_source, side, item_id, item_text}",
+      "phase2_remeasure": "map row_id -> integer 1-10 (no anchor shown)",
+      "phase2_recognition": "map row_id -> {presented_order: [item_id,...], choice: item_id | null, classification: 'target'|'similar'|'foil_a'|'foil_b'|'dont_remember', correct: bool, rt_ms: int}",
+      "claimed_recall_step1": "bool (did they claim to remember doing the redistribution elicitation)",
+      "framing_recall_response": "'luck' | 'performance' | 'dontknow'",
+      "framing_recall_correct": "bool, computed against participant's actual assigned Phase-1 framing"
+    }
+  },
+  "domains": {
+    "A": {
+      "label": "Justifiable",
+      "scale_low": "1 = never justifiable",
+      "scale_high": "10 = always justifiable",
+      "rows": [
+        { "row_id": "A1",  "a": { "item_id": "A1a",  "text": "Stealing property" },                                                              "b": { "item_id": "A1b",  "text": "Keeping money you have found in the street" },                       "source": "WVS-8 Q132 / constructed" },
+        { "row_id": "A2",  "a": { "item_id": "A2a",  "text": "Cheating on your partner" },                                                          "b": { "item_id": "A2b",  "text": "Lying to your partner" },                                             "source": "Pew Q84A / constructed" },
+        { "row_id": "A3",  "a": { "item_id": "A3a",  "text": "Having an abortion" },                                                               "b": { "item_id": "A3b",  "text": "Using contraceptives" },                                              "source": "Pew Q84 / Pew Q84" },
+        { "row_id": "A4",  "a": { "item_id": "A4a",  "text": "Avoiding a fare on public transport" },                                              "b": { "item_id": "A4b",  "text": "Avoiding a fare on a long-distance train" },                          "source": "WVS-8 Q131 / constructed" },
+        { "row_id": "A5",  "a": { "item_id": "A5a",  "text": "Someone accepting a bribe in the course of their duties" },                          "b": { "item_id": "A5b",  "text": "Someone accepting a gift in return for a favour at work" },           "source": "WVS-8 Q134 / constructed" },
+        { "row_id": "A6",  "a": { "item_id": "A6a",  "text": "Gambling" },                                                                         "b": { "item_id": "A6b",  "text": "Betting money on a sports match" },                                    "source": "Pew Q84B / constructed" },
+        { "row_id": "A7",  "a": { "item_id": "A7a",  "text": "Drinking alcohol" },                                                                 "b": { "item_id": "A7b",  "text": "Drinking alcohol in public places" },                                 "source": "Pew Q84 / constructed" },
+        { "row_id": "A9",  "a": { "item_id": "A9a",  "text": "Using marijuana" },                                                                  "b": { "item_id": "A9b",  "text": "Using marijuana in public places" },                                  "source": "Pew 25-country survey 2026 / constructed" },
+        { "row_id": "A10", "a": { "item_id": "A10a", "text": "Homosexuality" },                                                                    "b": { "item_id": "A10b", "text": "Same-sex couples marrying" },                                          "source": "WVS-8 Q135 / constructed" },
+        { "row_id": "A11", "a": { "item_id": "A11a", "text": "Smoking during pregnancy" },                                                         "b": { "item_id": "A11b", "text": "Smoking in front of children" },                                       "source": "constructed / constructed" }
+      ]
+    },
+    "B": {
+      "label": "Essential characteristic of democracy",
+      "scale_low": "1 = strongly disagree",
+      "scale_high": "10 = strongly agree",
+      "rows": [
+        { "row_id": "B1", "a": { "item_id": "B1a", "text": "It is justifiable for the army to take over when the government is incompetent" },     "b": { "item_id": "B1b", "text": "It is justifiable for a country to maintain an army for national defense" },       "source": "WVS-8 Q215 (reworded) / constructed" },
+        { "row_id": "B2", "a": { "item_id": "B2a", "text": "Strong leaders should not have to bother with parliament and elections" },              "b": { "item_id": "B2b", "text": "Strong leaders are good for democracy" },                                       "source": "WVS-8 Q197 (reworded) / constructed" },
+        { "row_id": "B3", "a": { "item_id": "B3a", "text": "People should obey their rulers" },                                                     "b": { "item_id": "B3b", "text": "People should follow the rules" },                                              "source": "WVS-8 Q218 (reworded) / constructed" },
+        { "row_id": "B4", "a": { "item_id": "B4a", "text": "Civil rights protect people from state oppression" },                                   "b": { "item_id": "B4b", "text": "Civil rights ensure equal opportunities" },                                     "source": "WVS-8 Q216 (reworded) / constructed" },
+        { "row_id": "B5", "a": { "item_id": "B5a", "text": "The government should never favor one religion over others" },                          "b": { "item_id": "B5b", "text": "Religious groups should practise freely without state interference" },          "source": "constructed / constructed" },
+        { "row_id": "B6", "a": { "item_id": "B6a", "text": "People should choose their leaders in free elections" },                                "b": { "item_id": "B6b", "text": "Those who lose an election should accept the result" },                        "source": "WVS-8 Q213 (reworded) / constructed" },
+        { "row_id": "B7", "a": { "item_id": "B7a", "text": "Democracy is always preferable to any other kind of government" },                      "b": { "item_id": "B7b", "text": "Democracy has significant flaws as a system of government" },                  "source": "WVS-8 'Democracy may have problems but is better than any other form of government' item (reworded) / constructed" },
+        { "row_id": "B8", "a": { "item_id": "B8a", "text": "Government should make decisions according to what experts say" },                      "b": { "item_id": "B8b", "text": "Governments should listen to the advice of experts" },                          "source": "WVS-8 Q198 (reworded) / constructed" },
+        { "row_id": "B9", "a": { "item_id": "B9a", "text": "People should be able to act according to their religious beliefs even when it conflicts with the law" }, "b": { "item_id": "B9b", "text": "People should be able to act according to their personal conscience even when it conflicts with the law" }, "source": "constructed / constructed" }
+      ]
+    },
+    "D": {
+      "label": "Technology, privacy and surveillance",
+      "scale_low": "1 = strongly disagree",
+      "scale_high": "10 = strongly agree",
+      "rows": [
+        { "row_id": "D1", "a": { "item_id": "D1a", "text": "The government should have the right to keep people under video surveillance in public areas" }, "b": { "item_id": "D1b", "text": "The government should have the right to monitor emails and private conversations" }, "source": "ISSP 2024 Q28a / Q28b (reworded)" },
+        { "row_id": "D2", "a": { "item_id": "D2a", "text": "Companies should not use personal information without explicit authorization from the person who provided it" }, "b": { "item_id": "D2b", "text": "Companies should be free to use personal information they have acquired legally" }, "source": "IUIPC Control (reworded) / constructed" },
+        { "row_id": "D3", "a": { "item_id": "D3a", "text": "AI should not take over the jobs done by humans" },                                     "b": { "item_id": "D3b", "text": "AI should not decide whether you get an interview or not" },                     "source": "ISSP 2024 Q35 (reworded) / constructed" },
+        { "row_id": "D4", "a": { "item_id": "D4a", "text": "Scientific innovation and progress is good for society" },                              "b": { "item_id": "D4b", "text": "Ethics is holding back scientific innovation and progress" },                   "source": "constructed / constructed" }
+      ]
+    },
+    "E": {
+      "label": "Animal welfare / environment",
+      "scale_low": "1 = strongly disagree",
+      "scale_high": "10 = strongly agree",
+      "rows": [
+        { "row_id": "E1", "a": { "item_id": "E1a", "text": "It is morally wrong to hunt wild animals for sport" },                                  "b": { "item_id": "E1b", "text": "It is morally wrong to hunt wild animals for food" },                          "source": "AAS-20 item 1 / item 5" },
+        { "row_id": "E2", "a": { "item_id": "E2a", "text": "Much of the scientific research done with animals is unnecessary" },                    "b": { "item_id": "E2b", "text": "The way most animals are raised for food causes them unnecessary suffering" }, "source": "AAS-20 item 7 (reworded) / constructed" },
+        { "row_id": "E3", "a": { "item_id": "E3a", "text": "Climate change is a serious issue that requires urgent action" },                        "b": { "item_id": "E3b", "text": "Climate change is caused by human activity" },                                 "source": "constructed (cf. Yale/Gallup climate opinion items) / constructed" },
+        { "row_id": "E4", "a": { "item_id": "E4a", "text": "It is important to set aside land for wildlife" },                                      "b": { "item_id": "E4b", "text": "Human economic gain matters more than setting aside land for wildlife" },       "source": "constructed / AAS-20 item 8 (reworded)" },
+        { "row_id": "E5", "a": { "item_id": "E5a", "text": "Governments should take primary responsibility for tackling climate change" },          "b": { "item_id": "E5b", "text": "Citizens should take primary responsibility for reducing their own consumption to fight climate change" }, "source": "constructed (cf. ISSP Environment module) / constructed" }
+      ]
+    },
+    "F": {
+      "label": "Economics and immigration",
+      "scale_low": "1 = strongly disagree",
+      "scale_high": "10 = strongly agree",
+      "rows": [
+        { "row_id": "F1", "a": { "item_id": "F1a", "text": "Refugees fleeing war or persecution should be allowed into this country" },             "b": { "item_id": "F1b", "text": "Economic migrants seeking a better standard of living should be allowed into this country" }, "source": "constructed (cf. Pew migration surveys) / constructed" },
+        { "row_id": "F2", "a": { "item_id": "F2a", "text": "This country's cultural life is generally undermined by immigration" },                   "b": { "item_id": "F2b", "text": "This country's labor market is worsened by immigration" },                       "source": "WVS-8 Q117 (reworded) / constructed" },
+        { "row_id": "F3", "a": { "item_id": "F3a", "text": "Taxation is equivalent to theft" },                                                     "b": { "item_id": "F3b", "text": "It's ok to cheat on taxes if you have a chance" },                             "source": "constructed / WVS-8 Q133 (reworded)" },
+        { "row_id": "F4", "a": { "item_id": "F4a", "text": "Government should spend more on scientific research" },                                 "b": { "item_id": "F4b", "text": "Government should spend more on culture and the arts" },                        "source": "ISSP Role of Government / ISSP Role of Government" },
+        { "row_id": "F5", "a": { "item_id": "F5a", "text": "Government should spend more on defense and the military" },                            "b": { "item_id": "F5b", "text": "Government should spend more on law enforcement and police" },                 "source": "ISSP Role of Government / ISSP Role of Government" },
+        { "row_id": "F6", "a": { "item_id": "F6a", "text": "Fighting rising prices should be a top priority for the country" },                     "b": { "item_id": "F6b", "text": "Fighting unemployment should be a top priority for the country" },              "source": "WVS-8 Q88 battery / WVS-8 Q88 battery" }
+      ]
+    }
+  },
+  "phase2_extra_items": {
+    "claimed_recall_step1": {
+      "variable": "claimed_recall_step1",
+      "wording": "Do you remember completing an earlier exercise in this study where you indicated your views about income redistribution?",
+      "response_options": ["Yes", "No", "Not sure"]
+    },
+    "framing_recall": {
+      "variable": "framing_recall_response",
+      "wording": "To the best of your memory, was that earlier exercise based on luck or based on performance/skill?",
+      "response_options": ["Based on luck", "Based on performance", "I don't remember"],
+      "scoring_note": "framing_recall_correct = (framing_recall_response matches participant's actual assigned Phase-1 framing); 'I don't remember' scored as incorrect/missing, not as a third category, unless analyzed separately."
+    },
+    "redistribution_study_frequency": {
+      "variable": "redistribution_study_frequency",
+      "wording": "Excluding our studies, how often have you participated in studies in which you were asked to redistribute money, or to give your opinion on redistribution?",
+      "scale": "0-10 slider, 0 = Never, 10 = Nearly always",
+      "placement_note": "Belongs to the final survey block, not the memory/stability task itself; asked once, after the recognition test and re-measurement are complete."
+    }
+  }
+}

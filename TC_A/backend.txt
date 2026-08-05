@@ -1,0 +1,1149 @@
+/**
+ * Apps Script backend for the tax-compliance study — v18.
+ *
+ * CHANGE FROM v17: no schema change, frontend-only (index.html), noted
+ * here because two columns' VALUE SEMANTICS change mid-study:
+ *   - Final survey C4.1/C4.2 (tax waste / top-20% income share) were a
+ *     0-100 slider ("out of every 100 dollars..."), now a 0-10 button
+ *     scale ("out of every 10 dollars...") — see the NOTE (v18) comments
+ *     at p2_survey_c4_tax_waste_pct/p2_survey_c4_top20_share_pct. Not
+ *     comparable to older rows without rescaling.
+ *   - Redistribution-study-frequency (screen 27) was a 0-10 slider, now a
+ *     5-option multiple choice ('0'|'1'|'2'|'3-4'|'5+') — see the NOTE
+ *     (v18) comment at p2_redistribution_study_frequency.
+ * Also purely cosmetic/UX, no data impact: the manual allocation widget's
+ * scroll-wheel-to-adjust interaction was removed (drag and +/-25c buttons
+ * are unaffected); the debrief screen no longer displays the Gini stat
+ * (still computed and saved to p2_giving_gini, just not shown); the
+ * pre-task instruction text was reworded.
+ *
+ * CHANGE FROM v16: one small but real backend addition (the `lookup`
+ * action's response now includes color_theme_phase1 — see below), plus
+ * frontend-only (index.html) semantics/behavior fixes noted here since
+ * they change how existing columns should be read:
+ *   - The redistribution (screen 8, "giving") allocation widget now
+ *     reorders dynamically by amount, exactly like elicitation/
+ *     re-elicitation (rank = sort position, rank1 = largest amount given
+ *     away — a non-monotonic split, a worse rank out-earning a better
+ *     one, is now structurally impossible rather than merely blocked).
+ *     p2_giving_amt_rank1..5 / p2_giving_alloc_json are therefore SORTED-
+ *     amount-indexed, same convention as p1_elicit_amt_rank1..5 /
+ *     p2_reelicit_amt_rank1..5, not identity-indexed — this participant's own
+ *     reward is p2_final_payoff, not p2_giving_amt_rank{p2_you_rank}. "YOU"
+ *     is a highlight on the FIXED screen position labeled with this
+ *     participant's real rank, not a tracked bucket of money — whichever
+ *     amount currently sorts into that position is what they'd actually
+ *     get. The dashed anchor overlay (the participant's earlier
+ *     re-elicitation split) also tracks rank position, so it stays lined
+ *     up with whichever live bar currently occupies that rank as things
+ *     reorder.
+ *   - Color theme: Phase 2 no longer draws its own independent random
+ *     color — it always takes the color Phase 1 did NOT get, so a
+ *     participant only ever sees blue-then-red or red-then-blue, never
+ *     the same color twice. p1_color_theme/p2_color_theme columns
+ *     unchanged, BUT the `lookup` action now also RETURNS
+ *     color_theme_phase1 (read from p1_color_theme) — Phase 1 and Phase 2
+ *     are separate Prolific sessions, so without this a fresh Phase 2
+ *     session had no way to know what color Phase 1 actually got and
+ *     could only guess, occasionally landing on the same color by chance
+ *     (the bug actually observed: blue-blue). See bootstrapAppInner_ in
+ *     index.html for where this now gets consumed before Phase 2's color
+ *     is decided.
+ *
+ * CHANGE FROM v15: three unrelated additions, all appended, none touching
+ * existing logic:
+ *   (1) Multi-grid task continuation (screen 6) — participants can now
+ *       click "Next grid" to keep going with a fresh grid (same
+ *       TASK_N_TARGETS difficulty, new target/layout) any time within the
+ *       shared 45s window. p2_task_found_count/p2_task_n_targets need NO
+ *       schema change — the frontend already sends the correct grand
+ *       total/per-grid difficulty, this backend has no found-count logic
+ *       of its own to update. p2_task_grids_json/p2_task_grids_attempted
+ *       add the full per-grid breakdown.
+ *   (2) Random per-phase color theme ('blue'|'red') — p1_color_theme/
+ *       p2_color_theme, picked independently per phase, purely visual.
+ *       (Superseded by the v17 change above — Phase 2 is no longer
+ *       independent.)
+ *   (3) Final survey A3 rewrite — "Besides yourself, who lives with you?"
+ *       (check-all-that-apply) -> "Including yourself, how many people
+ *       live in your household?" (single-select bucket,
+ *       p2_survey_a3_household_size). The 8 old p2_survey_a3_* columns
+ *       are kept (never delete a HEADER column) but their P2_FIELDS
+ *       mappers now return null instead of stale false/0 defaults, so new
+ *       rows read as "not asked" rather than implying a real answer.
+ *
+ * CHANGE FROM v14: the old emoji memory probe (Phase 1 screen 3 + Phase 2
+ * screen 10) is REPLACED entirely by a stability/recognition task using
+ * real survey content — see stability_item_pool.json and index.html's
+ * STABILITY_POOL block comment for the full design. Same purpose (a
+ * robustness check that Phase 1 has genuinely been forgotten by the time
+ * of the redistribution decision), different placement: the end-of-study
+ * half now sits AFTER the redistribution decision (screens 21-27,
+ * inserted between screen 8 and the final survey), not mid-Phase-2 like
+ * the old screen 10 did. p1_memory_sequence / p2_recall_answer /
+ * p2_recall_score / p2_recall_score_norm / p2_recall_no_memory_of_task are
+ * kept (never delete a HEADER column) but no longer written — see the v15
+ * HEADER block below for the ~40 replacement columns (per-item domain/
+ * row/side/response for Phase 1; per-item foil/recognition/re-measure
+ * plus claimed-recall/framing-recall/redistribution-study-frequency for
+ * Phase 2). The `lookup` action's response also changed shape:
+ * memory_sequence is replaced by stability_rows_tested (JSON array of
+ * {domain,row_id,side}) plus a new phase1_condition_confirmed field
+ * (echoes p1_phase1_condition, used to score framing-recall correctness
+ * against the authoritative backend record rather than client state).
+ *
+ * CHANGE FROM v13: the elicitation (screen 2), re-elicitation (screen 5),
+ * and redistribution (screen 8) screens no longer use a single 0-100
+ * tau-slider fed through a monotonic payoff curve — participants now
+ * build a $5 split across 5 rank slots directly, in 25c blocks, via a
+ * manual allocation widget (drag a bar, +/-25c buttons, Split-equally,
+ * Reset). This allows genuinely non-monotonic splits the old curve could
+ * never produce. Backend-side this is purely additive: one $ column per
+ * rank (p1_elicit_amt_rank1..5 / p2_reelicit_amt_rank1..5 /
+ * p2_giving_amt_rank1..5), plus a JSON array column and a Gini column,
+ * per phase. The old scalar p1_elicitation_pref / p2_reelicitation_pref /
+ * p2_giving_pref columns are kept (never remove a HEADER column) but are
+ * no longer written by the frontend. The `lookup` action's response also
+ * changed shape: elicitation_pref/reelicitation_pref are replaced by a
+ * single elicitation_alloc (JSON array string, from
+ * p1_elicitation_alloc_json) — the redistribution screen's anchor is now
+ * a full 5-value array (this session's re-elicitation allocation),
+ * carried entirely client-side within Phase 2, not fetched via lookup.
+ *
+ * CHANGE FROM v12: geolocation now tries two independent providers
+ * (ipapi.co, then ipwho.is) instead of one, recording which one actually
+ * answered in p1_geo_provider/p2_geo_provider — guards against a single
+ * provider being blocked (e.g. by an ad-blocker) or rate-limited.
+ *
+ * CHANGE FROM v11: more appended, pass-through-only columns (again, no new
+ * backend logic — this file just stores whatever the frontend's DATA_LOG
+ * sends):
+ *   - IP-based geolocation (p1_geo_* / p2_geo_*) — see fetchGeo_ in
+ *     index.html. Fetched client-side (ipapi.co) once right after EACH
+ *     phase's own consent screen, since Phase 1 and Phase 2 are separate
+ *     Prolific sessions that may run on different devices/networks.
+ *   - The final survey (p2_survey_*) — background, financial situation,
+ *     beliefs about inequality, political orientation, and 2024 vote.
+ *     Shown once, at the end of Phase 2 (index.html screens 18/19), right
+ *     before the outcome/debrief screen.
+ *
+ * CHANGE FROM v10: three new appended columns, all just passed straight
+ * through from the frontend's DATA_LOG (no new backend logic): the grid
+ * task's target emoji (p2_task_target_emoji) and the distinct set of
+ * distractor emojis actually placed in that grid (p2_task_other_emojis),
+ * plus whether the redistribution screen's re-elicitation-preference
+ * anchor overlay was shown this session (p2_redistribution_anchor_shown —
+ * now a 50/50 coin flip per session on the frontend, rather than always
+ * shown). Treatment assignment itself (CCC/CCT/.../TTT) is a frontend-only
+ * concern (see index.html) and doesn't touch this file — the backend just
+ * stores whatever 3-letter `treatment` string it's given.
+ *
+ * CHANGE FROM v9: the lookup response now also returns
+ * predecessor_found_counts (see getPredecessorFoundCounts_) — the real
+ * found_count of this participant's up-to-4 comparison-window predecessors,
+ * fetched at Phase-2-entry time (same call that already returns
+ * memory_sequence, elicitation_pref, assigned_rank). This lets the
+ * frontend compute its own actual_rank INSTANTLY the moment its own task
+ * ends, with no second network round-trip and no wait — the previous
+ * design (fetch actual_rank via a dedicated 'task_complete' response) was
+ * a real, felt latency/reliability cost with no correctness benefit, since
+ * this data was already knowable before the task even started.
+ * 'task_complete' is unchanged otherwise — it still writes this
+ * participant's own result and still computes/stores actual_rank
+ * server-side (via sweepActualRanks_), which remains the authoritative,
+ * tamper-resistant record for the Sheet — the frontend's copy is what
+ * drives the live display, computed from data the client could in
+ * principle inspect/alter, so the two independent computations (client
+ * for speed, server for authority) double as a cross-check before any
+ * real payout, not just redundant code.
+ *
+ * (v9's task_complete-drives-display fix, and v8's chain/fork model, are
+ * otherwise unchanged — see their comments below.)
+ *
+ * CRITICAL FIX FROM v8: actual_rank must determine what the participant
+ * SEES and gets PAID — not assigned_rank. Assigned rank is only ever used
+ * (a) to fix task difficulty before the task starts, and (b) as Michele's
+ * own instrument in his own estimation. v8 computed actual_rank correctly
+ * but the frontend kept displaying/paying on assigned_rank, which defeats
+ * the entire point of a task where real performance is supposed to matter.
+ *
+ * The fix that makes this work SYNCHRONOUSLY (no async/return-later flow
+ * needed): a NEW 'task_complete' action, fired right after the task
+ * auto-submits — well before the rest of Phase 2 (recall, redistribution)
+ * happens. It writes task_complete_at (a new column, distinct from
+ * phase2_complete_at) and returns the computed actual_rank immediately.
+ * This works because of the assignment invariant: a participant is only
+ * ever assigned into a chain position whose immediate predecessor was
+ * ALREADY task-complete — and by induction, so was every predecessor
+ * before that, transitively, all the way back. So by the time ANY
+ * participant finishes their own task, all 4 of their comparison-window
+ * predecessors are guaranteed already task-complete. actual_rank is never
+ * actually waiting on the future — v8's model already guaranteed this, it
+ * just wasn't being exploited.
+ *
+ * Cluster availability (getLastEntrantInCluster_) and rank-window
+ * eligibility (tryComputeActualRankForRow_) now both key off
+ * task_complete_at, not phase2_complete_at — because what matters for
+ * chain progression and rank comparisons is real task performance being
+ * known, not whether the participant has also finished recall/
+ * redistribution/everything else.
+ *
+ * TIE-BREAK (from Michele): ties are never broken arbitrarily. Standard
+ * competition ranking — tied participants share the same, BETTER
+ * (numerically lower) rank (e.g. found-counts of [16,8,5,5,2] produce
+ * ranks [1,2,3,3,5], not an arbitrary 3/4 split).
+ *
+ * (v8's chain/fork model, described below, is otherwise unchanged.)
+ *
+ * MAJOR REDESIGN FROM v7, per Michele's correction: a cluster is NOT a
+ * fixed batch of 5 rows. It's an endless chain with a looping rank cycle
+ * (1,2,3,4,5,1,2,3,4,5,...). Each participant's comparison group ("actual
+ * rank" relative to) is simply their 4 immediate predecessors IN THAT
+ * CHAIN — a sliding window, not a fixed group. No row is ever duplicated.
+ *
+ *   - cluster_id identifies a CHAIN SEGMENT (changes only when a fork
+ *     happens) — it's an organizational field for quickly finding "the
+ *     current tip," not a fixed-size bucket.
+ *   - cluster_slot is the assigned rank: just the participant's position
+ *     in the endless 1-5 cycle. Still drives task difficulty
+ *     (task_n_targets), exactly as before.
+ *   - prev_participant_pid is the REAL mechanism: a pointer (by pid) to
+ *     whoever immediately precedes this participant in the chain. Walking
+ *     this pointer backward 4 times gives the comparison group, and the
+ *     walk is UNIFORM — it never needs to special-case a fork boundary,
+ *     because a fork's first link already points to the correct ancestor
+ *     (see forking below). "It is not that difficult," as specified.
+ *
+ *   BOOTSTRAP (first-ever participant): cluster 1 is created with 4
+ *   synthetic "perfect" entries at slots 2,3,4,5, chained together via
+ *   prev_participant_pid (the very first synthetic has no predecessor),
+ *   physically inserted ABOVE the real participant's existing row so they
+ *   read as "the four first lines" in the sheet. The real participant
+ *   becomes slot 1, prev_participant_pid = the last synthetic's pid.
+ *
+ *   NORMAL CONTINUATION: find the tip (max cluster_id), find whoever most
+ *   recently joined it (max entered_phase2_at_iso within that cluster_id).
+ *   If they're complete: new participant continues the SAME cluster_id,
+ *   slot cycles (last.slot % 5) + 1, prev_participant_pid = last entrant's
+ *   own pid.
+ *
+ *   FORK: if the tip's last entrant is NOT complete, a new participant
+ *   does not join them. Instead: new cluster_id (tip + 1). The new
+ *   participant TAKES OVER the stuck entrant's slot and inherits the
+ *   stuck entrant's OWN prev_participant_pid directly — this is what
+ *   "not including the incomplete participant" means: the new participant
+ *   effectively steps into the stuck one's position in the sequence,
+ *   compared against the same 4 predecessors the stuck one would have
+ *   been compared against. NOTHING is copied — just this one pointer.
+ *   The stuck participant's own row is never touched. If they return and
+ *   complete later, their own already-fixed comparison window (established
+ *   at their own assignment time) is used as normal — forking elsewhere
+ *   doesn't change it.
+ *
+ *   ACTUAL RANK: once a participant is complete AND all 4 of their
+ *   prev_participant_pid-chain predecessors are ALSO complete, rank all 5
+ *   by real task_found_count (descending; ties -> earlier entered_phase2_at_iso
+ *   wins). This is computed PER PARTICIPANT against their own specific
+ *   window — it is not a shared group ranking, so completing one row can
+ *   make ITS OWN rank computable, or make some OTHER (later) participant's
+ *   rank computable if this row was the last piece of THEIR window. Every
+ *   phase2_complete triggers a full sweep for exactly this reason (cheap
+ *   at this study's scale, and simplest to get correct).
+ *
+ * GET  ?action=lookup&pid=XXXX
+ *      -> { found, treatment, phase1_complete, phase2_complete,
+ *           resume_phase, resume_snapshot, elicitation_alloc,
+ *           stability_rows_tested, phase1_condition_confirmed,
+ *           color_theme_phase1, assigned_rank, cluster_id }
+ *      actual_rank is still deliberately never returned here.
+ *
+ * POST { action: "phase1_complete"|"phase2_complete"|"progress",
+ *         pid, study_id, session_id, treatment, data, phase, snapshot }
+ */
+
+var SHEET_NAME = 'Responses';
+
+// Must match the frontend's N_GROUP (index.html) — keep both in sync by hand.
+var CLUSTER_SIZE = 5;
+var FLAG_TIMEOUT_MS = 60 * 60 * 1000; // 1 hour — informational flag only, no behavioral effect
+
+var HEADER = [
+  // ── identifiers ──────────────────────────────────────────────────────────
+  'prolific_pid', 'study_id', 'session_id', 'treatment',
+  'phase1_complete_at', 'phase2_complete_at',
+
+  // ── phase 1 (survey) ─────────────────────────────────────────────────────
+  'p1_app_phase', 'p1_demo_mode', 'p1_session_start_iso', 'p1_last_updated_iso',
+  'p1_elicitation_pref', 'p1_elicitation_start_value', 'p1_elicitation_time_ms',
+  'p1_memory_sequence',
+  'p1_survey_total_time_ms', 'p1_survey_active_time_ms', 'p1_survey_idle_time_ms',
+
+  // ── phase 2 (experiment) ─────────────────────────────────────────────────
+  'p2_app_phase', 'p2_demo_mode', 'p2_session_start_iso', 'p2_last_updated_iso',
+  'p2_reelicitation_pref', 'p2_reelicitation_start_value', 'p2_reelicitation_time_ms',
+  'p2_you_rank', 'p2_baseline_tau_pct', 'p2_initial_earning',
+  'p2_task_n_targets', 'p2_task_found_count', 'p2_task_wrong_clicks', 'p2_task_time_ms',
+  'p2_recall_answer', 'p2_recall_score', 'p2_recall_score_norm',
+  'p2_giving_pref', 'p2_giving_start_value', 'p2_giving_time_ms', 'p2_final_payoff',
+  'p2_experiment_total_time_ms', 'p2_experiment_active_time_ms', 'p2_experiment_idle_time_ms',
+  'p2_slider_events',
+
+  // ── resume ────────────────────────────────────────────────────────────────
+  'resume_phase', 'resume_snapshot_json',
+
+  // ── v4-v6 additions (appended) ───────────────────────────────────────────
+  'p1_phase1_condition',
+  'p1_elicitation_nopref_clicks', 'p1_elicitation_nopref_clicked_ever',
+  'p2_phase2_condition', 'p2_phase3_condition',
+  'p2_reelicitation_nopref_clicks', 'p2_reelicitation_nopref_clicked_ever',
+  'p2_recall_no_memory_of_task',
+  'p2_giving_nopref_clicks', 'p2_giving_nopref_clicked_ever',
+
+  // ── v8 cluster/rank bookkeeping (appended; REPLACES the v7 fork-copy
+  //    system — no row is ever duplicated now) ─────────────────────────────
+  'cluster_id',               // identifies a chain SEGMENT (changes only on fork)
+  'cluster_slot',              // 1..CLUSTER_SIZE — position in the endless rolling cycle
+  'entered_phase2_at_iso',     // when this row was assigned (used to find "last to join" + the 1hr flag)
+  'task_complete_at',          // when this participant's REAL task result (task_found_count) became
+                               // known — this, NOT phase2_complete_at, is what makes a cluster
+                               // available again and what makes a participant eligible to be used in
+                               // someone else's actual-rank window. Set by the 'task_complete' action,
+                               // fired right after the task auto-submits — well before the rest of
+                               // Phase 2 (recall, redistribution) is done. This is what makes actual
+                               // rank computable SYNCHRONOUSLY: by the assignment invariant, every
+                               // predecessor in the chain was already task-complete before this
+                               // participant even started, so nothing is ever waiting on the future.
+  'prev_participant_pid',      // pointer to whoever immediately precedes this participant in the
+                               // chain — walking this 4 times gives the actual-rank comparison group.
+                               // Blank only for the very first synthetic entry ever created.
+  'actual_rank',               // backend-only instrumental variable: this participant's rank among
+                               // {self + their 4 prev_participant_pid predecessors} by real
+                               // task_found_count. Never exposed via the lookup endpoint.
+  'is_synthetic',              // true for the 4 bootstrap filler rows created alongside the very
+                               // first real participant.
+  'flagged_incomplete',        // informational only — true once a row has been incomplete for over
+                               // an hour, for manual follow-up. No email, no behavioral effect.
+
+  // ── v11 additions (appended — HEADER stays append-only, see getSheet_) ──
+  'p2_task_target_emoji',      // the single emoji the participant was asked to find in the grid task
+  'p2_task_other_emojis',      // distinct set of non-target ("distractor") emojis actually placed in that grid (JSON array)
+  'p2_redistribution_anchor_shown', // true/false — whether the re-elicitation-preference orange overlay anchor was shown on the redistribution screen (now a 50/50 coin flip per session, rather than always-on)
+
+  // ── v12 additions (appended) ─────────────────────────────────────────────
+  // IP-based geolocation, fetched client-side (ipapi.co) once right after
+  // EACH phase's own consent screen — Phase 1 and Phase 2 are separate
+  // Prolific sessions and may run on different devices/networks, hence two
+  // independent sets of columns rather than one.
+  'p1_geo_country', 'p1_geo_region', 'p1_geo_city', 'p1_geo_ip', 'p1_geo_json',
+  'p2_geo_country', 'p2_geo_region', 'p2_geo_city', 'p2_geo_ip', 'p2_geo_json',
+  // Final survey — background, financial situation, beliefs, and vote.
+  // Shown once, at the end of Phase 2, right before the outcome/debrief
+  // screen (index.html screens 18/19).
+  'p2_survey_a1_employment', 'p2_survey_a2_marital',
+  'p2_survey_a3_nobody_else', 'p2_survey_a3_partner',
+  'p2_survey_a3_minor_children', 'p2_survey_a3_adult_children',
+  'p2_survey_a3_father', 'p2_survey_a3_mother',
+  'p2_survey_a3_other_adults', 'p2_survey_a3_other_minors',
+  'p2_survey_a4_education',
+  'p2_survey_b1_ends_meet', 'p2_survey_b2_prolific_income_importance',
+  'p2_survey_c1_attribution',
+  'p2_survey_c2_support_redistribution', 'p2_survey_c2_perceived_consensus',
+  'p2_survey_c3_economic_lr', 'p2_survey_c3_social_al',
+  'p2_survey_c4_tax_waste_pct', 'p2_survey_c4_top20_share_pct',
+  'p2_survey_d1_vote_2024',
+  'p2_survey_time_ms',
+
+  // ── v13 addition (appended) ───────────────────────────────────────────────
+  // Which geolocation provider actually answered for each phase (see
+  // GEO_PROVIDERS/fetchGeo_ in index.html) — 'ipapi.co' or 'ipwho.is'.
+  // Blank alongside that phase's other geo_* fields if both providers
+  // failed/were rate-limited.
+  'p1_geo_provider', 'p2_geo_provider',
+
+  // ── v14 addition (appended) ───────────────────────────────────────────────
+  // Manual allocation widget (see createAllocWidget in index.html), which
+  // replaced the old single 0-100 tau-slider + payoff-curve on screens
+  // 2/5/8 — participants now build a $5 split across 5 rank slots
+  // directly, in 25c blocks, so each rank's dollar amount gets its own
+  // column instead of being reconstructible only via a formula. One $
+  // amount per rank (1=best..5=worst) plus the full JSON array and the
+  // resulting Gini coefficient, per phase. p1_elicitation_pref /
+  // p2_reelicitation_pref / p2_giving_pref (the old scalar columns) are
+  // no longer written — kept only so previously-collected rows stay
+  // aligned under the current schema.
+  'p1_elicit_amt_rank1', 'p1_elicit_amt_rank2', 'p1_elicit_amt_rank3', 'p1_elicit_amt_rank4', 'p1_elicit_amt_rank5',
+  'p1_elicitation_alloc_json', 'p1_elicitation_gini',
+  'p2_reelicit_amt_rank1', 'p2_reelicit_amt_rank2', 'p2_reelicit_amt_rank3', 'p2_reelicit_amt_rank4', 'p2_reelicit_amt_rank5',
+  'p2_reelicitation_alloc_json', 'p2_reelicitation_gini',
+  'p2_giving_amt_rank1', 'p2_giving_amt_rank2', 'p2_giving_amt_rank3', 'p2_giving_amt_rank4', 'p2_giving_amt_rank5',
+  'p2_giving_alloc_json', 'p2_giving_gini',
+
+  // ── v15 addition (appended) ────────────────────────────────────────────────
+  // Stability/recognition task (see stability_item_pool.json + index.html's
+  // STABILITY_POOL block comment), which REPLACES the old emoji memory
+  // probe entirely. p1_memory_sequence / p2_recall_answer / p2_recall_score /
+  // p2_recall_score_norm / p2_recall_no_memory_of_task (above) are kept —
+  // never delete a HEADER column — but are no longer written.
+  //
+  // Phase 1 (screens 20/3): 3 real preference items sampled with no memory
+  // framing. One {domain,row_id,side,response} per item, plus the full
+  // array as JSON (used to restore the exact items at Phase 2 — see
+  // p1_stability_rows_json in the lookup response) and deliberation time.
+  'p1_stability_item1_domain', 'p1_stability_item1_row_id', 'p1_stability_item1_side', 'p1_stability_item1_response',
+  'p1_stability_item2_domain', 'p1_stability_item2_row_id', 'p1_stability_item2_side', 'p1_stability_item2_response',
+  'p1_stability_item3_domain', 'p1_stability_item3_row_id', 'p1_stability_item3_side', 'p1_stability_item3_response',
+  'p1_stability_rows_json', 'p1_stability_time_ms',
+  // Phase 2, end of study, after the redistribution decision (screens
+  // 21-27, blocked sequence): claimed recall -> framing recall
+  // (conditional) -> memory-test lead-in (no data) -> recognition (4AFC,
+  // blocked, before any reveal) -> reveal (no data, no scoring shown) ->
+  // re-measure (blocked, after reveal) -> redistribution-study frequency
+  // (final-survey-block item, asked here per the item pool's placement_note).
+  'p2_claimed_recall_step1',                    // 'Yes' | 'No' | 'Not sure'
+  'p2_framing_recall_response',                  // 'luck' | 'performance' | 'dontknow' | 'not_asked'
+  'p2_framing_recall_correct',                   // bool, or blank if not_asked — scored against p1_phase1_condition, not client-derived state
+  'p2_stability_item1_foil_row_id', 'p2_stability_item1_recog_choice', 'p2_stability_item1_recog_class', 'p2_stability_item1_recog_correct', 'p2_stability_item1_recog_rt_ms', 'p2_stability_item1_remeasure',
+  'p2_stability_item2_foil_row_id', 'p2_stability_item2_recog_choice', 'p2_stability_item2_recog_class', 'p2_stability_item2_recog_correct', 'p2_stability_item2_recog_rt_ms', 'p2_stability_item2_remeasure',
+  'p2_stability_item3_foil_row_id', 'p2_stability_item3_recog_choice', 'p2_stability_item3_recog_class', 'p2_stability_item3_recog_correct', 'p2_stability_item3_recog_rt_ms', 'p2_stability_item3_remeasure',
+  'p2_stability_foils_json', 'p2_stability_recognition_json', 'p2_stability_remeasure_json',
+  'p2_redistribution_study_frequency',           // NOTE (v18): was a 0-10 slider, now '0'|'1'|'2'|'3-4'|'5+' (5-option multiple choice) — not comparable across the change without bucketing the old numeric rows
+  'p2_stability_time_ms',
+
+  // ── v16 addition (appended) ────────────────────────────────────────────────
+  // (1) Multi-grid task continuation (screen 6) — the 45s timer is shared
+  // across as many grids as the participant clicks through via "Next
+  // grid"; p2_task_found_count/p2_task_n_targets (above) already carry the
+  // correct grand-total/per-grid-difficulty values with no schema change,
+  // this just adds the full per-grid breakdown.
+  'p2_task_grids_json', 'p2_task_grids_attempted',
+  // (2) Random per-phase color theme ('blue'|'red') — see
+  // pickRandomColorTheme_/applyColorTheme_ in index.html, picked
+  // independently per phase, purely visual/incidental (not tied to C/T framing).
+  'p1_color_theme', 'p2_color_theme',
+  // (3) Final survey A3 rewrite — "Besides yourself, who lives with you?"
+  // (a check-all-that-apply roster) became "Including yourself, how many
+  // people live in your household?" (a single-select bucket). The old
+  // p2_survey_a3_* columns above are kept but no longer written.
+  'p2_survey_a3_household_size'
+];
+
+function getSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(SHEET_NAME);
+  if (!sheet) sheet = ss.insertSheet(SHEET_NAME);
+  var lastCol = Math.max(sheet.getLastColumn(), HEADER.length);
+  var current = lastCol > 0 ? sheet.getRange(1, 1, 1, lastCol).getValues()[0] : [];
+  var matches = current.length >= HEADER.length &&
+    HEADER.every(function(h, i) { return current[i] === h; });
+  if (!matches) {
+    sheet.getRange(1, 1, 1, HEADER.length).setValues([HEADER]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function colIndex_(field) {
+  var i = HEADER.indexOf(field);
+  return i === -1 ? -1 : i + 1;
+}
+
+function cellValue_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return v;
+}
+
+// Every pid (real or synthetic) has exactly one row, ever — no duplicates,
+// no restarts creating a second row. Simple exact match.
+function findRowByPid_(sheet, pid) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  var data = sheet.getRange(2, 1, lastRow - 1, HEADER.length).getValues();
+  var pidCol = HEADER.indexOf('prolific_pid');
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][pidCol]) === String(pid)) return 2 + i;
+  }
+  return null;
+}
+
+function readRow_(sheet, rowIndex) {
+  return sheet.getRange(rowIndex, 1, 1, HEADER.length).getValues()[0];
+}
+
+function writeRowBatched_(sheet, rowIndex, isNewRow, updates) {
+  var row;
+  if (isNewRow) {
+    row = new Array(HEADER.length).fill('');
+  } else {
+    row = readRow_(sheet, rowIndex);
+    while (row.length < HEADER.length) row.push('');
+  }
+  updates.forEach(function(pair) {
+    var col = colIndex_(pair[0]);
+    if (col === -1) return;
+    row[col - 1] = cellValue_(pair[1]);
+  });
+  sheet.getRange(rowIndex, 1, 1, HEADER.length).setValues([row]);
+}
+
+// ============================================================
+// CHAIN / FORK LOGIC
+// ============================================================
+
+function getMaxClusterId_(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return 0;
+  var data = sheet.getRange(2, 1, lastRow - 1, HEADER.length).getValues();
+  var idx = HEADER.indexOf('cluster_id');
+  var max = 0;
+  for (var i = 0; i < data.length; i++) {
+    var cid = data[i][idx];
+    if (cid !== '' && cid !== null && Number(cid) > max) max = Number(cid);
+  }
+  return max;
+}
+
+// Whoever most recently joined this specific cluster_id (chain segment),
+// by entered_phase2_at_iso. That's "the last entrant," used to decide
+// whether to continue the chain or fork. Availability is defined by
+// task_complete_at (real task performance known), NOT phase2_complete_at
+// (the whole session, including recall/redistribution, may still be in
+// progress — that doesn't matter for chain progression or rank pairing).
+function getLastEntrantInCluster_(sheet, clusterId) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  var data = sheet.getRange(2, 1, lastRow - 1, HEADER.length).getValues();
+  var idx = {
+    pid: HEADER.indexOf('prolific_pid'), cluster_id: HEADER.indexOf('cluster_id'),
+    slot: HEADER.indexOf('cluster_slot'), entered: HEADER.indexOf('entered_phase2_at_iso'),
+    complete: HEADER.indexOf('task_complete_at'), prev: HEADER.indexOf('prev_participant_pid')
+  };
+  var best = null;
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    if (Number(row[idx.cluster_id]) !== Number(clusterId)) continue;
+    if (!best || new Date(row[idx.entered]).getTime() > new Date(best.row[idx.entered]).getTime()) {
+      best = { rowIndex: i + 2, row: row };
+    }
+  }
+  if (!best) return null;
+  return {
+    rowIndex: best.rowIndex,
+    pid: best.row[idx.pid],
+    slot: Number(best.row[idx.slot]),
+    complete: !!best.row[idx.complete],
+    prevPid: best.row[idx.prev]
+  };
+}
+
+function computeTaskNTargetsForSlot_(slot) {
+  var position = (CLUSTER_SIZE + 1) - slot;
+  return Math.pow(2, position);
+}
+
+// Creates cluster 1 with 4 synthetic "perfect" entries at slots 2..5,
+// chained together via prev_participant_pid, physically inserted ABOVE the
+// real participant's existing row (Michele: these should read as "the four
+// first lines," not just earlier-timestamped filler). The real participant
+// becomes slot 1, chained after the last synthetic.
+function bootstrapFirstCluster_(sheet, pid, rowIndex, isNew) {
+  var now = new Date().toISOString();
+  var earlier = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+
+  if (isNew) {
+    // Defensive fallback only — shouldn't normally happen (doGet only
+    // reaches this after confirming a row already exists for this pid).
+    var prevPidFallback = '';
+    writeRowBatched_(sheet, rowIndex, isNew, [['prolific_pid', pid]]);
+    for (var s = 2; s <= CLUSTER_SIZE; s++) {
+      var nF = computeTaskNTargetsForSlot_(s);
+      var synthPidF = 'SYNTHETIC_C1_S' + s;
+      writeRowBatched_(sheet, sheet.getLastRow() + 1, true, [
+        ['prolific_pid', synthPidF], ['phase1_complete_at', earlier], ['phase2_complete_at', earlier], ['task_complete_at', earlier],
+        ['cluster_id', 1], ['cluster_slot', s], ['entered_phase2_at_iso', earlier],
+        ['prev_participant_pid', prevPidFallback],
+        ['p2_task_n_targets', nF], ['p2_task_found_count', nF], ['is_synthetic', true]
+      ]);
+      prevPidFallback = synthPidF;
+    }
+    writeRowBatched_(sheet, rowIndex, false, [
+      ['cluster_id', 1], ['cluster_slot', 1], ['entered_phase2_at_iso', now],
+      ['prev_participant_pid', prevPidFallback]
+    ]);
+    return;
+  }
+
+  sheet.insertRowsBefore(rowIndex, CLUSTER_SIZE - 1);
+  var realRowIndex = rowIndex + (CLUSTER_SIZE - 1);
+
+  var prevPid = '';
+  for (var slot = 2; slot <= CLUSTER_SIZE; slot++) {
+    var synthRowIndex = rowIndex + (slot - 2);
+    var nTargets = computeTaskNTargetsForSlot_(slot);
+    var synthPid = 'SYNTHETIC_C1_S' + slot;
+    writeRowBatched_(sheet, synthRowIndex, true, [
+      ['prolific_pid', synthPid],
+      ['phase1_complete_at', earlier], ['phase2_complete_at', earlier], ['task_complete_at', earlier],
+      ['cluster_id', 1], ['cluster_slot', slot],
+      ['entered_phase2_at_iso', earlier],
+      ['prev_participant_pid', prevPid],
+      ['p2_task_n_targets', nTargets], ['p2_task_found_count', nTargets],
+      ['is_synthetic', true]
+    ]);
+    prevPid = synthPid;
+  }
+
+  writeRowBatched_(sheet, realRowIndex, false, [
+    ['prolific_pid', pid], ['cluster_id', 1], ['cluster_slot', 1],
+    ['entered_phase2_at_iso', now], ['prev_participant_pid', prevPid]
+  ]);
+}
+
+// The core assignment function. Idempotent for a pid that already has a
+// cluster assigned. Must be called from within a held lock.
+function assignParticipant_(sheet, pid) {
+  var rowIndex = findRowByPid_(sheet, pid);
+  if (rowIndex) {
+    var existing = readRow_(sheet, rowIndex);
+    var cid = existing[HEADER.indexOf('cluster_id')];
+    if (cid !== '' && cid !== null && cid !== undefined) {
+      return { cluster_id: Number(cid), cluster_slot: Number(existing[HEADER.indexOf('cluster_slot')]) };
+    }
+  }
+  var isNew = !rowIndex;
+  if (isNew) rowIndex = sheet.getLastRow() + 1;
+
+  flagStuckIncompleteRows_(sheet); // informational only, no effect below
+
+  var maxClusterId = getMaxClusterId_(sheet);
+  if (maxClusterId === 0) {
+    bootstrapFirstCluster_(sheet, pid, rowIndex, isNew);
+    return { cluster_id: 1, cluster_slot: 1 };
+  }
+
+  var now = new Date().toISOString();
+
+  // "Busy" is never stored — it's derived live, every time, by checking
+  // whether a cluster's last entrant is complete. This is what makes a
+  // cluster automatically become available again the moment its stuck
+  // participant finishes: the very next arrival re-checks from scratch
+  // and simply finds it free. Scan from cluster 1 upward (not just the
+  // most recently created one) and take the FIRST available cluster —
+  // only fork if every existing cluster is currently busy.
+  for (var cid = 1; cid <= maxClusterId; cid++) {
+    var candidate = getLastEntrantInCluster_(sheet, cid);
+    if (!candidate) continue; // shouldn't happen for an id that exists, but don't crash if it does
+    if (!candidate.complete) continue; // busy — try the next cluster
+
+    var newSlot = (candidate.slot % CLUSTER_SIZE) + 1;
+    writeRowBatched_(sheet, rowIndex, isNew, [
+      ['prolific_pid', pid], ['cluster_id', cid], ['cluster_slot', newSlot],
+      ['entered_phase2_at_iso', now], ['prev_participant_pid', candidate.pid]
+    ]);
+    return { cluster_id: cid, cluster_slot: newSlot };
+  }
+
+  // Every existing cluster is busy — fork from the most recent one. The
+  // new participant steps into that stuck entrant's position (same slot,
+  // same predecessor pointer — "not including the incomplete participant").
+  // Nothing is copied; the stuck row is untouched.
+  var stuck = getLastEntrantInCluster_(sheet, maxClusterId);
+  var newClusterId = maxClusterId + 1;
+  writeRowBatched_(sheet, rowIndex, isNew, [
+    ['prolific_pid', pid], ['cluster_id', newClusterId], ['cluster_slot', stuck.slot],
+    ['entered_phase2_at_iso', now], ['prev_participant_pid', stuck.prevPid]
+  ]);
+  return { cluster_id: newClusterId, cluster_slot: stuck.slot };
+}
+
+function flagStuckIncompleteRows_(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  var data = sheet.getRange(2, 1, lastRow - 1, HEADER.length).getValues();
+  var idx = {
+    entered: HEADER.indexOf('entered_phase2_at_iso'), complete: HEADER.indexOf('task_complete_at'),
+    flagged: HEADER.indexOf('flagged_incomplete'), synthetic: HEADER.indexOf('is_synthetic')
+  };
+  var now = Date.now();
+  for (var i = 0; i < data.length; i++) {
+    var row = data[i];
+    if (row[idx.synthetic]) continue;
+    if (!row[idx.entered]) continue;
+    if (row[idx.complete]) continue;
+    if (row[idx.flagged]) continue;
+    if (now - new Date(row[idx.entered]).getTime() > FLAG_TIMEOUT_MS) {
+      sheet.getRange(i + 2, idx.flagged + 1).setValue(true);
+    }
+  }
+}
+
+// ============================================================
+// ACTUAL RANK — per-participant sliding window of 4 predecessors,
+// followed via prev_participant_pid. Uniform walk: never special-cases a
+// fork boundary, because a fork's first link already points at the right
+// ancestor.
+// ============================================================
+
+// Walks the prev_participant_pid chain up to 4 steps back and returns the
+// real task_found_count of each predecessor found. By the assignment
+// invariant, all 4 are guaranteed already task-complete by the time this
+// is called (this participant could only have been assigned after their
+// immediate predecessor finished, and so on transitively) — so this list
+// is safe to hand to the frontend at Phase-2-entry lookup time, well
+// before the task even starts, and never goes stale afterward (a
+// predecessor's found_count never changes once written). This is what
+// lets the client compute its own rank INSTANTLY the moment its own task
+// ends, with no second network round-trip.
+function getPredecessorFoundCounts_(sheet, startPrevPid) {
+  var idx = { found: HEADER.indexOf('p2_task_found_count'), prev: HEADER.indexOf('prev_participant_pid') };
+  var results = [];
+  var curPrevPid = startPrevPid;
+  var cache = {};
+  for (var step = 0; step < 4; step++) {
+    if (!curPrevPid) break; // only possible for the first few bootstrap rows
+    var rowIndex = cache[curPrevPid] !== undefined ? cache[curPrevPid] : findRowByPid_(sheet, curPrevPid);
+    cache[curPrevPid] = rowIndex;
+    if (!rowIndex) break;
+    var row = readRow_(sheet, rowIndex);
+    results.push(Number(row[idx.found]) || 0);
+    curPrevPid = row[idx.prev];
+  }
+  return results;
+}
+
+function tryComputeActualRankForRow_(sheet, rowIndex, cache) {
+  var row = readRow_(sheet, rowIndex);
+  var idx = {
+    pid: HEADER.indexOf('prolific_pid'), complete: HEADER.indexOf('task_complete_at'),
+    actual: HEADER.indexOf('actual_rank'), synthetic: HEADER.indexOf('is_synthetic'),
+    prev: HEADER.indexOf('prev_participant_pid'), found: HEADER.indexOf('p2_task_found_count'),
+    entered: HEADER.indexOf('entered_phase2_at_iso')
+  };
+  if (row[idx.synthetic]) return;
+  if (!row[idx.complete]) return;
+  if (row[idx.actual] !== '' && row[idx.actual] !== null) return;
+
+  var window = [{ found: Number(row[idx.found]) || 0, self: true }];
+  var curPrevPid = row[idx.prev];
+  for (var step = 0; step < 4; step++) {
+    if (!curPrevPid) return; // not enough history yet — can't compute
+    var predRowIndex = cache[curPrevPid] !== undefined ? cache[curPrevPid] : findRowByPid_(sheet, curPrevPid);
+    cache[curPrevPid] = predRowIndex;
+    if (!predRowIndex) return; // data integrity issue — bail safely, don't guess
+    var predRow = readRow_(sheet, predRowIndex);
+    var predComplete = !!predRow[idx.complete] || !!predRow[idx.synthetic]; // synthetic rows are always "complete"
+    if (!predComplete) return; // a predecessor isn't done yet — can't compute now
+    window.push({ found: Number(predRow[idx.found]) || 0, self: false });
+    curPrevPid = predRow[idx.prev];
+  }
+
+  // Standard competition ranking: a tie is never broken arbitrarily — both
+  // (or all) tied participants get the SAME rank, and it's the better
+  // (numerically lower) one. Concretely: this participant's rank is
+  // 1 + however many window members strictly beat their found_count. A
+  // tie contributes nothing to that count, so tied participants land on
+  // the identical, more favorable number — never split between adjacent
+  // ranks by an arbitrary tiebreak (e.g. who happened to arrive first).
+  var mine = window[0].found;
+  var rank = 1 + window.filter(function(w) { return w.found > mine; }).length;
+  sheet.getRange(rowIndex, idx.actual + 1).setValue(rank);
+}
+
+// Called after every phase2_complete. A single completion can make its OWN
+// rank computable, or unblock some OTHER (later) participant whose window
+// was waiting on this row — a full sweep is the simplest way to catch both
+// without maintaining a reverse index, and is cheap at this study's scale.
+function sweepActualRanks_(sheet) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return;
+  var cache = {};
+  for (var r = 2; r <= lastRow; r++) {
+    tryComputeActualRankForRow_(sheet, r, cache);
+  }
+}
+
+// Field lists used to build the batched row write for the HTTP API. Cluster
+// bookkeeping fields are NOT here — only ever touched by the functions
+// above, never via this generic DATA_LOG mapping.
+// Helpers for the stability/recognition task's per-item field mapping
+// (P1_FIELDS/P2_FIELDS below) — d.stability_rows_tested / d.stability_foils
+// / d.stability_recognition are all arrays of (up to) 3 objects, one per
+// tested item, in the same order throughout.
+function stabilityRowField_(d, i, field) {
+  var row = Array.isArray(d.stability_rows_tested) ? d.stability_rows_tested[i] : null;
+  return (row && row[field] != null) ? row[field] : null;
+}
+function stabilityResponseField_(d, i) {
+  return (Array.isArray(d.stability_responses) && d.stability_responses[i] != null) ? d.stability_responses[i] : null;
+}
+function stabilityFoilField_(d, i, field) {
+  var foil = Array.isArray(d.stability_foils) ? d.stability_foils[i] : null;
+  return (foil && foil[field] != null) ? foil[field] : null;
+}
+function stabilityRecogField_(d, i, field) {
+  var rec = Array.isArray(d.stability_recognition) ? d.stability_recognition[i] : null;
+  return (rec && rec[field] != null) ? rec[field] : null;
+}
+function stabilityRemeasureField_(d, i) {
+  return (Array.isArray(d.stability_remeasure) && d.stability_remeasure[i] != null) ? d.stability_remeasure[i] : null;
+}
+
+var P1_FIELDS = [
+  ['p1_app_phase',             function(d){ return d.app_phase; }],
+  ['p1_demo_mode',             function(d){ return d.demo_mode; }],
+  ['p1_session_start_iso',     function(d){ return d.session_start_iso; }],
+  ['p1_phase1_condition',      function(d){ return d.phase1_condition; }],
+  ['p1_elicitation_pref',      function(d){ return d.elicitation_pref; }],
+  ['p1_elicitation_start_value', function(d){ return d.elicitation_start_value; }],
+  ['p1_elicitation_time_ms',   function(d){ return d.elicitation_time_ms; }],
+  ['p1_elicitation_nopref_clicks',      function(d){ return d.elicitation_nopref_clicks; }],
+  ['p1_elicitation_nopref_clicked_ever', function(d){ return d.elicitation_nopref_clicked_ever; }],
+  ['p1_memory_sequence',       function(d){ return d.memory_sequence; }],
+  ['p1_survey_total_time_ms',  function(d){ return d.survey_total_time_ms; }],
+  ['p1_survey_active_time_ms', function(d){ return d.survey_active_time_ms; }],
+  ['p1_survey_idle_time_ms',   function(d){ return d.survey_idle_time_ms; }],
+  ['p1_geo_country',           function(d){ return d.geo_phase1_country; }],
+  ['p1_geo_region',            function(d){ return d.geo_phase1_region; }],
+  ['p1_geo_city',              function(d){ return d.geo_phase1_city; }],
+  ['p1_geo_ip',                function(d){ return d.geo_phase1_ip; }],
+  ['p1_geo_provider',          function(d){ return d.geo_phase1_provider; }],
+  ['p1_geo_json',              function(d){ return d.geo_phase1_json; }],
+  // Manual allocation widget (screen 2) — one $ column per rank, plus the
+  // full array and its Gini. p1_elicitation_pref above is superseded and
+  // no longer written.
+  ['p1_elicit_amt_rank1',      function(d){ return Array.isArray(d.elicitation_alloc) ? d.elicitation_alloc[0] : null; }],
+  ['p1_elicit_amt_rank2',      function(d){ return Array.isArray(d.elicitation_alloc) ? d.elicitation_alloc[1] : null; }],
+  ['p1_elicit_amt_rank3',      function(d){ return Array.isArray(d.elicitation_alloc) ? d.elicitation_alloc[2] : null; }],
+  ['p1_elicit_amt_rank4',      function(d){ return Array.isArray(d.elicitation_alloc) ? d.elicitation_alloc[3] : null; }],
+  ['p1_elicit_amt_rank5',      function(d){ return Array.isArray(d.elicitation_alloc) ? d.elicitation_alloc[4] : null; }],
+  ['p1_elicitation_alloc_json', function(d){ return d.elicitation_alloc; }],
+  ['p1_elicitation_gini',      function(d){ return d.elicitation_gini; }],
+  // Stability/recognition task, Phase 1 half (screen 3) — replaces
+  // p1_memory_sequence above (deprecated, no longer written).
+  ['p1_stability_item1_domain',   function(d){ return stabilityRowField_(d, 0, 'domain'); }],
+  ['p1_stability_item1_row_id',   function(d){ return stabilityRowField_(d, 0, 'row_id'); }],
+  ['p1_stability_item1_side',     function(d){ return stabilityRowField_(d, 0, 'side'); }],
+  ['p1_stability_item1_response', function(d){ return stabilityResponseField_(d, 0); }],
+  ['p1_stability_item2_domain',   function(d){ return stabilityRowField_(d, 1, 'domain'); }],
+  ['p1_stability_item2_row_id',   function(d){ return stabilityRowField_(d, 1, 'row_id'); }],
+  ['p1_stability_item2_side',     function(d){ return stabilityRowField_(d, 1, 'side'); }],
+  ['p1_stability_item2_response', function(d){ return stabilityResponseField_(d, 1); }],
+  ['p1_stability_item3_domain',   function(d){ return stabilityRowField_(d, 2, 'domain'); }],
+  ['p1_stability_item3_row_id',   function(d){ return stabilityRowField_(d, 2, 'row_id'); }],
+  ['p1_stability_item3_side',     function(d){ return stabilityRowField_(d, 2, 'side'); }],
+  ['p1_stability_item3_response', function(d){ return stabilityResponseField_(d, 2); }],
+  ['p1_stability_rows_json',   function(d){ return d.stability_rows_tested; }],
+  ['p1_stability_time_ms',     function(d){ return d.stability_p1_time_ms; }],
+  ['p1_color_theme',           function(d){ return d.color_theme_phase1; }]
+];
+
+var P2_FIELDS = [
+  ['p2_app_phase',             function(d){ return d.app_phase; }],
+  ['p2_demo_mode',             function(d){ return d.demo_mode; }],
+  ['p2_session_start_iso',     function(d){ return d.session_start_iso; }],
+  ['p2_color_theme',           function(d){ return d.color_theme_phase2; }],
+  ['p2_phase2_condition',      function(d){ return d.phase2_condition; }],
+  ['p2_phase3_condition',      function(d){ return d.phase3_condition; }],
+  ['p2_reelicitation_pref',    function(d){ return d.reelicitation_pref; }],
+  // Manual allocation widget (screen 5) — same shape as the elicitation
+  // columns above. p2_reelicitation_pref is superseded and no longer written.
+  ['p2_reelicit_amt_rank1',    function(d){ return Array.isArray(d.reelicitation_alloc) ? d.reelicitation_alloc[0] : null; }],
+  ['p2_reelicit_amt_rank2',    function(d){ return Array.isArray(d.reelicitation_alloc) ? d.reelicitation_alloc[1] : null; }],
+  ['p2_reelicit_amt_rank3',    function(d){ return Array.isArray(d.reelicitation_alloc) ? d.reelicitation_alloc[2] : null; }],
+  ['p2_reelicit_amt_rank4',    function(d){ return Array.isArray(d.reelicitation_alloc) ? d.reelicitation_alloc[3] : null; }],
+  ['p2_reelicit_amt_rank5',    function(d){ return Array.isArray(d.reelicitation_alloc) ? d.reelicitation_alloc[4] : null; }],
+  ['p2_reelicitation_alloc_json', function(d){ return d.reelicitation_alloc; }],
+  ['p2_reelicitation_gini',    function(d){ return d.reelicitation_gini; }],
+  ['p2_reelicitation_start_value', function(d){ return d.reelicitation_start_value; }],
+  ['p2_reelicitation_time_ms', function(d){ return d.reelicitation_time_ms; }],
+  ['p2_reelicitation_nopref_clicks',      function(d){ return d.reelicitation_nopref_clicks; }],
+  ['p2_reelicitation_nopref_clicked_ever', function(d){ return d.reelicitation_nopref_clicked_ever; }],
+  ['p2_you_rank',              function(d){ return d.you_rank; }],
+  ['p2_baseline_tau_pct',      function(d){ return d.baseline_tau_pct; }],
+  ['p2_initial_earning',       function(d){ return d.initial_earning; }],
+  ['p2_task_n_targets',        function(d){ return d.task_n_targets; }],
+  ['p2_task_found_count',      function(d){ return d.task_found_count; }],
+  ['p2_task_wrong_clicks',     function(d){ return d.task_wrong_clicks; }],
+  ['p2_task_time_ms',          function(d){ return d.task_time_ms; }],
+  ['p2_task_target_emoji',     function(d){ return d.task_target_emoji; }],
+  ['p2_task_other_emojis',     function(d){ return d.task_other_emojis; }],
+  ['p2_task_grids_json',       function(d){ return d.task_grids; }],
+  ['p2_task_grids_attempted',  function(d){ return d.task_grids_attempted; }],
+  ['p2_recall_answer',         function(d){ return d.recall_answer; }],
+  ['p2_recall_score',          function(d){ return d.recall_score; }],
+  ['p2_recall_score_norm',     function(d){ return d.recall_score_norm; }],
+  ['p2_recall_no_memory_of_task', function(d){ return d.recall_no_memory_of_task; }],
+  ['p2_giving_pref',           function(d){ return d.giving_pref; }],
+  // Manual allocation widget (screen 8) — SORTED rank order (index i =
+  // rank i+1 BY AMOUNT, same convention as p1_elicit_amt_rank*/
+  // p2_reelicit_amt_rank*: rank1 is always the largest amount given away),
+  // not the participant's own identity. This participant's own reward is
+  // p2_final_payoff, not p2_giving_amt_rank{p2_you_rank}. p2_giving_pref is
+  // superseded and no longer written.
+  ['p2_giving_amt_rank1',      function(d){ return Array.isArray(d.giving_alloc) ? d.giving_alloc[0] : null; }],
+  ['p2_giving_amt_rank2',      function(d){ return Array.isArray(d.giving_alloc) ? d.giving_alloc[1] : null; }],
+  ['p2_giving_amt_rank3',      function(d){ return Array.isArray(d.giving_alloc) ? d.giving_alloc[2] : null; }],
+  ['p2_giving_amt_rank4',      function(d){ return Array.isArray(d.giving_alloc) ? d.giving_alloc[3] : null; }],
+  ['p2_giving_amt_rank5',      function(d){ return Array.isArray(d.giving_alloc) ? d.giving_alloc[4] : null; }],
+  ['p2_giving_alloc_json',     function(d){ return d.giving_alloc; }],
+  ['p2_giving_gini',           function(d){ return d.giving_gini; }],
+  ['p2_giving_start_value',    function(d){ return d.giving_start_value; }],
+  ['p2_giving_time_ms',        function(d){ return d.giving_time_ms; }],
+  ['p2_giving_nopref_clicks',      function(d){ return d.giving_nopref_clicks; }],
+  ['p2_giving_nopref_clicked_ever', function(d){ return d.giving_nopref_clicked_ever; }],
+  ['p2_redistribution_anchor_shown', function(d){ return d.redistribution_anchor_shown; }],
+  ['p2_final_payoff',          function(d){ return d.final_payoff; }],
+  ['p2_experiment_total_time_ms',  function(d){ return d.experiment_total_time_ms; }],
+  ['p2_experiment_active_time_ms', function(d){ return d.experiment_active_time_ms; }],
+  ['p2_experiment_idle_time_ms',   function(d){ return d.experiment_idle_time_ms; }],
+  ['p2_slider_events',         function(d){ return d.slider_events; }],
+  ['p2_geo_country',           function(d){ return d.geo_phase2_country; }],
+  ['p2_geo_region',            function(d){ return d.geo_phase2_region; }],
+  ['p2_geo_city',              function(d){ return d.geo_phase2_city; }],
+  ['p2_geo_ip',                function(d){ return d.geo_phase2_ip; }],
+  ['p2_geo_provider',          function(d){ return d.geo_phase2_provider; }],
+  ['p2_geo_json',              function(d){ return d.geo_phase2_json; }],
+  ['p2_survey_a1_employment',  function(d){ return d.survey_a1_employment; }],
+  ['p2_survey_a2_marital',     function(d){ return d.survey_a2_marital; }],
+  // DEPRECATED (A3 rewrite — see p2_survey_a3_household_size below): these
+  // always return null now rather than the stale false/0 DATA_LOG
+  // defaults, so new rows read as "not asked" instead of misleadingly
+  // implying an explicit answer that was never actually collected.
+  ['p2_survey_a3_nobody_else', function(d){ return null; }],
+  ['p2_survey_a3_partner',     function(d){ return null; }],
+  ['p2_survey_a3_minor_children', function(d){ return null; }],
+  ['p2_survey_a3_adult_children', function(d){ return null; }],
+  ['p2_survey_a3_father',      function(d){ return null; }],
+  ['p2_survey_a3_mother',      function(d){ return null; }],
+  ['p2_survey_a3_other_adults', function(d){ return null; }],
+  ['p2_survey_a3_other_minors', function(d){ return null; }],
+  ['p2_survey_a3_household_size', function(d){ return d.survey_a3_household_size; }],
+  ['p2_survey_a4_education',   function(d){ return d.survey_a4_education; }],
+  ['p2_survey_b1_ends_meet',   function(d){ return d.survey_b1_ends_meet; }],
+  ['p2_survey_b2_prolific_income_importance', function(d){ return d.survey_b2_prolific_income_importance; }],
+  ['p2_survey_c1_attribution', function(d){ return d.survey_c1_attribution; }],
+  ['p2_survey_c2_support_redistribution', function(d){ return d.survey_c2_support_redistribution; }],
+  ['p2_survey_c2_perceived_consensus', function(d){ return d.survey_c2_perceived_consensus; }],
+  ['p2_survey_c3_economic_lr', function(d){ return d.survey_c3_economic_lr; }],
+  ['p2_survey_c3_social_al',   function(d){ return d.survey_c3_social_al; }],
+  // NOTE (v18): these two used to be a 0-100 slider ("out of every 100
+  // dollars..."), now a 0-10 button scale ("out of every 10 dollars...") —
+  // despite the "_pct" field name, rows from before this change are on a
+  // 0-100 scale and rows after are 0-10. Not comparable without rescaling.
+  ['p2_survey_c4_tax_waste_pct', function(d){ return d.survey_c4_tax_waste_pct; }],
+  ['p2_survey_c4_top20_share_pct', function(d){ return d.survey_c4_top20_share_pct; }],
+  ['p2_survey_d1_vote_2024',   function(d){ return d.survey_d1_vote_2024; }],
+  ['p2_survey_time_ms',        function(d){ return d.survey_time_ms; }],
+  // Stability/recognition task, end-of-study half (screens 21-27) —
+  // replaces p2_recall_* above (deprecated, no longer written).
+  ['p2_claimed_recall_step1',   function(d){ return d.claimed_recall_step1; }],
+  ['p2_framing_recall_response', function(d){ return d.framing_recall_response; }],
+  ['p2_framing_recall_correct', function(d){ return d.framing_recall_correct; }],
+  ['p2_stability_item1_foil_row_id',   function(d){ return stabilityFoilField_(d, 0, 'row_id'); }],
+  ['p2_stability_item1_recog_choice',  function(d){ return stabilityRecogField_(d, 0, 'choice_item_id'); }],
+  ['p2_stability_item1_recog_class',   function(d){ return stabilityRecogField_(d, 0, 'classification'); }],
+  ['p2_stability_item1_recog_correct', function(d){ return stabilityRecogField_(d, 0, 'correct'); }],
+  ['p2_stability_item1_recog_rt_ms',   function(d){ return stabilityRecogField_(d, 0, 'rt_ms'); }],
+  ['p2_stability_item1_remeasure',     function(d){ return stabilityRemeasureField_(d, 0); }],
+  ['p2_stability_item2_foil_row_id',   function(d){ return stabilityFoilField_(d, 1, 'row_id'); }],
+  ['p2_stability_item2_recog_choice',  function(d){ return stabilityRecogField_(d, 1, 'choice_item_id'); }],
+  ['p2_stability_item2_recog_class',   function(d){ return stabilityRecogField_(d, 1, 'classification'); }],
+  ['p2_stability_item2_recog_correct', function(d){ return stabilityRecogField_(d, 1, 'correct'); }],
+  ['p2_stability_item2_recog_rt_ms',   function(d){ return stabilityRecogField_(d, 1, 'rt_ms'); }],
+  ['p2_stability_item2_remeasure',     function(d){ return stabilityRemeasureField_(d, 1); }],
+  ['p2_stability_item3_foil_row_id',   function(d){ return stabilityFoilField_(d, 2, 'row_id'); }],
+  ['p2_stability_item3_recog_choice',  function(d){ return stabilityRecogField_(d, 2, 'choice_item_id'); }],
+  ['p2_stability_item3_recog_class',   function(d){ return stabilityRecogField_(d, 2, 'classification'); }],
+  ['p2_stability_item3_recog_correct', function(d){ return stabilityRecogField_(d, 2, 'correct'); }],
+  ['p2_stability_item3_recog_rt_ms',   function(d){ return stabilityRecogField_(d, 2, 'rt_ms'); }],
+  ['p2_stability_item3_remeasure',     function(d){ return stabilityRemeasureField_(d, 2); }],
+  ['p2_stability_foils_json',        function(d){ return d.stability_foils; }],
+  ['p2_stability_recognition_json',  function(d){ return d.stability_recognition; }],
+  ['p2_stability_remeasure_json',    function(d){ return d.stability_remeasure; }],
+  ['p2_redistribution_study_frequency', function(d){ return d.redistribution_study_frequency; }],
+  ['p2_stability_time_ms',     function(d){ return d.stability_p2_time_ms; }]
+];
+
+function doGet(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var action = e.parameter.action;
+    if (action === 'lookup') {
+      var pid = e.parameter.pid;
+      var sheet = getSheet_();
+      var rowIndex = findRowByPid_(sheet, pid);
+      if (!rowIndex) {
+        return jsonOut_({ found: false, treatment: null,
+          phase1_complete: false, phase2_complete: false,
+          resume_phase: null, resume_snapshot: null,
+          elicitation_alloc: null,
+          stability_rows_tested: null, phase1_condition_confirmed: null,
+          color_theme_phase1: null,
+          assigned_rank: null, cluster_id: null,
+          predecessor_found_counts: [] });
+      }
+      var row = readRow_(sheet, rowIndex);
+      var get = function(field) { return row[HEADER.indexOf(field)]; };
+
+      var assignedRank = null, assignedClusterId = null, predecessorFoundCounts = [];
+      if (get('phase1_complete_at')) {
+        var assignment = assignParticipant_(sheet, pid);
+        assignedRank = assignment.cluster_slot;
+        assignedClusterId = assignment.cluster_id;
+        rowIndex = findRowByPid_(sheet, pid);
+        row = readRow_(sheet, rowIndex);
+        get = function(field) { return row[HEADER.indexOf(field)]; };
+        predecessorFoundCounts = getPredecessorFoundCounts_(sheet, get('prev_participant_pid'));
+      }
+
+      var resumeSnap = null;
+      try { if (get('resume_snapshot_json')) resumeSnap = JSON.parse(get('resume_snapshot_json')); } catch(err){}
+      return jsonOut_({
+        found: true,
+        treatment: get('treatment') || null,
+        phase1_complete: !!get('phase1_complete_at'),
+        phase2_complete: !!get('phase2_complete_at'),
+        resume_phase: get('resume_phase') || null,
+        resume_snapshot: resumeSnap,
+        // Phase 1's manual-allocation choice (JSON array string), so Phase
+        // 2 can restore it into elicitAllocRestored — data continuity
+        // only, not currently rendered on any Phase 2 screen.
+        elicitation_alloc: get('p1_elicitation_alloc_json') !== '' ? get('p1_elicitation_alloc_json') : null,
+        // Phase 1's 3 sampled stability items (JSON array string of
+        // {domain,row_id,side}), restored into STABILITY_ROWS_TESTED at
+        // Phase 2 entry so the end-of-study recognition/reveal/re-measure
+        // screens use the exact items actually shown in Phase 1.
+        stability_rows_tested: get('p1_stability_rows_json') !== '' ? get('p1_stability_rows_json') : null,
+        // The participant's REAL assigned Phase-1 framing condition
+        // ('C'|'T'), used to score framing_recall_correct against the
+        // authoritative backend record rather than client-side state.
+        phase1_condition_confirmed: get('p1_phase1_condition') || null,
+        // Phase 1's actual color theme, so a fresh Phase 2 session (a
+        // different Prolific session/device, no local snapshot to inherit
+        // from) can compute the guaranteed-opposite color instead of
+        // guessing — without this, Phase 2 had no way to know Phase 1's
+        // color and could coincidentally land on the same one.
+        color_theme_phase1: get('p1_color_theme') || null,
+        assigned_rank: assignedRank,
+        cluster_id: assignedClusterId,
+        predecessor_found_counts: predecessorFoundCounts
+        // Real found_counts of this participant's (up to) 4 comparison-
+        // window predecessors — see getPredecessorFoundCounts_. Safe to
+        // expose: these participants are already fully resolved, and the
+        // frontend needs this to compute its own actual_rank instantly
+        // instead of waiting on a second round-trip after the task.
+      });
+    }
+    return jsonOut_({ error: 'unknown action' });
+  } finally { lock.releaseLock(); }
+}
+
+function doPost(e) {
+  var body = JSON.parse(e.postData.contents);
+  var pid = body.pid;
+  if (!pid) return jsonOut_({ ok: false, error: 'missing pid' });
+
+  var now = new Date().toISOString();
+  var data = body.data || {};
+
+  if (body.action === 'progress') {
+    var lock = LockService.getScriptLock();
+    var gotLock = lock.tryLock(1000);
+    if (!gotLock) return jsonOut_({ ok: true, skipped: true });
+    try {
+      var sheet = getSheet_();
+      var rowIndex = findRowByPid_(sheet, pid);
+      var isNew = false;
+      if (!rowIndex) { rowIndex = sheet.getLastRow() + 1; isNew = true; }
+      var updates = [
+        ['prolific_pid', pid],
+        ['study_id',  body.study_id  || data.study_id  || ''],
+        ['session_id', body.session_id || data.session_id || ''],
+        ['treatment', body.treatment || data.treatment || ''],
+        ['resume_phase', body.phase || data.app_phase || ''],
+        ['resume_snapshot_json', JSON.stringify(body.snapshot || {})]
+      ];
+      updates.push(body.phase === 'phase1' ? ['p1_last_updated_iso', now] : ['p2_last_updated_iso', now]);
+      writeRowBatched_(sheet, rowIndex, isNew, updates);
+      return jsonOut_({ ok: true });
+    } catch (err) {
+      return jsonOut_({ ok: false, error: String(err) });
+    } finally { lock.releaseLock(); }
+  }
+
+  var lock2 = LockService.getScriptLock();
+  lock2.waitLock(10000);
+  try {
+    var sheet2 = getSheet_();
+    var rowIndex2 = findRowByPid_(sheet2, pid);
+    var isNew2 = false;
+    if (!rowIndex2) { rowIndex2 = sheet2.getLastRow() + 1; isNew2 = true; }
+
+    var alreadyPhase1 = !isNew2 && !!sheet2.getRange(rowIndex2, colIndex_('phase1_complete_at')).getValue();
+    var alreadyPhase2 = !isNew2 && !!sheet2.getRange(rowIndex2, colIndex_('phase2_complete_at')).getValue();
+    var alreadyTask = !isNew2 && !!sheet2.getRange(rowIndex2, colIndex_('task_complete_at')).getValue();
+
+    if (body.action === 'phase1_complete' && alreadyPhase1) return jsonOut_({ ok: true, already_complete: true });
+    if (body.action === 'phase2_complete' && alreadyPhase2) return jsonOut_({ ok: true, already_complete: true });
+    if (body.action === 'task_complete' && alreadyTask) {
+      var existingRank = sheet2.getRange(rowIndex2, colIndex_('actual_rank')).getValue();
+      return jsonOut_({ ok: true, already_complete: true, actual_rank: existingRank !== '' ? Number(existingRank) : null });
+    }
+
+    var updates2 = [
+      ['prolific_pid', pid],
+      ['study_id',  body.study_id  || data.study_id  || ''],
+      ['session_id', body.session_id || data.session_id || ''],
+      ['treatment', body.treatment || data.treatment || '']
+    ];
+
+    if (body.action === 'phase1_complete') {
+      updates2.push(['phase1_complete_at', now]);
+      P1_FIELDS.forEach(function(pair) { updates2.push([pair[0], pair[1](data)]); });
+      updates2.push(['p1_last_updated_iso', now]);
+      updates2.push(['resume_phase', '']);
+      updates2.push(['resume_snapshot_json', '']);
+      writeRowBatched_(sheet2, rowIndex2, isNew2, updates2);
+
+    } else if (body.action === 'task_complete') {
+      // Fired right after the task auto-submits — BEFORE the rest of
+      // Phase 2 (recall, redistribution) happens. This is the whole point
+      // of the redesign: task_complete_at (not phase2_complete_at) is what
+      // makes actual_rank computable, and by the assignment invariant it's
+      // always computable immediately — every predecessor in this
+      // participant's chain was already task-complete before this
+      // participant even started.
+      updates2.push(['task_complete_at', now]);
+      P2_FIELDS.forEach(function(pair) {
+        var v = pair[1](data);
+        if (v !== undefined && v !== null) updates2.push([pair[0], v]);
+      });
+      updates2.push(['p2_last_updated_iso', now]);
+      writeRowBatched_(sheet2, rowIndex2, isNew2, updates2);
+
+      sweepActualRanks_(sheet2); // computes THIS row's rank, and unblocks anyone waiting on it
+      var rankNow = sheet2.getRange(rowIndex2, colIndex_('actual_rank')).getValue();
+      return jsonOut_({ ok: true, actual_rank: rankNow !== '' ? Number(rankNow) : null });
+
+    } else if (body.action === 'phase2_complete') {
+      updates2.push(['phase2_complete_at', now]);
+      P2_FIELDS.forEach(function(pair) { updates2.push([pair[0], pair[1](data)]); });
+      updates2.push(['p2_last_updated_iso', now]);
+      updates2.push(['resume_phase', '']);
+      updates2.push(['resume_snapshot_json', '']);
+      writeRowBatched_(sheet2, rowIndex2, isNew2, updates2);
+
+      sweepActualRanks_(sheet2);
+    }
+
+    return jsonOut_({ ok: true });
+  } catch (err) {
+    return jsonOut_({ ok: false, error: String(err) });
+  } finally { lock2.releaseLock(); }
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
