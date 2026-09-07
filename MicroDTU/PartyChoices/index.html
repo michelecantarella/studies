@@ -72,6 +72,8 @@
   <p class="prompt">What is the best combination of drinks and snacks to bring to a party?</p>
   <p class="instructions">The student whose ranking is closest to the class average wins a chocolate bar.</p>
 
+  <div id="load-status" class="note">Loading bundles...</div>
+
   <div class="columns" id="columns">
     <div class="column">
       <h2>Bundles</h2>
@@ -88,20 +90,10 @@
 </div>
 
 <script>
-// Fixed set of bundles for this session. Generate this once by opening
-// the Apps Script backend's ?action=bundles URL, then paste the JSON
-// array it returns here before publishing this page. Everyone who opens
-// this page sees this exact same list, no live call needed to load it.
-const BUNDLES = [
-  {"id":"A","snacks":30,"drinks":10},
-  {"id":"B","snacks":18,"drinks":16},
-  {"id":"C","snacks":42,"drinks":6},
-  {"id":"D","snacks":24,"drinks":12}
-];
-
-// Only the ranking SUBMISSION needs a network call, to record it in the
-// spreadsheet. Set this to your Apps Script Web App /exec URL.
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwR1wr_n4uW3gn7TTlL0ILREljiG-kQf5vstm1FWWCZ3OWUZpIq2zvx4iDXTUShS1GJLw/exec";
+// The bundles are fetched live from the Apps Script backend every time the
+// page loads: whatever groups submitted today is what shows up here, with
+// nothing to paste or edit by hand.
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycby9eOvcErDB6cEJxR2x2cdp-TuIA-ZhdO_N-a5xnMgj5MdrA_LYVCERHXauVOwzZcgn8w/exec";
 
 const SNACK_EMOJI = "\u{1F37F}"; // popcorn
 const DRINK_EMOJI = "\u{1F37E}"; // bottle
@@ -173,12 +165,24 @@ function checkReady(){
   btn.disabled = pool.children.length > 0;
 }
 
-function init(){
+async function init(){
   const pool = document.getElementById("pool");
   const ranking = document.getElementById("ranking");
-  shuffle(BUNDLES).forEach(b => pool.appendChild(makeItem(b)));
-  wireDropzone(pool);
-  wireDropzone(ranking);
+  const status = document.getElementById("load-status");
+  try{
+    const res = await fetch(BACKEND_URL + "?action=bundles", { method: "GET", cache: "no-store" });
+    const bundles = await res.json();
+    if(!Array.isArray(bundles) || bundles.length === 0){
+      status.textContent = "No bundles have been submitted yet today.";
+      return;
+    }
+    status.style.display = "none";
+    shuffle(bundles).forEach(b => pool.appendChild(makeItem(b)));
+    wireDropzone(pool);
+    wireDropzone(ranking);
+  }catch(e){
+    status.textContent = "Could not load the bundles. Reload the page to try again.";
+  }
 }
 init();
 
