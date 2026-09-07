@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rank the bundles</title>
+<style>
+  :root{
+    --bg:#F7F7F5;
+    --text:#1C1C1C;
+    --muted:#6B6B6B;
+    --line:#D8D8D4;
+    --accent:#1C1C1C;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:Georgia, 'Times New Roman', serif;
+    min-height:100vh;
+  }
+  .wrap{ max-width:640px; margin:0 auto; padding:32px 20px 60px; }
+  h1{ font-size:22px; font-weight:400; margin:0 0 6px 0; }
+  p.instructions{ font-size:14px; color:var(--muted); line-height:1.5; margin:0 0 20px 0; font-family:Arial, sans-serif; }
+  label{ display:block; font-size:12px; color:var(--muted); margin-bottom:4px; font-family:Arial, sans-serif; }
+  input[type=text]{
+    width:100%; padding:9px 10px; border:1px solid var(--line);
+    background:#fff; color:var(--text); font-size:14px; font-family:Arial, sans-serif;
+    margin-bottom:24px;
+  }
+  .columns{ display:flex; gap:16px; margin-bottom:20px; }
+  .column{ flex:1; min-width:0; }
+  .column h2{
+    font-size:12px; font-weight:600; color:var(--muted);
+    font-family:Arial, sans-serif; margin:0 0 8px 0;
+  }
+  .dropzone{
+    list-style:none; margin:0; padding:8px; min-height:260px;
+    background:#fff; border:1px solid var(--line); border-radius:4px;
+  }
+  .item{
+    padding:10px 12px; margin-bottom:6px; background:var(--bg);
+    border:1px solid var(--line); border-radius:3px; cursor:grab;
+    font-size:15px; font-family:Arial, sans-serif; user-select:none;
+  }
+  .item:last-child{ margin-bottom:0; }
+  .item.dragging{ opacity:0.35; }
+  .dropzone.dragover{ border-color:var(--accent); }
+  .submit{
+    width:100%; padding:11px; background:var(--accent); color:#fff; border:none;
+    font-size:14px; font-family:Arial, sans-serif; cursor:pointer;
+  }
+  .submit:disabled{ opacity:0.4; cursor:default; }
+  .note{ font-size:12px; color:var(--muted); margin-top:10px; font-family:Arial, sans-serif; min-height:16px; }
+  .loading{ font-size:13px; color:var(--muted); font-family:Arial, sans-serif; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Rank the party bundles</h1>
+  <p class="instructions">
+    Drag each bundle from the left into the right column, ordered from the one you would most want at the party (top)
+    to the one you would least want (bottom). Then enter your student ID and submit.
+  </p>
+
+  <label for="student-id">Student ID</label>
+  <input type="text" id="student-id" autocomplete="off">
+
+  <div id="loading" class="loading">Loading bundles...</div>
+
+  <div class="columns" id="columns" style="display:none;">
+    <div class="column">
+      <h2>Bundles</h2>
+      <ul class="dropzone" id="pool"></ul>
+    </div>
+    <div class="column">
+      <h2>Your ranking, best at top</h2>
+      <ul class="dropzone" id="ranking"></ul>
+    </div>
+  </div>
+
+  <button class="submit" id="submit-btn" disabled>Submit</button>
+  <div class="note" id="note"></div>
+</div>
+
+<script>
+// ---- set this to your Apps Script Web App /exec URL ----
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbye3cXU3S-0CyFeLvPDjNz6nWRjbCQVWAXcWW5huV0roPZ02OysyhOpOAy9z9mi_OmbvQ/exec";
+
+const SNACK_EMOJI = "\u{1F968}"; // pretzel
+const DRINK_EMOJI = "\u{1F964}"; // cup with straw
+
+function shuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+function makeItem(b){
+  const li = document.createElement("li");
+  li.className = "item";
+  li.draggable = true;
+  li.dataset.id = b.id;
+  li.textContent = SNACK_EMOJI + " " + b.snacks + "    " + DRINK_EMOJI + " " + b.drinks;
+  li.addEventListener("dragstart", ()=>{
+    li.classList.add("dragging");
+  });
+  li.addEventListener("dragend", ()=>{
+    li.classList.remove("dragging");
+    checkReady();
+  });
+  return li;
+}
+
+function getDragAfterElement(container, y){
+  const items = [...container.querySelectorAll(".item:not(.dragging)")];
+  return items.reduce((closest, child)=>{
+    const box = child.getBoundingClientRect();
+    const offset = y - box.top - box.height/2;
+    if(offset < 0 && offset > closest.offset){
+      return { offset, element: child };
+    }
+    return closest;
+  }, { offset: Number.NEGATIVE_INFINITY, element: null }).element;
+}
+
+function wireDropzone(zone){
+  zone.addEventListener("dragover", (e)=>{
+    e.preventDefault();
+    zone.classList.add("dragover");
+    const dragging = document.querySelector(".dragging");
+    if(!dragging) return;
+    const afterElement = getDragAfterElement(zone, e.clientY);
+    if(afterElement == null){
+      zone.appendChild(dragging);
+    }else{
+      zone.insertBefore(dragging, afterElement);
+    }
+  });
+  zone.addEventListener("dragleave", ()=> zone.classList.remove("dragover"));
+  zone.addEventListener("drop", (e)=>{
+    e.preventDefault();
+    zone.classList.remove("dragover");
+    checkReady();
+  });
+}
+
+function checkReady(){
+  const pool = document.getElementById("pool");
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = pool.children.length > 0;
+}
+
+async function loadBundles(){
+  try{
+    const res = await fetch(BACKEND_URL + "?action=bundles", { method: "GET" });
+    const bundles = await res.json();
+    if(!Array.isArray(bundles) || bundles.length === 0){
+      document.getElementById("loading").textContent = "No bundles are ready yet, check back later.";
+      return;
+    }
+    document.getElementById("loading").style.display = "none";
+    document.getElementById("columns").style.display = "flex";
+
+    const pool = document.getElementById("pool");
+    const ranking = document.getElementById("ranking");
+    shuffle(bundles).forEach(b => pool.appendChild(makeItem(b)));
+    wireDropzone(pool);
+    wireDropzone(ranking);
+  }catch(e){
+    document.getElementById("loading").textContent = "Could not load bundles, check your connection and reload.";
+  }
+}
+loadBundles();
+
+document.getElementById("submit-btn").addEventListener("click", async ()=>{
+  const studentId = document.getElementById("student-id").value.trim();
+  const note = document.getElementById("note");
+  if(!studentId){
+    note.textContent = "Enter your student ID before submitting.";
+    return;
+  }
+  const ranking = [...document.getElementById("ranking").children].map(li => li.dataset.id);
+  if(ranking.length === 0 || document.getElementById("pool").children.length > 0){
+    note.textContent = "Drag every bundle into the ranking column first.";
+    return;
+  }
+
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true;
+  note.textContent = "Submitting...";
+
+  try{
+    await fetch(BACKEND_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ student_id: studentId, ranking: ranking.join(",") })
+    });
+    note.textContent = "Submitted. Thank you.";
+  }catch(e){
+    note.textContent = "Could not submit, check your connection and try again.";
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
