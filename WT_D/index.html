@@ -781,7 +781,7 @@ if(!_prolificID && _isPilotStudy){
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyEdNCf436QG1_nzy8dmAjjMPeZFOuQrxSZDUpArIR-XiFcRQBomfhrioOIkNGbNv8NpA/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbza3shzo1AdrCFCFsSlZlm_A2SWyhsjQVXdDUNb5kTm216lsC34rIEC7ZCD57lmlwrf/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.025; // £6/hr ÷ 3600s × 15s per task — guaranteed pay, tuned independently of the section bonus below (that's the extra, on-top reward, not part of this target)
@@ -1738,7 +1738,10 @@ function buildFullData_(){
     regime:          r.regime,           // META regime: 0 (alternates per hand), 1, or 2
     // First hand's disclosed structure and end-probability. hands_json has
     // the full realised chain (incl. each hand's own sub_regime); n_hands is
-    // how many hands actually ran.
+    // how many hands actually ran. hands_json travels to the backend as
+    // structured data — upsertHandRows_ (backend.txt) explodes it into its
+    // own Hands-sheet row per hand rather than storing it as a JSON string
+    // on this Responses row.
     hand_len:        r.hand_len,
     live_pattern:    r.live_pattern,
     card_order:      r.card_order,
@@ -1991,11 +1994,17 @@ function buildAbandonedRecord_(task, snap, attempt){
     card_order:     task.hands.map(h=>h.live.slice(0,h.playedLen).map(v=>v?'L':'S').join('')).join('|'),
     p_inside_first: task.pInside,
     n_hands:        task.hands.length,
-    hands_json:     task.hands.map(h=>({
+    // hands_json is still sent as structured data (not stringified) — the
+    // backend explodes it into its own row per hand (Hands sheet, keyed by
+    // hand_n) rather than storing it as one JSON-string cell on Responses.
+    // hand_n is this hand's 1-based order within the sequence attempt (the
+    // last one, hand_n===n_hands, is the hand that ended the sequence).
+    hands_json:     task.hands.map((h,idx)=>({
+                      hand_n:idx+1,
                       hand_len:h.length, live_pattern:h.live.map(v=>v?'L':'S').join(''),
                       p_inside:h.pInside, sub_regime:h.subRegime, wasted:h.wasted?1:0,
                       ends:h.ends?1:0, end_pos:h.ends?h.endPos:null, played_len:h.playedLen,
-                      pause:h.pause,
+                      pause:h.pause, pause_secs:h.pauseSecs||null, offer_fired_at:h.offerFiredAt||null,
                       active_passed_in_hand:h.activePassedInHand, active_passed_in_seq:h.activePassedInSeq,
                       inactive_passed_in_hand:h.inactivePassedInHand, inactive_passed_in_seq:h.inactivePassedInSeq,
                       active_left_in_hand:h.activeLeftInHand, active_left_in_seq:h.activeLeftInSeq,
@@ -2016,7 +2025,11 @@ function buildAbandonedRecord_(task, snap, attempt){
     alt_base:       Math.round(task.altBase*1000)/1000,
     alt_width:      task.altWidth,
     alt_minus_expected: Math.round((task.altDuration-task.expectedRemaining)*1000)/1000,
-    pause_secs:     task.pauseSecs || null,
+    // The FIRST hand's own offer-screen duration, same convention as
+    // pause/pause_max above — blank if that hand's own offer was wasted (no
+    // offer screen was ever shown for it). Every hand's own value (including
+    // this one) also goes into hands_json below.
+    pause_secs:     (task.hands[0] && task.hands[0].pauseSecs) || null,
     outcome:        'abandoned_reload',
     outcome_summary: 'abandoned before reload — superseded by a later attempt',
     n_tasks_done:   nTasksDone,
@@ -3232,7 +3245,20 @@ function showOfferScreen(task, subtaskDone, frameType){
   const resumeBtn=el('btn-resume-now'); if(resumeBtn) resumeBtn.style.display='inline-block';
 
   const secs = 10 + Math.floor(Math.random()*36); // Uniform[10,45] seconds
-  task.pauseSecs = secs;
+  // Stored on the HAND whose own offer just fired (found via task.offerAt,
+  // the same lookup that triggered this call — see proceedAfterSubmit/
+  // startTask), not on `task` itself: every hand redraws this independently,
+  // so a single task-level field would just get overwritten by whichever
+  // hand's offer screen showed last, silently losing every earlier hand's
+  // duration. offerFiredAt is the real wall-clock moment THIS hand's offer
+  // banner actually appeared — task.offerAtTask/offerAtTime (elsewhere)
+  // only ever capture the FIRST such moment in the whole section, by
+  // design, so later hands would otherwise have no timestamp at all.
+  const handIdx = task.offerAt ? task.offerAt.indexOf(subtaskDone) : -1;
+  if(handIdx !== -1){
+    task.hands[handIdx].pauseSecs = secs;
+    task.hands[handIdx].offerFiredAt = new Date().toISOString();
+  }
   let remaining = secs;
   el('st-cd-n').textContent = remaining;
   const tick = setInterval(()=>{
@@ -3499,12 +3525,16 @@ function endTask(outcome){
     // _in_seq count live/safe cards already gone by AT that pause, within
     // just this hand vs. across the whole sequence so far; the _left_
     // variants count how many remain, within this hand vs. across the rest
-    // of the realised chain. The last hand is the ending one. See README §6.
-    hands_json:    task.hands.map(h=>({
+    // of the realised chain. The hand with hand_n===n_hands is the ending
+    // one. Sent as structured data (not stringified) — the backend explodes
+    // this into its own Hands-sheet row per hand (keyed by hand_n) rather
+    // than storing it as one JSON-string cell here. See README §6/§9.
+    hands_json:    task.hands.map((h,idx)=>({
+                     hand_n:idx+1,
                      hand_len:h.length, live_pattern:h.live.map(v=>v?'L':'S').join(''),
                      p_inside:h.pInside, sub_regime:h.subRegime, wasted:h.wasted?1:0,
                      ends:h.ends?1:0, end_pos:h.ends?h.endPos:null, played_len:h.playedLen,
-                     pause:h.pause,
+                     pause:h.pause, pause_secs:h.pauseSecs||null, offer_fired_at:h.offerFiredAt||null,
                      active_passed_in_hand:h.activePassedInHand, active_passed_in_seq:h.activePassedInSeq,
                      inactive_passed_in_hand:h.inactivePassedInHand, inactive_passed_in_seq:h.inactivePassedInSeq,
                      active_left_in_hand:h.activeLeftInHand, active_left_in_seq:h.activeLeftInSeq,
@@ -3542,7 +3572,11 @@ function endTask(outcome){
     alt_base:      Math.round(task.altBase*1000)/1000,
     alt_width:     task.altWidth,
     alt_minus_expected: Math.round(altMinusExpected*1000)/1000,
-    pause_secs:    task.pauseSecs || null,
+    // The FIRST hand's own offer-screen duration, same convention as
+    // pause/pause_max above — blank if that hand's own offer was wasted (no
+    // offer screen was ever shown for it). Every hand's own value (including
+    // this one) also goes into hands_json above.
+    pause_secs:    (task.hands[0] && task.hands[0].pauseSecs) || null,
     outcome,
     outcome_summary: outcomeSummary,
     switch_offered: S.offerShown ? 1 : 0,
