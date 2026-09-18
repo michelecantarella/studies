@@ -1723,13 +1723,15 @@ function paintPanels_(){
   if(done) done.textContent = S.subtaskDone;
   if(doneSub) doneSub.textContent = S.phase==='alt' ? ('of '+task.altDuration+' in the alternative') : 'in total';
 
-  // Tasks left in the current hand (main) or in the alternative (alt phase).
-  const tl = el('s-tasksleft'), tlSub = el('s-tasksleft-sub');
-  if(tl){
-    if(S.phase === 'alt'){
-      tl.textContent = Math.max(0, task.altDuration - S.subtaskDone);
-      if(tlSub) tlSub.textContent = 'in the alternative';
-    } else {
+  // Tasks left in the current hand (main phase only) — during the
+  // alternative this would just restate "cards completed" above as a
+  // countdown instead of a count-up of the very same number, so the whole
+  // panel is hidden rather than shown with redundant alt-phase text.
+  const tlPanel = el('panel-tasksleft');
+  if(tlPanel) tlPanel.style.display = S.phase==='alt' ? 'none' : '';
+  if(S.phase !== 'alt'){
+    const tl = el('s-tasksleft'), tlSub = el('s-tasksleft-sub');
+    if(tl){
       const loc = locateCard_(task, S.subtaskDone);
       tl.textContent = loc ? (loc.hand.length - loc.localPos) : 0;
       if(tlSub) tlSub.textContent = 'in this hand';
