@@ -23,8 +23,9 @@ The study investigates how people manage sunk time and forgone earnings when fac
 |---|---|
 | `index.html` | Single-page frontend — all study logic, UI, and data collection |
 | `backend.txt` | Google Apps Script source — paste into Apps Script editor and deploy |
+| `DATA_DICTIONARY.md` | Plain-language, column-by-column reference for the Excel/Sheets output — what every field in `Meta`/`Responses`/`Hands` actually means |
 
-These files live in this folder. The study is designed to be hosted as a static file (GitHub Pages, any web server). The backend is a Google Sheets / Apps Script deployment. Column-by-column field documentation lives inline in §9 below, and as comments directly above `META_HEADER`/`RESP_HEADER` in `backend.txt` — there is no separate data dictionary file.
+These files live in this folder. The study is designed to be hosted as a static file (GitHub Pages, any web server). The backend is a Google Sheets / Apps Script deployment. Column-by-column field documentation also lives inline in §9 below, and as comments directly above `META_HEADER`/`RESP_HEADER`/`HANDS_HEADER` in `backend.txt` — `DATA_DICTIONARY.md` is the standalone version of the same information, meant to be handed to someone working with the spreadsheet output who doesn't need the rest of this design document.
 
 ---
 
