@@ -1,0 +1,814 @@
+/**
+ * Google Apps Script backend — WT Study v2
+ *
+ * Three sheets:
+ *   Meta      — one row per respondent (study-level + resume snapshot)
+ *   Responses — one row per respondent × sequence × attempt (long-form panel data)
+ *   Hands     — one row per respondent × sequence × attempt × hand (see
+ *               HANDS_HEADER below) — the exploded, per-hand replacement for
+ *               Responses' now-legacy hands_json blob column.
+ *
+ * Deploy: Extensions → Apps Script → Deploy → New deployment
+ *   Execute as: Me  |  Who has access: Anyone
+ *
+ * GET  ?action=lookup&pid=XXX
+ *   → { found, study_complete, resume_snapshot }
+ *
+ * POST { action:'progress', pid, study_id, session_id, study_level, sections, snapshot }
+ *   → { ok: true }   (non-blocking: tryLock 1 s, skipped if busy)
+ *
+ * POST { action:'complete', pid, study_id, session_id, study_level, sections }
+ *   → { ok: true }   (blocking: waitLock 10 s, idempotent)
+ */
+
+// ── Sheet names ──────────────────────────────────────────────────
+
+var META_SHEET  = 'Meta';
+var RESP_SHEET  = 'Responses';
+var HANDS_SHEET = 'Hands';
+
+// ── Headers ──────────────────────────────────────────────────────
+
+var META_HEADER = [
+  'prolific_pid', 'study_id', 'session_id', 'demo_mode',
+  'consent_at', 'study_complete_at', 'last_updated_iso',
+  // age/gender/student: the original short survey's three fields. Replaced
+  // by the longer survey below (employment_status onward) — kept here,
+  // always blank going forward, purely so every column after them never
+  // shifts position relative to rows already written under the old survey.
+  'age', 'gender', 'student',
+  'sections_done', 'total_earnings', 'total_grid_pay', 'total_grids_completed',
+  'reload_count', 'reload_log_json',
+  'resume_snapshot_json',
+  'training_bonus', // appended at the end so existing sheet columns never shift
+  'seq_frame_treatment', // 4 or 5 — hidden sequence-count framing treatment
+  'total_penalty', // sum of per-section mistake penalties, previously tracked live but never logged
+  // The training walkthrough's one recorded practice decision (the
+  // interactive "Let's give it a try" step) — 'switch' or 'continue', plus
+  // when it was made. Not tied to any real section/pay, purely a check
+  // that the mechanic was understood before the real study begins.
+  'training_choice', 'training_choice_at',
+  // IP-based geolocation, fetched client-side right after consent (Apps
+  // Script's doGet/doPost never see the caller's IP, so this can't be done
+  // here on the backend). Best-effort — blank if the lookup failed, was
+  // rate-limited, or demo_mode>=2 skipped it entirely. geo_json is the full
+  // raw API response (lat/long, timezone, ISP/org, currency, languages,
+  // asn, ...); the four flat fields are just convenience copies of its
+  // most-used values for quick filtering in the sheet.
+  'geo_country', 'geo_region', 'geo_city', 'geo_ip', 'geo_json',
+  // Longer background survey, replacing age/gender/student above.
+  // employment_status/labor_income: labor_income is blank unless
+  // employment_status is one of the employed/self-employed categories.
+  'employment_status', 'labor_income', 'marstat',
+  // hh_others: headcount of people besides the respondent living in their
+  // household (0 if living alone). family_contributors is blank whenever
+  // hh_others is 0 — that question only makes sense once someone else is
+  // actually in the household.
+  'hh_others',
+  'family_contributors', 'education',
+  // ends_meet_*: SOEP-style 7-point scale, asked for three time frames.
+  'ends_meet_now', 'ends_meet_past', 'ends_meet_future',
+  // risk (Dohmen et al. 2011, SOEP single item) / patience (Falk et al.
+  // 2016, GPS single item) — both 0-10.
+  'risk', 'patience',
+  // Which geolocation provider actually answered (see fetchGeo_ in
+  // index.html) — 'ipapi.co' or 'ipwho.is'. Appended at the end so the
+  // earlier geo_* columns don't shift. Blank alongside them if every
+  // provider failed/rate-limited.
+  'geo_provider',
+  // 1 iff PROLIFIC_PID was absent from the study link — either auto-
+  // generated (STUDY_ID=pilot only, prefixed 'pilot_'), manually typed in
+  // by the participant on a dedicated screen shown right after consent (see
+  // index.html's doConsent()/submitManualPid_()), or entered as a student
+  // ID/name on the student version's own screen ahead of consent (STUDY_ID=
+  // studentpilot, which has no PROLIFIC_PID at all — see submitStudentId_()).
+  // 0 for the normal case (PROLIFIC_PID arrived in the URL, as Prolific's
+  // own link template does).
+  'pid_missing_from_link',
+  // Post-training finish-hub scenarios (optional, self-directed replays of
+  // the switch/forced-outside mechanics before the real study begins).
+  // training_scenario_order: the randomised order the two scenario buttons
+  // were shown in, e.g. 'inside,outside' — fixed once per respondent so
+  // Back/reload can't change it. training_scenarios_viewed: which
+  // scenario(s) ('inside'/'outside') the participant actually clicked into,
+  // in the order first engaged — blank if they skipped straight to the
+  // real study without trying either.
+  'training_scenario_order', 'training_scenarios_viewed',
+  // End-of-training comprehension check (index.html's trainScreen16_ /
+  // trainCompAnswer_) — three questions, answered correctly in order
+  // before the real study can start. Each column is the number of
+  // INCORRECT attempts on that question before answering it correctly; 0
+  // means right on the first try. The correct option's position is
+  // reshuffled after every wrong attempt (never back to the position just
+  // picked — see shuffleAvoidingIndex_), so a participant can't just
+  // spam-click the same slot until it happens to be right.
+  'training_comp_check_q1_wrong', 'training_comp_check_q2_wrong', 'training_comp_check_q3_wrong'
+];
+
+var RESP_HEADER = [
+  'prolific_pid', 'study_id', 'session_id', 'demo_mode',
+  'seq_n',
+  'pay', 'pay_tasks', 'regime',
+  // FIRST hand's disclosed structure: hand_len (total tasks), live_pattern
+  // (one char per task, in order — L=live/can-end, S=safe/cannot; e.g.
+  // "SSLSLS" — MIXED throughout, not a block of S then a block of L),
+  // p_inside_first (its end-probability). card_order is the FULL sequence's
+  // card-by-card order across every hand actually played (see below). The
+  // full realised chain (every hand's own pattern + which sub-regime placed
+  // its offer) lives in the separate Hands sheet, one row per hand — see
+  // HANDS_HEADER further down. n_hands is how many hands the section
+  // actually ran; n_req is the total main-sequence task count.
+  'hand_len', 'live_pattern', 'card_order', 'p_inside_first', 'n_hands', 'n_req',
+  // pause_secs: the FIRST hand's own offer-screen duration (Uniform[10,45]s,
+  // redrawn independently every time an offer fires — see the Hands sheet's
+  // own pause_secs for every hand's value, not just the first's). WT_E: this
+  // is now the ENTIRE accept/refuse window, not a preliminary auto-continue
+  // timer before a persistent button — see 'Accept and switch'/'Refuse and
+  // stay' in index.html's showOfferScreen(). Blank if the first hand's own
+  // offer was wasted, since no offer screen was shown.
+  'pause', 'pause_max', 'alt_duration', 'alt_end', 'pause_secs',
+  'outcome', 'switch_offered', 'switch_at',
+  'n_tasks_done', 'earnings', 'grid_pay',
+  'total_targets', 'total_found', 'total_false_pos', 'total_missed',
+  'seq_reload_count', 'start_at', 'end_at',
+  'tasks_json',
+  'seq_frame_treatment', 'seq_is_bonus',
+  'switch_offered_at_task', 'switch_offered_at_time',
+  'switch_taken', 'switch_taken_at_task', 'switch_taken_at_time',
+  'forfeit_taken', 'forfeit_taken_at_task', 'forfeit_taken_at_time',
+  'seq_start_at_time', // explicit alias of start_at
+  // ── Looping-"hand" design fields (MIXED) ──────────────────────────
+  //
+  // The main sequence is a chain of hands. UNLIKE the other builds, a hand
+  // is NOT a block of safe cards followed by a block of live cards — every
+  // task in it is independently, randomly marked live (can end the hand) or
+  // safe (cannot), so the two are interspersed throughout (see live_pattern
+  // above / the Hands sheet's own live_pattern per hand). Each hand has its
+  // own disclosed `p_inside` (chance the sequence ends inside it); if it
+  // ends, the ending card is uniform over whichever tasks were marked live;
+  // if it survives, a fresh hand loops in (new length, new pattern, new
+  // p_inside). The full realised chain (one row per hand: hand_len,
+  // live_pattern, p_inside, sub_regime, wasted, ends, end_pos, played_len,
+  // pause, plus pause-context bookkeeping — active_passed_in_hand/_in_seq and
+  // inactive_passed_in_hand/_in_seq count live/safe cards already gone by AT
+  // that hand's own pause, within just that hand vs. across the whole
+  // sequence so far; the _left_ variants count how many remain, within that
+  // hand vs. across the rest of the realised chain) now lives in its OWN
+  // sheet — see HANDS_HEADER/upsertHandRows_ below — one row per respondent x
+  // seq_n x seq_attempt x hand_n, joinable back onto this sheet by
+  // (prolific_pid, seq_n, seq_attempt). card_order (below) concatenates every
+  // hand's live_pattern, TRUNCATED to played_len (cards after an early end
+  // were never shown), joined with "|" — the exact card-by-card order
+  // presented across the whole main sequence. The hand with hand_n = n_hands
+  // is the ending one.
+  //
+  // regime (above) is the META regime, fixed PER RESPONDENT, and governs how
+  // each hand's offer (pause) is placed relative to ITS OWN ending:
+  //   1 — every hand: ending drawn first, offer after. LEAKS: E[n_req|pause]
+  //       rises with pause.
+  //   2 — every hand: offer first, ending conditional on surviving it. Flat,
+  //       never wastes the offer.
+  //   3 — every hand: pause and ending drawn FULLY INDEPENDENTLY. Flat like
+  //       2, but can WASTE the offer (Hands sheet's wasted=1 for that hand)
+  //       if the hand already ended at or before its own pause card.
+  //   0 — the "mixed" regime: EACH HAND independently re-rolls which of
+  //       {1,2} governs it (never 3), rather than the whole respondent being
+  //       fixed to one. The Hands sheet's sub_regime column records which
+  //       one actually applied to that specific hand (constant across all
+  //       hands, equal to regime, when regime is 1, 2, or 3; varies
+  //       hand-to-hand only when regime=0).
+  //
+  // e_end_at_start: expected TOTAL main length at the start (first-hand
+  // actuals + population means for later hands). e_remaining = e_end_at_start
+  // - pause; e_end_at_pause = pause + e_remaining. pay_tasks is drawn around
+  // e_end_at_start; alt_duration is drawn around e_remaining (so the
+  // alternative's endpoint sits at e_end_at_start). alt_base = e_end_at_start,
+  // alt_width = the mean hand length (the beta-normal support width).
+  // alt_minus_expected = alt_duration - e_remaining (negative = alt shorter).
+  // NOTE: e_remaining/e_end_at_start/e_end_at_pause describe the FIRST hand's
+  // own offer, same as elsewhere on this row — see the Hands sheet for the
+  // per-hand pause-context bookkeeping (active_passed_in_hand etc.) instead.
+  'e_remaining', 'e_end_at_start', 'e_end_at_pause',
+  // Mistake penalty accrued during this section (£0.01 per missed/false-
+  // positive click), deducted from earnings.
+  'penalty',
+  // 1 iff the UNDISCLOSED hand cap (index.html's CFG.maxHands, currently 6)
+  // forced the last hand to end rather than the section ending on its own
+  // draw — treat these rows as right-censored at n_req.
+  'cap_bound',
+  // 1 iff ANY hand in this section wasted its own offer (only reachable when
+  // that hand's sub_regime was 3) — see the Hands sheet's own wasted column
+  // for exactly which hand(s). No switch decision exists for a wasted hand's
+  // own pause.
+  'offer_wasted',
+  'alt_base', 'alt_width', 'alt_minus_expected',
+  // Legacy — permanently blank going forward. Used to hold the full realised
+  // chain of hands as one JSON-array string; superseded by the Hands sheet
+  // (one row per hand — see HANDS_HEADER), which upsertRespRows_ no longer
+  // populates this column from. Kept only so later columns never shift, same
+  // treatment as age/gender/student in META_HEADER.
+  'hands_json',
+  // WT_E: accepting the offer is a two-step flow — pressing "Accept and
+  // switch" on the offer banner opens a confirm popup (Confirm/Undo) while
+  // the SAME countdown keeps running; switch_pressed_at_task/_time is step 1
+  // (that first press — re-recorded on every press if Undo is used and it's
+  // pressed again later, so it always reflects whichever press actually led
+  // to confirming), switch_taken_at_task/_time (above) is step 2 (Confirm,
+  // or a timeout auto-committing it — see undo_count/auto_confirmed in the
+  // Hands sheet). switch_decision_secs is the real gap between the two.
+  // switch_pressed_at_task also lets outcome_summary tell "accepted the very
+  // first hand's offer" apart from "declined an earlier hand's offer and
+  // accepted a later one" — see index.html's computeOutcomeSummary_. All
+  // three only populated if switch_taken=1.
+  'switch_pressed_at_task', 'switch_pressed_at_time', 'switch_decision_secs',
+  // alt_phase_started_at: when the alternative sequence actually began.
+  // Blank if it was never reached (a 'completed' or 'forfeited' outcome).
+  'alt_phase_started_at',
+  // outcome_summary: a fixed human-readable label, derived from the columns
+  // above (never a new source of truth) — see computeOutcomeSummary_() in
+  // index.html.
+  'outcome_summary',
+  // ── Reload/attempt tracking ────────────────────────────────────────
+  //
+  // Historically a new-session reload mid-section (see index.html's
+  // applyResume_) silently discarded that section's already-drawn hands and
+  // redrew fresh ones — the abandoned hands never reached this sheet at all,
+  // since in-progress sections are only ever logged once endTask() completes
+  // them. Now every attempt at a given seq_n gets its OWN row instead of one
+  // overwriting the next:
+  //
+  // seq_attempt: 1 for a respondent's first (and usually only) attempt at
+  //   this seq_n; bumped to 2, 3, ... each time a new-session reload
+  //   discarded an in-progress attempt with real participant progress on it
+  //   (see index.html's buildAbandonedRecord_). An abandoned attempt's row
+  //   has outcome='abandoned_reload' (see outcome_summary above) and
+  //   whatever hands/card_order/regime data it had already drawn — its
+  //   switch/forfeit timing fields are blank, since abandonment happens
+  //   before any of those could resolve into a real decision.
+  //
+  // is_latest_attempt: 1 on whichever attempt is currently the most recent
+  //   for this (prolific_pid, seq_n) — computed server-side in
+  //   upsertRespRows_ (never trust a client-sent value for this), so it's
+  //   correct even if attempts arrive in separate progress/complete calls.
+  //   Filter to is_latest_attempt=1 to get one row per real section, the
+  //   same view older analyses (single-attempt-per-seq_n) assumed.
+  'seq_attempt', 'is_latest_attempt'
+];
+
+// One row per respondent x sequence x attempt x HAND — the exploded
+// replacement for Responses' now-legacy hands_json blob column (see its
+// comment above). Written by upsertHandRows_, called alongside
+// upsertRespRows_ from both the 'progress' and 'complete' doPost branches, so
+// every save that writes a Responses row also (re)writes that section's hand
+// rows from the same s.hands_json array the client already builds (see
+// index.html's generateTasks_/buildAbandonedRecord_ — hand_n is the 1-based
+// order of the hand within the sequence attempt; the hand with
+// hand_n = n_hands, from Responses, is the one that ended the sequence).
+//
+// Joins back onto Responses by (prolific_pid, seq_n, seq_attempt); joins
+// onto Meta by prolific_pid alone. study_id/session_id/demo_mode are
+// repeated per row purely for convenience filtering, same as on Responses.
+var HANDS_HEADER = [
+  'prolific_pid', 'study_id', 'session_id', 'demo_mode',
+  'seq_n', 'seq_attempt', 'hand_n',
+  // This hand's own disclosed structure — total length, live/safe pattern
+  // (one char per task, e.g. "SSLSLS"), and end-probability.
+  'hand_len', 'live_pattern', 'p_inside',
+  // Which of {1,2,3} governed THIS hand's own offer placement (only varies
+  // hand-to-hand when the respondent's META regime is 0 — see backend.txt's
+  // RESP_HEADER regime comment, and README.md §6). wasted is only ever 1
+  // under sub_regime 3, meaning this hand's own offer never fired because the
+  // hand had already ended before reaching its own pause card.
+  'sub_regime', 'wasted',
+  // Whether THIS hand was the one that ended the sequence, and if so at
+  // which of its own cards (0-indexed among its live cards); played_len is
+  // how many of this hand's cards were actually shown (all of them, unless
+  // it ended early). pause is this hand's own offer position (0-indexed
+  // count of this hand's own cards completed when its offer fires), fixed at
+  // generation time like everything else here. pause_secs and offer_fired_at
+  // are NOT — both are set at RUNTIME, the moment this hand's own offer
+  // screen actually shows (showOfferScreen() in index.html): pause_secs is
+  // how long that screen's countdown ran (Uniform[10,45]s, redrawn
+  // independently on every offer) — in WT_E this is THIS HAND'S entire
+  // accept/refuse window, since the alternative can only be taken while
+  // this countdown is running, not for the rest of the hand afterward.
+  // offer_fired_at is the real wall-clock
+  // ISO timestamp of that same moment (task-level switch_offered_at_task/
+  // _at_time only ever capture the FIRST such moment across the whole
+  // section, by design — every later hand's own firing time lives only
+  // here). Both are blank when this hand's own offer was wasted (sub_regime
+  // 3, never fired at all) and, for a superseded reload attempt, whenever
+  // the participant never actually played far enough to see it.
+  'ends', 'end_pos', 'played_len', 'pause', 'pause_secs', 'offer_fired_at',
+  // WT_E's two-step accept flow (see index.html's tentativeChoice_/
+  // confirmTentative_/undoTentative_): pressing "Accept and switch" or
+  // "Refuse and stay" only sets a TENTATIVE choice — nothing is committed
+  // until "Confirm" is pressed on the follow-up screen, or the SAME
+  // countdown from pause_secs runs out. undo_count is how many times
+  // "Undo" was pressed on that follow-up screen for THIS hand's own offer
+  // (a measure of indecision; 0 if never opened or never undone).
+  // auto_refused=1 iff the countdown ran out while still on the first
+  // screen (no tentative choice yet), defaulting to staying in the main
+  // sequence. auto_confirmed=1 iff it ran out on the follow-up screen
+  // instead (a tentative choice existed), auto-committing that choice
+  // rather than reverting it. At most one of the two is ever 1 for a given
+  // hand, and both are 0 if the participant resolved it (Confirm or
+  // Refuse-then-timeout-free) before time ran out, or if this hand's own
+  // offer never fired at all (wasted=1).
+  'undo_count', 'auto_refused', 'auto_confirmed',
+  // Pause-context bookkeeping, computed once at generation time (never read
+  // by the game logic, purely for analysis): how many live ("active") and
+  // safe ("inactive") cards had already gone by AT this hand's own pause,
+  // both within just this hand and across the whole sequence so far
+  // (_in_hand vs _in_seq), and how many of each remain — within this hand,
+  // or across the rest of the already-realised chain (_left_in_hand vs
+  // _left_in_seq).
+  'active_passed_in_hand', 'active_passed_in_seq',
+  'inactive_passed_in_hand', 'inactive_passed_in_seq',
+  'active_left_in_hand', 'active_left_in_seq',
+  'inactive_left_in_hand', 'inactive_left_in_seq',
+  // Mirrors the parent Responses row's is_latest_attempt (same rule, same
+  // (seq_n, seq_attempt) key) — computed server-side in upsertHandRows_, not
+  // trusted from the client. Filter to is_latest_attempt=1 for one row per
+  // real, non-superseded hand.
+  'is_latest_attempt'
+];
+
+// ── Sheet helpers ────────────────────────────────────────────────
+
+function ensureSheet_(name, header) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  var current = sheet.getLastColumn() > 0
+    ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), header.length)).getValues()[0]
+    : [];
+  var matches = current.length >= header.length &&
+    header.every(function(h, i) { return current[i] === h; });
+  if (!matches) {
+    sheet.getRange(1, 1, 1, header.length).setValues([header]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function getMetaSheet_()  { return ensureSheet_(META_SHEET, META_HEADER); }
+function getRespSheet_()  { return ensureSheet_(RESP_SHEET, RESP_HEADER); }
+function getHandsSheet_() { return ensureSheet_(HANDS_SHEET, HANDS_HEADER); }
+
+function cellValue_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return v;
+}
+
+// Write (or update) a single row using a header array to map field names → column indices.
+function writeRowBatched_(sheet, rowIndex, isNew, updates, header) {
+  var row = isNew
+    ? new Array(header.length).fill('')
+    : (function() {
+        var r = sheet.getRange(rowIndex, 1, 1, header.length).getValues()[0];
+        while (r.length < header.length) r.push('');
+        return r;
+      })();
+  updates.forEach(function(pair) {
+    var col = header.indexOf(pair[0]);
+    if (col !== -1) row[col] = cellValue_(pair[1]);
+  });
+  sheet.getRange(rowIndex, 1, 1, header.length).setValues([row]);
+}
+
+// ── Meta row lookup ──────────────────────────────────────────────
+
+function findMetaRow_(sheet, pid) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  var pidCol = META_HEADER.indexOf('prolific_pid');
+  var data   = sheet.getRange(2, 1, lastRow - 1, pidCol + 1).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][pidCol]) === String(pid)) return i + 2;
+  }
+  return null;
+}
+
+function readMetaRow_(sheet, rowIndex) {
+  return sheet.getRange(rowIndex, 1, 1, META_HEADER.length).getValues()[0];
+}
+
+// ── Response row lookup ──────────────────────────────────────────
+// Returns a map of seq_n (as string) → { attemptNumber → rowIndex } for the
+// given pid. Rows written before seq_attempt existed have no value there —
+// treated as attempt 1, same as a fresh single-attempt section.
+
+function findResponseRows_(sheet, pid) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {};
+  var pidCol = RESP_HEADER.indexOf('prolific_pid');
+  var seqCol = RESP_HEADER.indexOf('seq_n');
+  var attCol = RESP_HEADER.indexOf('seq_attempt');
+  var nCols  = Math.max(pidCol, seqCol, attCol) + 1;
+  var data   = sheet.getRange(2, 1, lastRow - 1, nCols).getValues();
+  var map    = {};
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][pidCol]) !== String(pid)) continue;
+    var seqKey = String(data[i][seqCol]);
+    var att    = Number(data[i][attCol]) || 1;
+    if (!map[seqKey]) map[seqKey] = {};
+    map[seqKey][att] = i + 2;
+  }
+  return map;
+}
+
+// ── Upsert Meta row ───────────────────────────────────────────────
+
+function upsertMeta_(sheet, pid, study_id, session_id, sl, snapshot, now, setComplete) {
+  var rowIndex = findMetaRow_(sheet, pid);
+  var isNew    = !rowIndex;
+  if (isNew) rowIndex = sheet.getLastRow() + 1;
+
+  var updates = [
+    ['prolific_pid',     pid],
+    ['study_id',         study_id   || ''],
+    ['session_id',       session_id || ''],
+    ['demo_mode',        sl.demo_mode   != null ? sl.demo_mode   : ''],
+    ['last_updated_iso', now],
+    ['sections_done',          sl.sections_done          != null ? sl.sections_done          : ''],
+    ['training_bonus',         sl.training_bonus         != null ? sl.training_bonus         : ''],
+    ['training_choice',        sl.training_choice        || ''],
+    ['training_choice_at',     sl.training_choice_at     || ''],
+    ['seq_frame_treatment',    sl.seq_frame_treatment    != null ? sl.seq_frame_treatment    : ''],
+    ['total_earnings',         sl.total_earnings         != null ? sl.total_earnings         : ''],
+    ['total_grid_pay',         sl.total_grid_pay         != null ? sl.total_grid_pay         : ''],
+    ['total_grids_completed',  sl.total_grids_completed  != null ? sl.total_grids_completed  : ''],
+    ['total_penalty',          sl.total_penalty          != null ? sl.total_penalty          : ''],
+    ['reload_count',           sl.reload_count           != null ? sl.reload_count           : ''],
+    ['reload_log_json',        JSON.stringify(sl.reload_log || [])],
+    ['resume_snapshot_json',   setComplete ? '' : JSON.stringify(snapshot || {})],
+    ['geo_country',            sl.geo_country || ''],
+    ['geo_region',             sl.geo_region  || ''],
+    ['geo_city',               sl.geo_city    || ''],
+    ['geo_ip',                 sl.geo_ip      || ''],
+    ['geo_json',               sl.geo_json    || ''],
+    ['employment_status',      sl.employment_status  || ''],
+    ['labor_income',           sl.labor_income        || ''],
+    ['marstat',                sl.marstat             || ''],
+    // hh_others can legitimately be 0 (living alone) — must check != null,
+    // not `|| ''`, or a genuine 0 would be written as blank.
+    ['hh_others',              sl.hh_others           != null ? sl.hh_others           : ''],
+    ['family_contributors',    sl.family_contributors || ''],
+    ['education',              sl.education           || ''],
+    ['ends_meet_now',          sl.ends_meet_now       || ''],
+    ['ends_meet_past',         sl.ends_meet_past      || ''],
+    ['ends_meet_future',       sl.ends_meet_future    || ''],
+    ['risk',                   sl.risk                != null ? sl.risk                : ''],
+    ['patience',               sl.patience            != null ? sl.patience            : ''],
+    ['geo_provider',           sl.geo_provider        || ''],
+    ['pid_missing_from_link',  sl.pid_missing_from_link != null ? sl.pid_missing_from_link : ''],
+    ['training_scenario_order',   sl.training_scenario_order   || ''],
+    ['training_scenarios_viewed', sl.training_scenarios_viewed || ''],
+    ['training_comp_check_q1_wrong', sl.training_comp_check_q1_wrong != null ? sl.training_comp_check_q1_wrong : ''],
+    ['training_comp_check_q2_wrong', sl.training_comp_check_q2_wrong != null ? sl.training_comp_check_q2_wrong : ''],
+    ['training_comp_check_q3_wrong', sl.training_comp_check_q3_wrong != null ? sl.training_comp_check_q3_wrong : ''],
+  ];
+
+  if (setComplete) updates.push(['study_complete_at', now]);
+
+  // Preserve initial consent_at — only write if not already set
+  if (sl.consent_at) {
+    var existingConsent = isNew ? '' : readMetaRow_(sheet, rowIndex)[META_HEADER.indexOf('consent_at')];
+    if (!existingConsent) updates.push(['consent_at', sl.consent_at]);
+  }
+
+  writeRowBatched_(sheet, rowIndex, isNew, updates, META_HEADER);
+}
+
+// ── Upsert Responses rows ─────────────────────────────────────────
+// Writes one row per section in the sections array. Each (seq_n, seq_attempt)
+// pair gets its own row — a new-session reload that discarded an in-progress
+// attempt (see index.html's applyResume_/buildAbandonedRecord_) no longer
+// overwrites it, it just adds attempt 2 (3, ...) alongside it. After writing,
+// is_latest_attempt is recomputed for every seq_n touched so it always
+// reflects the true max attempt on the sheet, not just what's in this batch.
+
+function upsertRespRows_(sheet, pid, study_id, session_id, demo_mode, sections) {
+  if (!sections || !sections.length) return;
+  var rowMap     = findResponseRows_(sheet, pid); // seq_n -> {attempt: rowIndex}
+  var touchedSeq = {};
+
+  for (var i = 0; i < sections.length; i++) {
+    var s        = sections[i];
+    var seqKey   = String(s.seq_n);
+    var attempt  = s.seq_attempt != null ? Number(s.seq_attempt) : 1;
+    if (!rowMap[seqKey]) rowMap[seqKey] = {};
+    var rowIndex = rowMap[seqKey][attempt];
+    var isNew    = !rowIndex;
+    if (isNew) rowIndex = sheet.getLastRow() + 1;
+
+    var updates = [
+      ['prolific_pid',    pid],
+      ['study_id',        study_id   || ''],
+      ['session_id',      session_id || ''],
+      ['demo_mode',       demo_mode  != null ? demo_mode  : ''],
+      ['seq_n',           s.seq_n],
+      ['pay',             s.pay           != null ? s.pay           : ''],
+      ['pay_tasks',       s.pay_tasks     != null ? s.pay_tasks     : ''],
+      ['regime',          s.regime        != null ? s.regime        : ''],
+      ['hand_len',        s.hand_len      != null ? s.hand_len      : ''],
+      ['live_pattern',    s.live_pattern  || ''],
+      ['p_inside_first',  s.p_inside_first != null ? s.p_inside_first : ''],
+      ['n_hands',         s.n_hands       != null ? s.n_hands       : ''],
+      ['n_req',           s.n_req         != null ? s.n_req         : ''],
+      ['pause',           s.pause         != null ? s.pause         : ''],
+      ['pause_max',       s.pause_max     != null ? s.pause_max     : ''],
+      ['alt_duration',    s.alt_duration  != null ? s.alt_duration  : ''],
+      ['alt_end',         s.alt_end       != null ? s.alt_end       : ''],
+      ['pause_secs',      s.pause_secs    != null ? s.pause_secs    : ''],
+      ['outcome',         s.outcome       || ''],
+      ['switch_offered',  s.switch_offered != null ? s.switch_offered : ''],
+      ['switch_at',       s.switch_at     != null ? s.switch_at     : ''],
+      ['n_tasks_done',    s.n_tasks_done  != null ? s.n_tasks_done  : ''],
+      ['earnings',        s.earnings      != null ? s.earnings      : ''],
+      ['grid_pay',        s.grid_pay      != null ? s.grid_pay      : ''],
+      ['total_targets',   s.total_targets  != null ? s.total_targets  : ''],
+      ['total_found',     s.total_found    != null ? s.total_found    : ''],
+      ['total_false_pos', s.total_false_pos!= null ? s.total_false_pos: ''],
+      ['total_missed',    s.total_missed   != null ? s.total_missed   : ''],
+      ['seq_reload_count', s.seq_reload_count != null ? s.seq_reload_count : ''],
+      ['start_at',        s.start_at  || ''],
+      ['end_at',          s.end_at    || ''],
+      ['tasks_json',      JSON.stringify(s.tasks_json || [])],
+      ['seq_frame_treatment', s.seq_frame_treatment != null ? s.seq_frame_treatment : ''],
+      ['seq_is_bonus',        s.seq_is_bonus         != null ? s.seq_is_bonus         : ''],
+      ['switch_offered_at_task',  s.switch_offered_at_task  != null ? s.switch_offered_at_task  : ''],
+      ['switch_offered_at_time',  s.switch_offered_at_time  || ''],
+      ['switch_taken',             s.switch_taken            != null ? s.switch_taken            : ''],
+      ['switch_taken_at_task',     s.switch_taken_at_task    != null ? s.switch_taken_at_task    : ''],
+      ['switch_taken_at_time',     s.switch_taken_at_time    || ''],
+      ['forfeit_taken',            s.forfeit_taken           != null ? s.forfeit_taken           : ''],
+      ['forfeit_taken_at_task',    s.forfeit_taken_at_task   != null ? s.forfeit_taken_at_task   : ''],
+      ['forfeit_taken_at_time',    s.forfeit_taken_at_time   || ''],
+      ['seq_start_at_time',        s.seq_start_at_time       || ''],
+      ['e_remaining',               s.e_remaining             != null ? s.e_remaining             : ''],
+      ['e_end_at_start',           s.e_end_at_start          != null ? s.e_end_at_start          : ''],
+      ['e_end_at_pause',           s.e_end_at_pause          != null ? s.e_end_at_pause          : ''],
+      ['penalty',                  s.penalty                 != null ? s.penalty                 : ''],
+      ['cap_bound',                s.cap_bound               != null ? s.cap_bound               : ''],
+      ['offer_wasted',             s.offer_wasted            != null ? s.offer_wasted            : ''],
+      ['alt_base',                 s.alt_base                != null ? s.alt_base                : ''],
+      ['alt_width',                s.alt_width               != null ? s.alt_width               : ''],
+      ['alt_minus_expected',       s.alt_minus_expected      != null ? s.alt_minus_expected      : ''],
+      // hands_json intentionally omitted from `updates` — that column is
+      // legacy/blank now (see RESP_HEADER comment); the per-hand data goes
+      // to the Hands sheet instead, via upsertHandRows_.
+      ['switch_pressed_at_task',   s.switch_pressed_at_task  != null ? s.switch_pressed_at_task  : ''],
+      ['switch_pressed_at_time',   s.switch_pressed_at_time  || ''],
+      ['switch_decision_secs',     s.switch_decision_secs    != null ? s.switch_decision_secs    : ''],
+      ['alt_phase_started_at',     s.alt_phase_started_at    || ''],
+      ['outcome_summary',          s.outcome_summary         || ''],
+      ['seq_attempt',              attempt],
+    ];
+
+    writeRowBatched_(sheet, rowIndex, isNew, updates, RESP_HEADER);
+    rowMap[seqKey][attempt] = rowIndex;
+    touchedSeq[seqKey] = true;
+  }
+
+  // is_latest_attempt must reflect the true max attempt on the sheet for
+  // each seq_n touched — not just what arrived in this call, since an
+  // abandoned attempt and its successor can be sent in separate
+  // progress/complete calls.
+  var isLatestCol = RESP_HEADER.indexOf('is_latest_attempt') + 1;
+  Object.keys(touchedSeq).forEach(function(seqKey) {
+    var attempts = rowMap[seqKey]; // {attemptNumber: rowIndex}
+    var attemptNums = Object.keys(attempts).map(Number);
+    var maxAttempt  = Math.max.apply(null, attemptNums);
+    attemptNums.forEach(function(att) {
+      var cell = sheet.getRange(attempts[att], isLatestCol);
+      var want = (att === maxAttempt) ? 1 : 0;
+      if (cell.getValue() !== want) cell.setValue(want);
+    });
+  });
+}
+
+// ── Hand row lookup ────────────────────────────────────────────────
+// Returns seq_n (string) -> attempt (number) -> hand_n (number) -> rowIndex,
+// for the given pid. One level deeper than findResponseRows_, since a single
+// (seq_n, attempt) now spans one row per hand rather than one row total.
+
+function findHandRows_(sheet, pid) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {};
+  var pidCol  = HANDS_HEADER.indexOf('prolific_pid');
+  var seqCol  = HANDS_HEADER.indexOf('seq_n');
+  var attCol  = HANDS_HEADER.indexOf('seq_attempt');
+  var handCol = HANDS_HEADER.indexOf('hand_n');
+  var nCols   = Math.max(pidCol, seqCol, attCol, handCol) + 1;
+  var data    = sheet.getRange(2, 1, lastRow - 1, nCols).getValues();
+  var map     = {};
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][pidCol]) !== String(pid)) continue;
+    var seqKey = String(data[i][seqCol]);
+    var att    = Number(data[i][attCol])  || 1;
+    var handN  = Number(data[i][handCol]) || 1;
+    if (!map[seqKey])       map[seqKey]       = {};
+    if (!map[seqKey][att])  map[seqKey][att]  = {};
+    map[seqKey][att][handN] = i + 2;
+  }
+  return map;
+}
+
+// ── Upsert Hands rows ─────────────────────────────────────────────
+// Explodes each section's hands_json array (still sent by the client as
+// structured data — see index.html's generateTasks_/buildAbandonedRecord_ —
+// even though Responses no longer stores it as a JSON string) into one row
+// per hand. Mirrors upsertRespRows_'s attempt handling one level deeper: a
+// (seq_n, seq_attempt) that gets re-sent (e.g. progress then complete) simply
+// updates its existing hand rows rather than duplicating them, keyed by
+// (seq_n, seq_attempt, hand_n).
+
+function upsertHandRows_(sheet, pid, study_id, session_id, demo_mode, sections) {
+  if (!sections || !sections.length) return;
+  var rowMap     = findHandRows_(sheet, pid); // seq_n -> attempt -> hand_n -> rowIndex
+  var touchedSeq = {};
+
+  for (var i = 0; i < sections.length; i++) {
+    var s     = sections[i];
+    var hands = s.hands_json || [];
+    if (!hands.length) continue;
+
+    var seqKey  = String(s.seq_n);
+    var attempt = s.seq_attempt != null ? Number(s.seq_attempt) : 1;
+    if (!rowMap[seqKey])          rowMap[seqKey]          = {};
+    if (!rowMap[seqKey][attempt]) rowMap[seqKey][attempt] = {};
+
+    for (var j = 0; j < hands.length; j++) {
+      var h        = hands[j];
+      var handN    = h.hand_n != null ? Number(h.hand_n) : (j + 1);
+      var rowIndex = rowMap[seqKey][attempt][handN];
+      var isNew    = !rowIndex;
+      if (isNew) rowIndex = sheet.getLastRow() + 1;
+
+      var updates = [
+        ['prolific_pid', pid],
+        ['study_id',     study_id   || ''],
+        ['session_id',   session_id || ''],
+        ['demo_mode',    demo_mode  != null ? demo_mode  : ''],
+        ['seq_n',        s.seq_n],
+        ['seq_attempt',  attempt],
+        ['hand_n',       handN],
+        ['hand_len',     h.hand_len     != null ? h.hand_len     : ''],
+        ['live_pattern', h.live_pattern || ''],
+        ['p_inside',     h.p_inside     != null ? h.p_inside     : ''],
+        ['sub_regime',   h.sub_regime   != null ? h.sub_regime   : ''],
+        ['wasted',       h.wasted       != null ? h.wasted       : ''],
+        ['ends',         h.ends         != null ? h.ends         : ''],
+        ['end_pos',      h.end_pos      != null ? h.end_pos      : ''],
+        ['played_len',   h.played_len   != null ? h.played_len   : ''],
+        ['pause',        h.pause        != null ? h.pause        : ''],
+        ['pause_secs',   h.pause_secs   != null ? h.pause_secs   : ''],
+        ['offer_fired_at', h.offer_fired_at || ''],
+        ['undo_count',     h.undo_count     != null ? h.undo_count     : ''],
+        ['auto_refused',   h.auto_refused   != null ? h.auto_refused   : ''],
+        ['auto_confirmed', h.auto_confirmed != null ? h.auto_confirmed : ''],
+        ['active_passed_in_hand',   h.active_passed_in_hand   != null ? h.active_passed_in_hand   : ''],
+        ['active_passed_in_seq',    h.active_passed_in_seq    != null ? h.active_passed_in_seq    : ''],
+        ['inactive_passed_in_hand', h.inactive_passed_in_hand != null ? h.inactive_passed_in_hand : ''],
+        ['inactive_passed_in_seq',  h.inactive_passed_in_seq  != null ? h.inactive_passed_in_seq  : ''],
+        ['active_left_in_hand',     h.active_left_in_hand     != null ? h.active_left_in_hand     : ''],
+        ['active_left_in_seq',      h.active_left_in_seq      != null ? h.active_left_in_seq      : ''],
+        ['inactive_left_in_hand',   h.inactive_left_in_hand   != null ? h.inactive_left_in_hand   : ''],
+        ['inactive_left_in_seq',    h.inactive_left_in_seq    != null ? h.inactive_left_in_seq    : ''],
+      ];
+
+      writeRowBatched_(sheet, rowIndex, isNew, updates, HANDS_HEADER);
+      rowMap[seqKey][attempt][handN] = rowIndex;
+    }
+    touchedSeq[seqKey] = true;
+  }
+
+  // is_latest_attempt mirrors the same rule as upsertRespRows_ — recomputed
+  // from what's actually on the Hands sheet, across every hand row that
+  // belongs to a given attempt, not just this call's batch.
+  var isLatestCol = HANDS_HEADER.indexOf('is_latest_attempt') + 1;
+  Object.keys(touchedSeq).forEach(function(seqKey) {
+    var attempts    = rowMap[seqKey]; // {attempt: {hand_n: rowIndex}}
+    var attemptNums = Object.keys(attempts).map(Number);
+    var maxAttempt  = Math.max.apply(null, attemptNums);
+    attemptNums.forEach(function(att) {
+      var want = (att === maxAttempt) ? 1 : 0;
+      Object.keys(attempts[att]).forEach(function(handN) {
+        var cell = sheet.getRange(attempts[att][handN], isLatestCol);
+        if (cell.getValue() !== want) cell.setValue(want);
+      });
+    });
+  });
+}
+
+// ── HTTP handlers ────────────────────────────────────────────────
+
+function doGet(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var action = e.parameter.action;
+    if (action !== 'lookup') return jsonOut_({ error: 'unknown action' });
+
+    var pid = e.parameter.pid;
+    if (!pid) return jsonOut_({ error: 'missing pid' });
+
+    var sheet    = getMetaSheet_();
+    var rowIndex = findMetaRow_(sheet, pid);
+
+    if (!rowIndex) {
+      return jsonOut_({ found: false, study_complete: false, resume_snapshot: null });
+    }
+
+    var row           = readMetaRow_(sheet, rowIndex);
+    var get           = function(f) { return row[META_HEADER.indexOf(f)]; };
+    var studyComplete = !!get('study_complete_at');
+    var resumeSnap    = null;
+
+    if (!studyComplete) {
+      try {
+        var raw = get('resume_snapshot_json');
+        if (raw) resumeSnap = JSON.parse(raw);
+      } catch (err) {}
+    }
+
+    return jsonOut_({
+      found:           true,
+      study_complete:  studyComplete,
+      resume_snapshot: resumeSnap
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function doPost(e) {
+  var body       = JSON.parse(e.postData.contents);
+  var pid        = body.pid;
+  if (!pid) return jsonOut_({ ok: false, error: 'missing pid' });
+
+  var now        = new Date().toISOString();
+  var sl         = body.study_level || {};
+  var sections   = body.sections    || [];
+  var study_id   = body.study_id    || '';
+  var session_id = body.session_id  || '';
+
+  // ── progress (non-blocking) ──────────────────────────────────
+  if (body.action === 'progress') {
+    var lock    = LockService.getScriptLock();
+    var gotLock = lock.tryLock(1000);
+    if (!gotLock) return jsonOut_({ ok: true, skipped: true });
+    try {
+      var metaSheet  = getMetaSheet_();
+      var respSheet  = getRespSheet_();
+      var handsSheet = getHandsSheet_();
+      upsertMeta_(metaSheet, pid, study_id, session_id, sl, body.snapshot, now, false);
+      upsertRespRows_(respSheet, pid, study_id, session_id, sl.demo_mode, sections);
+      upsertHandRows_(handsSheet, pid, study_id, session_id, sl.demo_mode, sections);
+      return jsonOut_({ ok: true });
+    } catch (err) {
+      return jsonOut_({ ok: false, error: String(err) });
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  // ── complete (blocking, idempotent) ─────────────────────────
+  if (body.action === 'complete') {
+    var lock2 = LockService.getScriptLock();
+    lock2.waitLock(10000);
+    try {
+      var metaSheet2  = getMetaSheet_();
+      var respSheet2  = getRespSheet_();
+      var handsSheet2 = getHandsSheet_();
+
+      // Idempotent: already complete → return ok without re-writing
+      var existingRow = findMetaRow_(metaSheet2, pid);
+      if (existingRow) {
+        var existingMeta = readMetaRow_(metaSheet2, existingRow);
+        if (existingMeta[META_HEADER.indexOf('study_complete_at')]) {
+          return jsonOut_({ ok: true, already_complete: true });
+        }
+      }
+
+      upsertMeta_(metaSheet2, pid, study_id, session_id, sl, null, now, true);
+      upsertRespRows_(respSheet2, pid, study_id, session_id, sl.demo_mode, sections);
+      upsertHandRows_(handsSheet2, pid, study_id, session_id, sl.demo_mode, sections);
+      return jsonOut_({ ok: true });
+    } catch (err) {
+      return jsonOut_({ ok: false, error: String(err) });
+    } finally {
+      lock2.releaseLock();
+    }
+  }
+
+  return jsonOut_({ ok: false, error: 'unknown action' });
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}

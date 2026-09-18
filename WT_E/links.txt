@@ -1,0 +1,8 @@
+ttps://michelecantarella.github.io/studies/WT_E/?PROLIFIC_PID=dummyid&demomode=1
+
+Per generare una nuova risposta cambiate il campo PROLIFIC_PID=[dummyid]
+
+per togliere la demomode basta rimuovere il blocco &demomode=1
+
+
+STUDY_ID=pilot
