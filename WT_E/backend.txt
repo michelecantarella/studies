@@ -367,7 +367,10 @@ var HANDS_HEADER = [
   // afterward. offer_fired_at is the real wall-clock ISO timestamp of that
   // same moment (Responses' switch_offered_at_task/_at_time only ever
   // capture the FIRST such moment across the whole section, by design —
-  // every later hand's own firing time lives only here).
+  // every later hand's own firing time lives only here). See
+  // deliberation_secs at the very end of this array (kept there, not here,
+  // to preserve column order for already-collected rows — see the
+  // append-only note above).
   'pause_secs', 'offer_fired_at',
   // WT_E's two-step accept flow (see index.html's tentativeChoice_/
   // confirmTentative_/undoTentative_): pressing "Accept and switch" or
@@ -443,7 +446,21 @@ var HANDS_HEADER = [
   // (Responses.tasks_json is now the ALT PHASE's own grids only, which has
   // no hand structure to attach to). Empty array (not blank) if this hand
   // was never reached at all.
-  'tasks_json'
+  'tasks_json',
+  // Appended at the END (not grouped next to pause_secs/offer_fired_at
+  // above, in prose, to preserve column order for already-collected rows —
+  // see the append-only note at the top of this file). deliberation_secs is
+  // how long the participant actually took, in real elapsed seconds, from
+  // offer_fired_at to whichever moment decide() (index.html) actually
+  // committed a final decision for THIS hand's own offer — accept or
+  // refuse, manually confirmed or auto-resolved by the countdown reaching
+  // 0 (stampDeliberation_()). NOT the same as pause_secs (the RANDOMISED
+  // length assigned to the countdown, not how long deciding actually took)
+  // nor Responses.switch_decision_secs (task-level, switch-taken case only,
+  // and only the step1→step2 confirm-popup gap, not the initial ask step
+  // before it). Blank iff this hand's own offer never fired (wasted=1) or
+  // fired but was never resolved (reload discarded the attempt first).
+  'deliberation_secs'
 ];
 
 // ── Sheet helpers ────────────────────────────────────────────────
@@ -787,6 +804,7 @@ function upsertHandRows_(sheet, pid, study_id, session_id, demo_mode, sections) 
         ['e_end_at_pause',      h.e_end_at_pause       != null ? h.e_end_at_pause       : ''],
         ['pause_secs',   h.pause_secs   != null ? h.pause_secs   : ''],
         ['offer_fired_at', h.offer_fired_at || ''],
+        ['deliberation_secs', h.deliberation_secs != null ? h.deliberation_secs : ''],
         ['undo_count',     h.undo_count     != null ? h.undo_count     : ''],
         ['auto_refused',   h.auto_refused   != null ? h.auto_refused   : ''],
         ['auto_confirmed', h.auto_confirmed != null ? h.auto_confirmed : ''],

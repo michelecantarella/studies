@@ -932,7 +932,7 @@ if(!_prolificID && _isPilotStudy){
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbx6NRI7MkpXrRmMor1z6zqIl2r6jVOOY8__qz9p_XbQAr4ZeHk3hgQjBA3cjuxsYrMfBg/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzxCRR-1NLp2Iy7st2NrnqmkdQ6ge-TqlfRAxyaGYWyMoRI9eqbEm-x7kjn3qUI_AQa9g/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.025; // £6/hr ÷ 3600s × 15s per task — guaranteed pay, tuned independently of the section bonus below (that's the extra, on-top reward, not part of this target)
@@ -2280,6 +2280,7 @@ function buildAbandonedRecord_(task, snap, attempt){
                       p_inside:h.pInside, sub_regime:h.subRegime, wasted:h.wasted?1:0,
                       ends:h.ends?1:0, end_pos:h.ends?h.endPos:null, played_len:h.playedLen,
                       pause:h.pause, pause_secs:h.pauseSecs||null, offer_fired_at:h.offerFiredAt||null,
+                      deliberation_secs: h.deliberationSecs!=null ? h.deliberationSecs : null,
                       left_pattern:h.leftPattern, right_pattern:h.rightPattern,
                       undo_count:h.undoCount||0, auto_refused:h.autoRefused?1:0, auto_confirmed:h.autoConfirmed?1:0,
                       active_passed_in_hand:h.activePassedInHand, active_passed_in_seq:h.activePassedInSeq,
@@ -4092,12 +4093,30 @@ function totalTasksSoFar_(){
   return S.phase==='alt' ? S.altStartPos + S.subtaskDone : S.subtaskDone;
 }
 
+// deliberation_secs (Hands sheet): real elapsed time from the moment THIS
+// hand's own offer banner actually appeared (offerFiredAt) to the moment a
+// final decision was committed for it here in decide() — accept or refuse,
+// manually confirmed or auto-resolved by the countdown timing out. This is
+// deliberately different from pause_secs (the RANDOMISED length assigned to
+// the offer's own countdown, not how long the participant actually took)
+// and from switch_decision_secs (task-level, only covers the switch-taken
+// case, and only the step1→step2 confirm-popup gap, not the ask step
+// before it) — deliberation_secs is the one true "how long did the pause
+// actually last before a final decision" figure, covering both outcomes.
+function stampDeliberation_(task, handIdx){
+  if(handIdx==null || handIdx===-1) return;
+  const h = task.hands[handIdx];
+  if(!h || !h.offerFiredAt) return;
+  h.deliberationSecs = Math.round((Date.now() - new Date(h.offerFiredAt)) / 100) / 10;
+}
 function decide(choice){
   const task=S.tasks[S.taskIdx];
   if(S.offerTimer){ clearInterval(S.offerTimer); S.offerTimer=null; }
   if(choice==='continue'){
     kill();
+    const offerHandIdx = S.offerHandIdx; // captured before hideOfferBanner_() resets it to null
     hideOfferBanner_();
+    stampDeliberation_(task, offerHandIdx);
     if(S.subtaskDone >= task.nReq){ endTaskOrDefer_('completed'); return; }
     showScreen('subtask');
     startSubtask();
@@ -4105,6 +4124,7 @@ function decide(choice){
     kill();
     const offerHandIdx = S.offerHandIdx; // captured before hideOfferBanner_() resets it to null
     hideOfferBanner_();
+    stampDeliberation_(task, offerHandIdx);
     const now = new Date().toISOString();
     // switchPressedAtTask/Time were already captured in tentativeChoice_()
     // — the moment "Accept and switch" was first pressed, step 1 of the
@@ -4410,6 +4430,12 @@ function endTask(outcome){
                      p_inside:h.pInside, sub_regime:h.subRegime, wasted:h.wasted?1:0,
                      ends:h.ends?1:0, end_pos:h.ends?h.endPos:null, played_len:h.playedLen,
                      pause:h.pause, pause_secs:h.pauseSecs||null, offer_fired_at:h.offerFiredAt||null,
+                     // deliberation_secs: real elapsed time from this hand's
+                     // offer appearing to a final decision — see
+                     // stampDeliberation_()'s own comment. null iff the
+                     // offer never fired for this hand, or fired but was
+                     // never resolved (reload discarded the attempt first).
+                     deliberation_secs: h.deliberationSecs!=null ? h.deliberationSecs : null,
                      // left_pattern/right_pattern split THIS hand's own
                      // live/safe pattern at its own pause — left is the
                      // `pause` cards already completed (0-indexed positions
