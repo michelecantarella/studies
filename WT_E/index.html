@@ -718,7 +718,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <!-- Prolific respondents only — hidden for the student version, which has
        neither a training/penalty distinction worth explaining nor a
        separately-approved bonus payment (see showResults()). -->
-  <p id="res-note-prolific1" style="font-size:.85rem;color:var(--ink2);margin-top:.7rem;">The bonus figure includes your training bonus and has your mistake penalties subtracted.</p>
+  <p id="res-note-prolific1" style="font-size:.85rem;color:var(--ink2);margin-top:.7rem;">The bonus figure includes your training bonus and has your total penalties subtracted.</p>
   <p id="res-note-prolific2" style="font-size:.85rem;color:var(--ink2);">Your participation fee is paid immediately. Bonus payments are approved by hand, so please allow a couple of working days.</p>
   <!-- Student version only. -->
   <p id="res-note-student" style="display:none;font-size:.85rem;color:var(--ink2);margin-top:.7rem;">Wait for your responses to be registered before closing the window.</p>
@@ -909,7 +909,7 @@ if(!_prolificID && _isPilotStudy){
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzrNuBxk-88BCGvPCIuzQQQfzOAGFnCia5-_RYYTMAyaZPfALZFfS77wBFn7U5o_LADUA/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbx6NRI7MkpXrRmMor1z6zqIl2r6jVOOY8__qz9p_XbQAr4ZeHk3hgQjBA3cjuxsYrMfBg/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.025; // £6/hr ÷ 3600s × 15s per task — guaranteed pay, tuned independently of the section bonus below (that's the extra, on-top reward, not part of this target)
@@ -1673,7 +1673,7 @@ function paintTaskCard_(){
 
   if(S.phase === 'alt'){
     card.className = 'taskcard is-alt';
-    banner.textContent = 'Alternative sequence — a fixed run of cards.';
+    banner.textContent = 'Alternative sequence.';
     setProb(false); // the alternative has no end-probability
     renderHand_(task);
     return;
@@ -1932,7 +1932,7 @@ function buildFullData_(){
     // the study cost the participant money — see also autokicked sequences,
     // which stop a sequence the moment ITS OWN penalty reaches ITS OWN pay,
     // so this should essentially never actually need the clamp in practice).
-    total_bonus_owed:      Math.max(0, Math.round((totalEarnings-totalPenalty)*100)/100),
+    final_bonus:      Math.max(0, Math.round((totalEarnings-totalPenalty)*100)/100),
     reload_count:          SESSION.totalReloads,
     reload_log:            SESSION.reloadLog,
     // IP-based geolocation (see fetchGeo_) — best-effort, may be blank if
@@ -1974,8 +1974,8 @@ function buildFullData_(){
     hands_json:      r.hands_json || [],
     // Whole-experiment population constant — see the RESP_HEADER comment on
     // this field. The equivalent figure for a real hand's own parameters
-    // (e_remaining_at_hand_start/e_end_at_hand_start/e_remaining_at_pause/
-    // e_end_at_pause) now lives only on the Hands sheet, every hand.
+    // (e_end_at_hand_start/e_end_at_pause) now lives only on the Hands
+    // sheet, every hand.
     e_end_at_start:  r.e_end_at_start,
     n_req:           r.n_req,
     // 1 iff the undisclosed hand cap forced the last hand to end — treat
@@ -1986,13 +1986,16 @@ function buildFullData_(){
     offer_wasted:    r.offer_wasted,
     alt_duration:    r.alt_duration,
     alt_end:         r.alt_end,
-    // alt_duration/pay were drawn from a bounded bell centred on
-    // e_end_at_start (alt_base) with support width alt_width; alt_minus_
-    // expected = alt_duration - e_remaining (negative = alt was shorter).
+    // pay was drawn from a bounded bell centred on e_end_at_start (alt_base)
+    // with support width alt_width; alt_duration from the same kind of bell
+    // but centred on the first hand's own e_end_at_pause net of position
+    // already reached (Hands sheet, hand_n=1); alt_minus_expected =
+    // alt_duration minus that same figure — negative = alt was shorter.
     alt_base:        r.alt_base,
     alt_width:       r.alt_width,
     alt_minus_expected: r.alt_minus_expected,
-    outcome:         r.outcome,
+    // outcome_summary IS the outcome — see endTask()'s own comment on why
+    // there is no separate plain `outcome` column any more.
     outcome_summary: r.outcome_summary,
     switch_offered_at_task: r.switch_offered_at_task,
     switch_offered_at_time: r.switch_offered_at_time,
@@ -2021,6 +2024,9 @@ function buildFullData_(){
     seq_start_at_time: r.seq_start_at_time,
     briefing_ended_at: r.briefing_ended_at,
     end_at:          r.end_at,
+    // Alt-phase grids only now — the main phase's own grids travel inside
+    // hands_json above instead (Hands.tasks_json, per hand) — see
+    // submitMatrix()/endTask().
     tasks_json:      r.grids || [],
     seq_frame_treatment: r.seq_frame_treatment,
     seq_is_bonus:    r.seq_is_bonus,
@@ -2251,12 +2257,17 @@ function buildAbandonedRecord_(task, snap, attempt){
                       active_left_in_hand:h.activeLeftInHand, active_left_in_seq:h.activeLeftInSeq,
                       inactive_left_in_hand:h.inactiveLeftInHand, inactive_left_in_seq:h.inactiveLeftInSeq,
                       sunk_cost_at_pause: h.sunkCostAtPause,
-                      e_remaining_at_hand_start: Math.round(h.eRemainingAtHandStart*1000)/1000,
-                      e_end_at_hand_start:       Math.round(h.eEndAtHandStart*1000)/1000,
-                      e_remaining_at_pause:      Math.round(h.eRemainingAtPause*1000)/1000,
-                      e_end_at_pause:            Math.round(h.eEndAtPause*1000)/1000,
+                      e_end_at_hand_start: Math.round(h.eEndAtHandStart*1000)/1000,
+                      e_end_at_pause:      Math.round(h.eEndAtPause*1000)/1000,
                       hand_started_at:h.handStartedAt||null, hand_ended_at:h.handEndedAt||null,
                       hand_penalty: h.handPenalty!=null ? h.handPenalty : null,
+                      switched:  h.switched  ? 1 : 0,
+                      forfeited: h.forfeited ? 1 : 0,
+                      switch_at_task_hand:    h.switchAtTaskHand    != null ? h.switchAtTaskHand    : null,
+                      switch_at_task_overall: h.switchAtTaskOverall != null ? h.switchAtTaskOverall : null,
+                      forfeit_at_task_hand:    h.forfeitAtTaskHand    != null ? h.forfeitAtTaskHand    : null,
+                      forfeit_at_task_overall: h.forfeitAtTaskOverall != null ? h.forfeitAtTaskOverall : null,
+                      tasks_json: h.grids || [],
                     })),
     e_end_at_start: Math.round(task.expectedStartEnd*1000)/1000,
     n_req:          task.nReq,
@@ -2269,7 +2280,6 @@ function buildAbandonedRecord_(task, snap, attempt){
     alt_base:       Math.round(task.altBase*1000)/1000,
     alt_width:      task.altWidth,
     alt_minus_expected: Math.round((task.altDuration-task.expectedRemaining)*1000)/1000,
-    outcome:        'abandoned_reload',
     outcome_summary: 'abandoned before reload — superseded by a later attempt',
     n_tasks_done:   nTasksDone,
     earnings:       0,
@@ -2282,6 +2292,8 @@ function buildAbandonedRecord_(task, snap, attempt){
     seq_start_at_time: task.startAt || null,
     briefing_ended_at: task.briefingEndedAt || null,
     end_at:         new Date().toISOString(),
+    // Alt-phase grids only — see endTask()'s own tasks_json comment.
+    grids:          task.altGrids || [],
     seq_frame_treatment: snap.nSeqFrame || 5,
     seq_is_bonus:   isBonusIdx_(task.index) ? 1 : 0,
   };
@@ -2791,7 +2803,7 @@ function trainPaint_(o){
       banner.textContent = 'This hand can end now.';
     } else if(o.alt){
       card.className='taskcard is-alt';
-      banner.textContent='Alternative sequence — a fixed run of cards.';
+      banner.textContent='Alternative sequence.';
     } else {
       card.className='taskcard is-safe';
       banner.textContent = 'This hand cannot end yet.';
@@ -3091,7 +3103,7 @@ function trainScreen6_(){
   trainPaint_({done:1});
   trainLightUpTo_(['panel-penalty']);
   renderTip_(
-    'Penalties for misclicks (£0.01 per mistake) are shown below the reward and are subtracted from your final total.',
+    'Penalties for misclicks (£0.01 per mistake) are shown below the reward and are subtracted from your final total. Penalties accumulate across sequences and are still applied even if you forfeited or switched.',
     tipContinue_()
   );
 }
@@ -3168,7 +3180,7 @@ function trainScreen12_(){
   trainFlashOfferBanner_(); // flash "The alternative sequence is now available"
   flashSwitchAvailable(); // and the panel explained right here — the ONLY place this ever flashes
   renderTip_(
-    'At some point we may offer you an alternative sequence. The alternative will grant you the reward after completing a specific number of cards. '+
+    'During each hand, we may offer you an alternative sequence. The alternative will grant you the reward after completing a specific number of cards. '+
     'This panel always shows how many cards it takes, and whether it is locked or available.',
     tipContinue_()
   );
@@ -3461,7 +3473,6 @@ function startTask(resumeSubtaskDone){
   if(!resuming){ S.phase='main'; S.altStartPos=0; S.penalty=0; }
   const task=S.tasks[S.taskIdx];
   task.startAt = task.startAt || new Date().toISOString();
-  task.grids = task.grids || [];
 
   // Undo anything left over from the training walkthrough.
   trainLightAll_();
@@ -3688,11 +3699,15 @@ function submitMatrix(){
   const nMissed   = correctIdxs.length - nFound;
   const isCorrect = nMissed === 0 && nFalsePos === 0;
 
-  // Record this grid
+  // Record this grid — attached to the HAND it belongs to (task.hands[i].grids)
+  // when in the main phase, since which hand a card was played in is
+  // genuinely hand-level data (see the Hands sheet's own tasks_json). The
+  // alt phase has no hand structure to attach to, so its grids collect
+  // separately on task.altGrids instead — see endTask()'s own tasks_json
+  // (Responses row), which is only ever the alt-phase portion now.
   const task=S.tasks[S.taskIdx];
   if(task){
-    if(!task.grids) task.grids=[];
-    task.grids.push({
+    const gridRecord = {
       grid_n:     S.subtaskDone + 1,
       phase:      S.phase,
       target:     S.target,
@@ -3703,7 +3718,15 @@ function submitMatrix(){
       n_missed:   nMissed,
       no_activity: noActivity,
       first_move_at: S.firstMoveAt || null,
-    });
+    };
+    if(S.phase==='main' && S._handTimingIdx!=null && task.hands[S._handTimingIdx]){
+      const h = task.hands[S._handTimingIdx];
+      if(!h.grids) h.grids=[];
+      h.grids.push(gridRecord);
+    } else {
+      if(!task.altGrids) task.altGrids=[];
+      task.altGrids.push(gridRecord);
+    }
   }
 
   if(!isCorrect){
@@ -4003,6 +4026,7 @@ function decide(choice){
     startSubtask();
   } else if(choice==='switch'){
     kill();
+    const offerHandIdx = S.offerHandIdx; // captured before hideOfferBanner_() resets it to null
     hideOfferBanner_();
     const now = new Date().toISOString();
     // switchPressedAtTask/Time were already captured in tentativeChoice_()
@@ -4016,6 +4040,16 @@ function decide(choice){
     task.switchTaken=true;
     task.switchTakenAtTask=S.subtaskDone; // true main-phase progress
     task.switchTakenAtTime=now;
+    // Attribute the switch to the ONE hand whose own offer actually led to
+    // it — otherwise the only way to find which hand that was would be
+    // cross-referencing switch_taken_at_task against every hand's own
+    // globalStart/playedLen range. Blank on every other hand.
+    if(offerHandIdx!=null && offerHandIdx!==-1 && task.hands[offerHandIdx]){
+      const h = task.hands[offerHandIdx];
+      h.switched            = true; // plain flag — see switch_at_task_hand/_overall for WHERE
+      h.switchAtTaskHand    = S.subtaskDone - h.globalStart;
+      h.switchAtTaskOverall = S.subtaskDone;
+    }
     S.phase='alt'; S.altStartPos=S.subtaskDone; S.subtaskDone=0;
     task.altPhaseStartedAt = now;
     S._lastHandIdx = null; // reset so the alt deck slides in fresh
@@ -4027,6 +4061,18 @@ function decide(choice){
     task.forfeitTaken=true;
     task.forfeitTakenAtTask=totalTasksSoFar_();
     task.forfeitTakenAtTime=new Date().toISOString();
+    // Attribute to the current hand — but ONLY if forfeiting during the
+    // main phase; the alt phase has no hand structure to attribute it to
+    // (stays sequence-level only, via forfeit_taken_at_task above).
+    if(S.phase==='main'){
+      const loc = locateCard_(task, S.subtaskDone);
+      if(loc && task.hands[loc.handIdx]){
+        const h = task.hands[loc.handIdx];
+        h.forfeited            = true; // plain flag — see forfeit_at_task_hand/_overall for WHERE
+        h.forfeitAtTaskHand    = loc.localPos;
+        h.forfeitAtTaskOverall = totalTasksSoFar_();
+      }
+    }
     endTask('forfeited');
   }
 }
@@ -4204,12 +4250,17 @@ function endTask(outcome){
     ? Math.round((new Date(task.switchTakenAtTime) - new Date(task.switchPressedAtTime)) / 100) / 10
     : null;
 
-  // Aggregate grid stats
-  const grids = task.grids || [];
-  const totalTargets  = grids.reduce((a,g)=>a+g.n_targets,  0);
-  const totalFound    = grids.reduce((a,g)=>a+g.n_found,    0);
-  const totalFalsePos = grids.reduce((a,g)=>a+g.n_false_pos,0);
-  const totalMissed   = grids.reduce((a,g)=>a+g.n_missed,   0);
+  // Aggregate grid stats across the WHOLE sequence — every hand's own grids
+  // (task.hands[i].grids, main phase) plus the alt phase's (task.altGrids).
+  // A genuine sequence-wide total, unlike tasks_json itself, which moved to
+  // per-hand storage (see submitMatrix()) — this aggregate stays here since
+  // it's a real sum across hands, not first-hand-only duplication.
+  const altGrids = task.altGrids || [];
+  const allGrids = task.hands.reduce((a,h)=>a.concat(h.grids||[]), altGrids.slice());
+  const totalTargets  = allGrids.reduce((a,g)=>a+g.n_targets,  0);
+  const totalFound    = allGrids.reduce((a,g)=>a+g.n_found,    0);
+  const totalFalsePos = allGrids.reduce((a,g)=>a+g.n_false_pos,0);
+  const totalMissed   = allGrids.reduce((a,g)=>a+g.n_missed,   0);
   const seqReloads    = SESSION.reloadLog.filter(r=>r.seq_index===task.index).length;
 
   // The actual amount owed for this sequence — earnings net of its own
@@ -4288,20 +4339,21 @@ function endTask(outcome){
                      // sequence by that moment (= the two _in_seq fields
                      // above, summed). Fixed at generation time, like them.
                      sunk_cost_at_pause: h.sunkCostAtPause,
-                     // Two expected-total-length figures genuinely specific
-                     // to THIS hand's own real pInside/length (unlike the
-                     // flat whole-experiment constant e_end_at_start below,
-                     // which never varies by hand) — see the generation-time
-                     // comment above (eRemFullrandWith_) for the exact
-                     // formula. "At hand start" is before any of this hand's
-                     // own cards are known to have passed; "at pause" is
-                     // conditional on having survived to this hand's own
-                     // pause, accounting for only what remains in THIS hand
-                     // from there plus uncertain future hands.
-                     e_remaining_at_hand_start: Math.round(h.eRemainingAtHandStart*1000)/1000,
-                     e_end_at_hand_start:       Math.round(h.eEndAtHandStart*1000)/1000,
-                     e_remaining_at_pause:      Math.round(h.eRemainingAtPause*1000)/1000,
-                     e_end_at_pause:            Math.round(h.eEndAtPause*1000)/1000,
+                     // Two expected-total-END-OF-SEQUENCE figures (in
+                     // tasks), genuinely specific to THIS hand's own real
+                     // pInside/length (unlike the flat whole-experiment
+                     // constant e_end_at_start below, which never varies by
+                     // hand) — see the generation-time comment above
+                     // (eRemFullrandWith_) for the exact formula.
+                     // e_end_at_hand_start: expected end position as
+                     // anticipated the moment this hand is dealt (before any
+                     // of its own cards are known to have passed).
+                     // e_end_at_pause: expected end position as anticipated
+                     // AT this hand's own pause, conditional on having
+                     // survived to it (corrected for the live/orange cards
+                     // already gone by within this hand).
+                     e_end_at_hand_start: Math.round(h.eEndAtHandStart*1000)/1000,
+                     e_end_at_pause:      Math.round(h.eEndAtPause*1000)/1000,
                      // Set at RUNTIME by stampHandTransition_()/open|
                      // closeHandTiming_(), the moment the current position
                      // actually enters/leaves this hand — NOT fixed at
@@ -4315,15 +4367,38 @@ function endTask(outcome){
                      // 0 is itself a meaningful "reached it, no mistakes").
                      hand_started_at:h.handStartedAt||null, hand_ended_at:h.handEndedAt||null,
                      hand_penalty: h.handPenalty!=null ? h.handPenalty : null,
+                     // Set in decide() — which hand's own offer actually led
+                     // to a real switch (switch_at_task_hand/_overall), and
+                     // which hand a forfeit happened during, if it happened
+                     // in the main phase at all (forfeit_at_task_hand/
+                     // _overall — blank if the forfeit happened during the
+                     // alt phase instead, which has no hand to attribute it
+                     // to). Both blank on every OTHER hand — at most one
+                     // hand per sequence ever has either set. switched/
+                     // forfeited are the same thing as plain 0/1 flags, for
+                     // whoever just wants "was this the hand" without caring
+                     // where exactly within it.
+                     switched:  h.switched  ? 1 : 0,
+                     forfeited: h.forfeited ? 1 : 0,
+                     switch_at_task_hand:    h.switchAtTaskHand    != null ? h.switchAtTaskHand    : null,
+                     switch_at_task_overall: h.switchAtTaskOverall != null ? h.switchAtTaskOverall : null,
+                     forfeit_at_task_hand:    h.forfeitAtTaskHand    != null ? h.forfeitAtTaskHand    : null,
+                     forfeit_at_task_overall: h.forfeitAtTaskOverall != null ? h.forfeitAtTaskOverall : null,
+                     // Every grid actually played DURING this hand — see
+                     // submitMatrix(), which now attaches each grid to the
+                     // hand it belongs to instead of one flat sequence-wide
+                     // array. Empty (not null) if this hand was reached but
+                     // no grids were ever submitted in it (shouldn't happen
+                     // in practice — every reached hand has at least one).
+                     tasks_json: h.grids || [],
                    })),
     // A whole-experiment population CONSTANT (never varies by hand/sequence/
     // respondent — see POP_MEAN_END) — NOT this section's own first-hand
     // actuals. The equivalent figure genuinely specific to a real hand's own
-    // parameters now lives only on the Hands sheet (e_remaining_at_hand_start/
-    // e_end_at_hand_start/e_remaining_at_pause/e_end_at_pause, every hand —
-    // this Responses row used to repeat just the FIRST hand's own version as
-    // e_remaining/e_end_at_pause, which was dropped as pure duplication of
-    // that hand's own row on Hands, hand_n=1).
+    // parameters now lives only on the Hands sheet (e_end_at_hand_start/
+    // e_end_at_pause, every hand — this Responses row used to repeat just
+    // the FIRST hand's own version as e_remaining/e_end_at_pause, which was
+    // dropped as pure duplication of that hand's own row on Hands, hand_n=1).
     e_end_at_start: Math.round(task.expectedStartEnd*1000)/1000,
     n_req:         task.nReq,
     // 1 when the UNDISCLOSED hand cap (CFG.maxHands) forced the last hand to
@@ -4345,7 +4420,13 @@ function endTask(outcome){
     alt_base:      Math.round(task.altBase*1000)/1000,
     alt_width:     task.altWidth,
     alt_minus_expected: Math.round(altMinusExpected*1000)/1000,
-    outcome,
+    // outcome_summary IS the outcome field — no separate plain `outcome`
+    // column any more (dropped as a pure redundancy: outcome_summary is
+    // strictly more informative, e.g. distinguishing "switched at offer and
+    // forfeited" from "continued and forfeited", both of which would
+    // otherwise collapse to the same plain 'forfeited'). completed/switched/
+    // forfeited/autokicked/abandoned_reload are all still unambiguously
+    // recoverable by matching on outcome_summary's text if ever needed.
     outcome_summary: outcomeSummary,
     switch_offered_at_task: S.offerShown ? task.offerAtTask : null,
     switch_offered_at_time: S.offerShown ? task.offerAtTime : null,
@@ -4387,7 +4468,11 @@ function endTask(outcome){
     seq_start_at_time: task.startAt || null, // explicit alias of start_at, requested by name
     briefing_ended_at: task.briefingEndedAt || null, // "Start sequence" pressed on the pre-sequence grace screen — see graceStart()
     end_at:        new Date().toISOString(),
-    grids:         grids,
+    // The ALT phase's own grids only — the main phase's now live on each
+    // hand's own row instead (Hands.tasks_json), since which hand a card
+    // was played in is genuinely hand-level data. The alt phase has no hand
+    // structure to attach to, so it stays here.
+    grids:         altGrids,
     seq_frame_treatment: SESSION.nSeqFrame || 5,
     seq_is_bonus:  isBonusIdx_(task.index) ? 1 : 0,
   });
@@ -4442,8 +4527,8 @@ function showResults(){
   // approved) and the show-up fee (fixed Prolific base pay, paid
   // immediately, untouched by penalties or performance). Clamped at 0 —
   // mistakes can never make the study cost the participant money; matches
-  // total_bonus_owed in buildFullData_() (same formula, computed again
-  // there for the backend payload).
+  // final_bonus in buildFullData_() (same formula, computed again there for
+  // the backend payload).
   const bonusReward = Math.max(0, Math.round((trainingBonus + totalSectionBonus - totalPenalty)*100)/100);
   const showUpFee   = SHOW_UP_FEE;
 

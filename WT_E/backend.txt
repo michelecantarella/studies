@@ -57,12 +57,13 @@ var META_HEADER = [
   'sections_done', 'total_earnings', 'total_grid_pay', 'total_grids_completed',
   'training_bonus', // £0.10 fixed bonus, credited once the training walkthrough is completed — already included in total_earnings
   'total_penalty',  // sum of per-section mistake penalties
-  // The actual amount owed at the end of the whole study: total_earnings
-  // net of total_penalty, clamped at 0 — see index.html's showResults()/
+  // The actual amount owed at the end of the whole study — what "Your bonus
+  // reward" shows on the results screen: total_earnings net of
+  // total_penalty, clamped at 0 — see index.html's showResults()/
   // buildFullData_(). Mistake penalties can never make the study cost the
   // participant money; autokicked sequences (see RESP_HEADER's auto_kicked)
   // mean this should essentially never actually need the clamp in practice.
-  'total_bonus_owed',
+  'final_bonus',
   // ── Reload/access tracking (respondent-level — see RESP_HEADER's
   // seq_reload_count/seq_attempt for the per-sequence breakdown) ──
   'reload_count', 'reload_log_json',
@@ -149,22 +150,22 @@ var RESP_HEADER = [
   // pay_tasks (below) is drawn from a bounded bell ("beta normal") centred
   // on e_end_at_start (alt_base) — the population constant. alt_duration is
   // drawn from the SAME kind of bell but centred differently: on the FIRST
-  // hand's own e_remaining_at_pause (Hands sheet, hand_n=1) — otherwise it
-  // would ignore how many tasks are already sunk before the offer and be
-  // systematically too long (see README.md §6). Both share the same support
-  // width, alt_width (= the mean hand length). alt_minus_expected =
-  // alt_duration - e_remaining_at_pause (that same hand_n=1 value) —
-  // negative means the alternative was the shorter option in expectation,
-  // at the first hand's own offer.
+  // hand's own expected-further-cards figure at its own pause (Hands
+  // sheet's e_end_at_pause, hand_n=1, net of that hand's own position) —
+  // otherwise it would ignore how many tasks are already sunk before the
+  // offer and be systematically too long (see README.md §6). Both share the
+  // same support width, alt_width (= the mean hand length).
+  // alt_minus_expected = alt_duration minus that same figure — negative
+  // means the alternative was the shorter option in expectation, at the
+  // first hand's own offer.
   'alt_base', 'alt_width', 'alt_minus_expected',
   // A whole-experiment population CONSTANT (index.html's POP_MEAN_END) —
   // never derived from this section's own hands, never varies by hand/
   // sequence/respondent. The equivalent figure genuinely specific to a real
   // hand's own pInside/length now lives only on the Hands sheet, every hand
-  // (e_remaining_at_hand_start/e_end_at_hand_start/e_remaining_at_pause/
-  // e_end_at_pause) — this row used to repeat just the FIRST hand's own
-  // version as e_remaining/e_end_at_pause, dropped as pure duplication of
-  // that hand's own row on Hands (hand_n=1).
+  // (e_end_at_hand_start/e_end_at_pause) — this row used to repeat just the
+  // FIRST hand's own version as e_remaining/e_end_at_pause, dropped as pure
+  // duplication of that hand's own row on Hands (hand_n=1).
   'e_end_at_start',
   // 1 iff the UNDISCLOSED hand cap (index.html's CFG.maxHands, currently 6)
   // forced the last hand to end rather than the section ending on its own
@@ -203,13 +204,14 @@ var RESP_HEADER = [
   // happened while this seq_n was current.
   'seq_reload_count',
   // ── Outcome ──
-  // completed / switched / forfeited / autokicked for a real, finished
-  // attempt (see auto_kicked below for the last); abandoned_reload for a
-  // superseded attempt (see "Reload/attempt tracking").
-  'outcome',
-  // A fixed human-readable label, derived from the columns on this row
-  // (never a new source of truth) — see computeOutcomeSummary_() in
-  // index.html and README.md §14 for the full derivation table.
+  // outcome_summary IS the outcome — no separate plain enum column. A fixed
+  // human-readable label (completed / switched / forfeited / autokicked /
+  // abandoned_reload, refined with WHEN/whether a switch or forfeit also
+  // happened — e.g. "switched at offer and forfeited") derived from the
+  // columns on this row (never a new source of truth, see
+  // computeOutcomeSummary_() in index.html and README.md §14 for the full
+  // derivation table) — strictly more informative than a plain enum would
+  // be, so keeping both was pure redundancy.
   'outcome_summary',
   'switch_offered_at_task', 'switch_offered_at_time', // task number and timestamp when the very FIRST offer of the section opened
   // WT_E: accepting the offer is a two-step flow — pressing "Accept and
@@ -244,7 +246,13 @@ var RESP_HEADER = [
   'net_earnings',
   // ── Grid accuracy, aggregated across the whole sequence ──
   'total_targets', 'total_found', 'total_false_pos', 'total_missed',
-  'tasks_json', // one object per completed grid — see README.md §9
+  // The ALT PHASE's own grids only — the main phase's now live on
+  // HANDS_HEADER's own tasks_json instead, one hand's own cards per row
+  // (which hand a given card was played in is genuinely hand-level data,
+  // not sequence-level — this column used to mix every hand's cards
+  // together with no way to tell them apart). The alt phase has no hand
+  // structure to attach to, so it stays here. See README.md §9.
+  'tasks_json',
   // ── Reload/attempt tracking ────────────────────────────────────────
   //
   // Historically a new-session reload mid-section (see index.html's
@@ -326,8 +334,8 @@ var HANDS_HEADER = [
   // gap, no overlap. Also fixed at generation time, tied to `pause` — same
   // NOT-blank-when-wasted=1 rule as pause/sunk_cost_at_pause above.
   'left_pattern', 'right_pattern',
-  // Two expected-total-main-sequence-length figures genuinely specific to
-  // THIS hand's own real pInside/length (unlike RESP_HEADER's
+  // Two expected-total-END-OF-SEQUENCE figures (in tasks), genuinely
+  // specific to THIS hand's own real pInside/length (unlike RESP_HEADER's
   // e_end_at_start, a flat whole-experiment constant that never varies by
   // hand) — see index.html's eRemFullrandWith_() for the exact formula,
   // which conditions on survival to a given local position within the hand
@@ -337,16 +345,15 @@ var HANDS_HEADER = [
   // sunk_cost_at_pause/left_pattern/right_pattern above (the offer visually
   // firing has nothing to do with these — they're a property of the hand's
   // OWN draw, not of whether the participant ever saw the offer screen).
-  //   e_remaining_at_hand_start/e_end_at_hand_start: computed from the very
-  //   start of this hand (before any of its own cards are known to have
-  //   passed) — what the sequence's expected total length looks like the
-  //   moment this hand is dealt, accounting for the hand actually on offer
-  //   plus uncertain future hands.
-  //   e_remaining_at_pause/e_end_at_pause: computed AT this hand's own
-  //   pause — conditional on having survived to it, accounting for only
-  //   what remains in THIS hand from there, plus uncertain future hands.
-  'e_remaining_at_hand_start', 'e_end_at_hand_start',
-  'e_remaining_at_pause', 'e_end_at_pause',
+  //   e_end_at_hand_start: computed from the very start of this hand
+  //   (before any of its own cards are known to have passed) — what the
+  //   sequence's expected end position looks like the moment this hand is
+  //   dealt, accounting for the hand actually on offer plus uncertain
+  //   future hands.
+  //   e_end_at_pause: computed AT this hand's own pause — conditional on
+  //   having survived to it, corrected for the live/orange cards already
+  //   gone by within this hand, plus uncertain future hands.
+  'e_end_at_hand_start', 'e_end_at_pause',
   // ── Set at RUNTIME, the moment this hand's own offer screen actually
   // shows (showOfferScreen() in index.html) — NOT fixed at generation time
   // like everything above. Both blank when this hand's own offer was wasted
@@ -404,7 +411,39 @@ var HANDS_HEADER = [
   // that) — the gap in Responses.penalty between this hand's own start and
   // end. Same blank-iff-never-reached rule as the two timestamps above
   // (blank, not 0 — 0 is itself a meaningful "reached it, no mistakes").
-  'hand_penalty'
+  'hand_penalty',
+  // Set in index.html's decide() — WHICH hand a real switch/forfeit
+  // actually happened during. Blank/0 on every hand except the one it
+  // happened on; at most one hand per sequence attempt ever has switched=1,
+  // and at most one (possibly a different one, or none) ever has
+  // forfeited=1.
+  //   switched/forfeited: plain 0/1 flags — "was this the hand", nothing
+  //   more. switched=1 iff this hand's OWN offer actually led to
+  //   Responses.switch_taken=1. forfeited=1 iff the participant forfeited
+  //   while in THIS hand specifically (main phase only — a forfeit during
+  //   the alt phase has no hand to attribute it to; stays sequence-level
+  //   only, via Responses.forfeit_taken_at_task).
+  //   switch_at_task_hand/_overall: for switched=1, WHERE exactly — the
+  //   position within that hand, and the position within the whole
+  //   sequence (same value as Responses.switch_taken_at_task). Without
+  //   this, finding which hand's offer was accepted means cross-
+  //   referencing that timestamp against every hand's own
+  //   globalStart/playedLen range instead.
+  //   forfeit_at_task_hand/_overall: for forfeited=1, WHERE exactly — same
+  //   idea, mirroring switch_at_task_hand/_overall.
+  'switched', 'forfeited',
+  'switch_at_task_hand', 'switch_at_task_overall',
+  'forfeit_at_task_hand', 'forfeit_at_task_overall',
+  // Every grid actually played DURING this hand — one object per completed
+  // card (target emoji, which cells were clicked right/wrong, no_activity/
+  // first_move_at — see README.md §9's tasks_json structure). Moved here
+  // from a single flat sequence-wide column on Responses, which USED to mix
+  // every hand's own cards together with no way to tell which hand a given
+  // card was even played in — genuinely hand-level data, not sequence-level
+  // (Responses.tasks_json is now the ALT PHASE's own grids only, which has
+  // no hand structure to attach to). Empty array (not blank) if this hand
+  // was never reached at all.
+  'tasks_json'
 ];
 
 // ── Sheet helpers ────────────────────────────────────────────────
@@ -516,7 +555,7 @@ function upsertMeta_(sheet, pid, study_id, session_id, sl, snapshot, now, setCom
     ['total_grid_pay',         sl.total_grid_pay         != null ? sl.total_grid_pay         : ''],
     ['total_grids_completed',  sl.total_grids_completed  != null ? sl.total_grids_completed  : ''],
     ['total_penalty',          sl.total_penalty          != null ? sl.total_penalty          : ''],
-    ['total_bonus_owed',       sl.total_bonus_owed       != null ? sl.total_bonus_owed       : ''],
+    ['final_bonus',            sl.final_bonus            != null ? sl.final_bonus            : ''],
     ['reload_count',           sl.reload_count           != null ? sl.reload_count           : ''],
     ['reload_log_json',        JSON.stringify(sl.reload_log || [])],
     ['resume_snapshot_json',   setComplete ? '' : JSON.stringify(snapshot || {})],
@@ -615,7 +654,6 @@ function upsertRespRows_(sheet, pid, study_id, session_id, demo_mode, sections) 
       ['seq_start_at_time',        s.seq_start_at_time       || ''],
       ['briefing_ended_at',        s.briefing_ended_at       || ''],
       ['seq_reload_count', s.seq_reload_count != null ? s.seq_reload_count : ''],
-      ['outcome',         s.outcome       || ''],
       ['outcome_summary',          s.outcome_summary         || ''],
       ['switch_offered_at_task',  s.switch_offered_at_task  != null ? s.switch_offered_at_task  : ''],
       ['switch_offered_at_time',  s.switch_offered_at_time  || ''],
@@ -745,10 +783,8 @@ function upsertHandRows_(sheet, pid, study_id, session_id, demo_mode, sections) 
         ['sunk_cost_at_pause', h.sunk_cost_at_pause != null ? h.sunk_cost_at_pause : ''],
         ['left_pattern',  h.left_pattern  || ''],
         ['right_pattern', h.right_pattern || ''],
-        ['e_remaining_at_hand_start', h.e_remaining_at_hand_start != null ? h.e_remaining_at_hand_start : ''],
-        ['e_end_at_hand_start',       h.e_end_at_hand_start       != null ? h.e_end_at_hand_start       : ''],
-        ['e_remaining_at_pause',      h.e_remaining_at_pause      != null ? h.e_remaining_at_pause      : ''],
-        ['e_end_at_pause',            h.e_end_at_pause            != null ? h.e_end_at_pause            : ''],
+        ['e_end_at_hand_start', h.e_end_at_hand_start != null ? h.e_end_at_hand_start : ''],
+        ['e_end_at_pause',      h.e_end_at_pause       != null ? h.e_end_at_pause       : ''],
         ['pause_secs',   h.pause_secs   != null ? h.pause_secs   : ''],
         ['offer_fired_at', h.offer_fired_at || ''],
         ['undo_count',     h.undo_count     != null ? h.undo_count     : ''],
@@ -765,6 +801,13 @@ function upsertHandRows_(sheet, pid, study_id, session_id, demo_mode, sections) 
         ['hand_started_at', h.hand_started_at || ''],
         ['hand_ended_at',   h.hand_ended_at   || ''],
         ['hand_penalty',    h.hand_penalty != null ? h.hand_penalty : ''],
+        ['switched',  h.switched  != null ? h.switched  : ''],
+        ['forfeited', h.forfeited != null ? h.forfeited : ''],
+        ['switch_at_task_hand',    h.switch_at_task_hand    != null ? h.switch_at_task_hand    : ''],
+        ['switch_at_task_overall', h.switch_at_task_overall != null ? h.switch_at_task_overall : ''],
+        ['forfeit_at_task_hand',    h.forfeit_at_task_hand    != null ? h.forfeit_at_task_hand    : ''],
+        ['forfeit_at_task_overall', h.forfeit_at_task_overall != null ? h.forfeit_at_task_overall : ''],
+        ['tasks_json', JSON.stringify(h.tasks_json || [])],
       ];
 
       writeRowBatched_(sheet, rowIndex, isNew, updates, HANDS_HEADER);
