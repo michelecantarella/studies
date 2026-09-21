@@ -2,9 +2,11 @@
 
 One row per column, in the exact left-to-right order it appears in the Google Sheet / Excel export. There are **three sheets** (tabs): `Meta`, `Responses`, `Hands`.
 
-- **`Meta`** — one row per respondent (their background survey answers + running totals).
-- **`Responses`** — one row per respondent × sequence (1–5) × **attempt** (almost always just 1 attempt — see "Reload/attempt tracking" below).
-- **`Hands`** — one row per respondent × sequence × attempt × **hand** (a "hand" is one card-stack draw within a sequence — see §5/§6 of `README.md` for the full mechanic). This is the fine-grained breakdown behind each `Responses` row.
+- **`Meta`** — one row per respondent. **Respondent-level data only**: their background survey answers, running totals, and study-wide milestones.
+- **`Responses`** — one row per respondent × sequence (1–5) × **attempt** (almost always just 1 attempt — see "Reload/attempt tracking" below). **Sequence-level data only**: anything that varies from one sequence to the next for the same respondent.
+- **`Hands`** — one row per respondent × sequence × attempt × **hand** (a "hand" is one card-stack draw within a sequence — see §5/§6 of `README.md` for the full mechanic). **Hand-level data only**: anything that varies from one hand to the next within the same sequence. This is the fine-grained breakdown behind each `Responses` row.
+
+**These three levels are kept strictly separate — nothing is repeated across sheets.** A sequence's own data lives only on `Responses`, never copied onto `Meta`; a hand's own data lives only on `Hands`, never copied onto `Responses` (earlier versions of this study repeated the *first* hand's own pattern/offer/timing directly on `Responses`, which was pure duplication of that hand's own row on `Hands` — removed).
 
 **Join keys:**
 - `Responses` → `Meta`: match on `prolific_pid`.
@@ -12,7 +14,7 @@ One row per column, in the exact left-to-right order it appears in the Google Sh
 
 **Before analysing `Responses` or `Hands`: filter to `is_latest_attempt = 1`.** This gives one row per real section (or per real hand) — see "Reload/attempt tracking" at the end of this document for why the column exists at all. For the vast majority of respondents every row already has `is_latest_attempt = 1`, since a reload discarding real progress is rare.
 
-Columns marked **LEGACY** are permanently blank going forward — they exist only so that columns added later never shift position relative to rows already written under an older version of the study. Safe to ignore/hide.
+Columns marked **£** always hold a plain number in the sheet — the £ sign is never stored, it's only how the participant's own screen displays it (or "Points" instead, for the in-class student version — same underlying number either way).
 
 ---
 
@@ -25,25 +27,23 @@ Columns marked **LEGACY** are permanently blank going forward — they exist onl
 | session_id | text | Prolific's session ID for this respondent |
 | demo_mode | 0/1/2 | 0 = real respondent; 1/2 = internal testing (debug bar), never a genuine participant |
 | consent_at | timestamp | When "I consent" was clicked. Never overwritten once set. Blank for the student version, which collects consent in class instead. |
+| training_started_at | timestamp | When the tutorial walkthrough began |
+| training_ended_at | timestamp | When the tutorial walkthrough finished (comprehension check passed) |
+| experiment_started_at | timestamp | When the 5 real sections began. Almost always the same instant as `training_ended_at` — kept as its own column anyway since it answers a slightly different question. |
+| experiment_ended_at | timestamp | When the LAST real section actually finished playing. **Not the same as `study_complete_at` below** — this is when the respondent stopped playing; `study_complete_at` is when that result was successfully saved, which can be seconds (or, with a flaky connection, much longer) later. |
 | study_complete_at | timestamp | Set the moment the final save succeeds. Blank means the respondent has not (yet, or ever) finished. |
 | last_updated_iso | timestamp | Updated on every single save — the most recent activity timestamp for this respondent |
-| age | — | **LEGACY.** Original short survey's field; replaced by the fuller survey (`employment_status` onward). |
-| gender | — | **LEGACY.** See `age` above. |
-| student | — | **LEGACY.** See `age` above. |
 | sections_done | number | How many of the 5 sequences this respondent has finished |
-| total_earnings | £ | Running total bonus earnings so far (training bonus + section bonuses, net of penalties) |
+| total_earnings | £ | Running total GROSS bonus earnings so far (training bonus + section bonuses) — **not yet net of penalties.** See `total_bonus_owed` below for the actual amount owed. |
 | total_grid_pay | £ | Running total of the guaranteed per-grid pay (independent of the bonus above) |
 | total_grids_completed | number | Running total of individual emoji-grids completed |
-| reload_count | number | How many times this respondent came back in a **new browser session** (closed tab/different device) — same-tab refreshes don't count |
+| training_bonus | £ | Fixed bonus (£0.10) credited once the tutorial is completed. Already included in `total_earnings`. |
+| total_penalty | £ | Sum of all mistake penalties (misclicks on the grids) across every sequence — see `Responses.penalty` for the per-sequence breakdown |
+| total_bonus_owed | £ | **The actual amount owed at the end of the whole study** — `total_earnings` minus `total_penalty`, never negative. This is what "Your bonus reward" on the results screen actually shows. |
+| reload_count | number | How many times this respondent came back in a **new browser session** (closed tab/different device) — same-tab refreshes don't count. See `Responses.seq_reload_count` for the per-sequence breakdown. |
 | reload_log_json | JSON (text) | One entry per reload above: which section number was current, and when |
 | resume_snapshot_json | JSON (text) | The full state needed to resume mid-study. Cleared once the respondent finishes. Not generally useful for analysis — it's a technical resume mechanism, not data. |
-| training_bonus | £ | Fixed bonus (£0.10) credited once the tutorial is completed. Already included in `total_earnings`. |
 | seq_frame_treatment | 4 or 5 | Hidden framing treatment: whether this respondent was told they'd complete "4" or "5" sequences (both actually run 5) |
-| total_penalty | £ | Sum of all mistake penalties (misclicks on the grids) across every sequence |
-| training_choice | — | **LEGACY.** Was going to record a free practice decision during training; the tutorial now walks everyone through both branches instead, so there's nothing to record. |
-| training_choice_at | — | **LEGACY.** See `training_choice` above. |
-| geo_country, geo_region, geo_city, geo_ip | text | IP-based location, best-effort (see "Geolocation" note below). Blank if the lookup failed or was skipped. |
-| geo_json | JSON (text) | The full raw response from whichever geolocation provider answered (lat/long, timezone, ISP, currency, etc.) — the four fields above are just convenience copies of its most-used values |
 | employment_status | text | Current main activity status (employed / self-employed / student / retired / not employed / other) |
 | labor_income | number | Usual monthly income after tax. Blank unless `employment_status` is one of the employed/self-employed categories. |
 | marstat | text | Marital status |
@@ -53,7 +53,12 @@ Columns marked **LEGACY** are permanently blank going forward — they exist onl
 | ends_meet_now, ends_meet_past, ends_meet_future | text (7-point scale) | SOEP-style "how easily do you make ends meet" — for this month / a year ago / a year from now |
 | risk | 0–10 | Single-item risk-tolerance measure (Dohmen et al. 2011) |
 | patience | 0–10 | Single-item patience measure (Falk et al. 2016) |
+| geo_country, geo_region, geo_city, geo_ip | text | IP-based location, best-effort (see "Geolocation" note below). Blank if the lookup failed or was skipped. |
 | geo_provider | text | Which geolocation service actually answered — `ipapi.co` or `ipwho.is` |
+| geo_json | JSON (text) | The full raw response from whichever geolocation provider answered (lat/long, timezone, ISP, currency, etc.) — the fields above are just convenience copies of its most-used values |
+| device_type | text | Best-effort device classification captured at consent — `Desktop`, `Mobile`, or `Tablet` |
+| browser | text | Best-effort browser name captured at consent — `Chrome`, `Safari`, `Firefox`, `Edge`, `Opera`, or `Other` |
+| user_agent | text | The full raw browser user-agent string, for anything the two fields above don't capture |
 | pid_missing_from_link | 0/1 | 1 if `prolific_pid` had to be typed in by hand (or auto-generated for `pilot`) rather than arriving in the study link itself — always 1 for `studentpilot` |
 | training_scenario_order | text | Order the tutorial's two optional end-of-training scenario buttons were shown in |
 | training_scenarios_viewed | text | Which of those optional scenarios the respondent actually opened, in order. Blank if neither. |
@@ -69,56 +74,49 @@ Columns marked **LEGACY** are permanently blank going forward — they exist onl
 |---|---|---|
 | prolific_pid, study_id, session_id, demo_mode | — | Same as `Meta`, repeated on every row for convenience filtering |
 | seq_n | 1–5 | Which of the respondent's 5 sequences this row is |
+| seq_attempt | number | 1 for a normal, un-interrupted attempt; 2, 3, … only if an earlier attempt at this `seq_n` was abandoned by a reload (see "Reload/attempt tracking") |
+| is_latest_attempt | 0/1 | **Filter to 1** to get one row per real sequence — see the top of this document |
 | pay | £ | This sequence's fixed reward |
 | pay_tasks | number | The (hidden) task count `pay` was calibrated around |
 | regime | 0/1/2/3 | This respondent's fixed offer-placement rule for the whole study (0 = "mixed", re-rolled per hand — see `Hands.sub_regime`) |
-| hand_len | number | The FIRST hand's total length (cards) |
-| live_pattern | text, e.g. `SSLSLS` | The FIRST hand's live(`L`)/safe(`S`) pattern, one character per card — genuinely mixed, not blocked |
-| card_order | text, e.g. `SSLSLS\|LSL` | The full card-by-card order across **every** hand actually played this sequence, one hand's pattern per `\|`-separated segment, each truncated to however many of its cards were actually shown |
-| p_inside_first | 0–1 | The FIRST hand's disclosed probability that the sequence ends inside it |
 | n_hands | number | How many hands this sequence actually ran through |
 | n_req | number | Total main-sequence card count it actually took to end (or, if it never ended naturally, the hand-cap cutoff — see `cap_bound`) |
-| pause | number | The FIRST hand's own offer position (which card, within that hand, its offer appeared on) |
-| pause_max | number | The largest `pause` could have been for that hand (`hand_len − 1`) |
 | alt_duration | number | The alternative sequence's fixed length (in cards) |
 | alt_end | number | The alternative's fixed endpoint |
-| pause_secs | number (seconds) | How long the FIRST hand's own offer countdown ran for (10–45s, redrawn every time an offer fires — every later hand's own value is in the `Hands` sheet instead). Blank if that hand's offer never fired (see `Hands.wasted`). |
-| outcome | text | `completed` / `switched` / `forfeited` for a real, finished attempt; `abandoned_reload` for a superseded attempt (see "Reload/attempt tracking") |
-| switch_offered | — | **LEGACY.** Superseded by `switch_offered_at_task`/`_time` below. |
-| switch_at | — | **LEGACY.** See `switch_offered` above. |
-| n_tasks_done | number | How many cards were actually completed in this sequence attempt |
-| earnings | £ | This sequence's actual bonus payout (0 if forfeited) |
-| grid_pay | £ | Guaranteed per-grid pay earned this sequence (independent of `earnings`) |
-| total_targets, total_found, total_false_pos, total_missed | number | Aggregated grid-click accuracy across the whole sequence |
-| seq_reload_count | number | How many of the respondent's session-level reloads happened while this sequence number was current |
-| start_at, end_at | timestamp | When this sequence attempt started and ended |
-| tasks_json | JSON (text) | One entry per individual grid completed — see "`tasks_json` structure" below |
+| alt_base | number | Population constant, identical to `e_end_at_start` |
+| alt_width | number | The average hand length used when drawing `alt_duration` |
+| alt_minus_expected | number | `alt_duration` minus the FIRST hand's own `e_remaining_at_pause` (`Hands` sheet, `hand_n=1`). Negative = the alternative was the shorter option in expectation, at the moment of the first offer. |
+| e_end_at_start | number | A fixed population constant (same across all respondents/sequences/hands — see `Hands.e_remaining_at_hand_start`/`e_end_at_hand_start` for the equivalent figure genuinely specific to a real hand's own parameters) — the expected total main-sequence length if nothing were known yet |
+| cap_bound | 0/1 | 1 if the sequence hit the hidden maximum-hands safety cap rather than ending on its own — treat `n_req` as right-censored for these rows |
+| offer_wasted | 0/1 | 1 if any hand in this sequence never got to show its offer at all (its own end came first — see `Hands.wasted`) |
+| card_order | text, e.g. `SSLSLS\|LSL` | The full card-by-card order across **every** hand actually played this sequence, one hand's pattern per `\|`-separated segment, each truncated to however many of its cards were actually shown. A whole-sequence aggregate — reconstructable from the `Hands` sheet too, kept here as one flat, directly-readable field. |
 | seq_frame_treatment | 4 or 5 | Same hidden framing treatment as in `Meta`, repeated here |
 | seq_is_bonus | 0/1 | 1 if this was the hidden 6th "bonus" sequence (only exists for respondents told "4", to keep real completion time equal — see `README.md` §7) |
+| start_at | timestamp | When this sequence attempt started |
+| end_at | timestamp | When this sequence attempt ended |
+| seq_start_at_time | timestamp | Same value as `start_at` (explicit alias, kept for naming consistency with other `_at_time` columns) |
+| briefing_ended_at | timestamp | The moment the pre-sequence briefing (reward, alternative length, reminders) actually ended — "Start sequence" pressed. Distinct from `start_at`, stamped an instant later once the first real card is actually being set up. |
+| seq_reload_count | number | How many of the respondent's session-level reloads happened while this sequence number was current |
+| outcome | text | `completed` / `switched` / `forfeited` / `autokicked` for a real, finished attempt (see `auto_kicked` below for the last); `abandoned_reload` for a superseded attempt (see "Reload/attempt tracking") |
+| outcome_summary | text | A ready-made, human-readable label (e.g. "switched at offer", "continued and forfeited") summarising this row — purely derived from the other columns, see `README.md` §14 for the full derivation table |
 | switch_offered_at_task, switch_offered_at_time | number, timestamp | The card position and timestamp when the very FIRST offer of this sequence appeared |
 | switch_taken | 0/1 | Whether the respondent switched to the alternative this sequence |
 | switch_taken_at_task, switch_taken_at_time | number, timestamp | Card position and timestamp of **step 2** — pressing "Confirm" on the confirm pop-up (or a timeout auto-committing it). Blank unless `switch_taken = 1`. |
-| forfeit_taken | 0/1 | Whether the respondent gave up this sequence |
-| forfeit_taken_at_task, forfeit_taken_at_time | number, timestamp | Card position and timestamp of the forfeit, if any |
-| seq_start_at_time | timestamp | Same value as `start_at` (explicit alias, kept for naming consistency with other `_at_time` columns) |
-| e_remaining | number | Expected further cards remaining, calculated from the first hand's own offer position |
-| e_end_at_start | number | A fixed population constant (same across all respondents/sequences) — the expected total main-sequence length if nothing were known yet |
-| e_end_at_pause | number | `pause + e_remaining` |
-| penalty | £ | Mistake penalty (£0.01 per misclick) for this sequence, already deducted from `earnings` |
-| cap_bound | 0/1 | 1 if the sequence hit the hidden maximum-hands safety cap rather than ending on its own — treat `n_req` as right-censored for these rows |
-| offer_wasted | 0/1 | 1 if any hand in this sequence never got to show its offer at all (its own end came first — see `Hands.wasted`) |
-| alt_base | number | Population constant, identical to `e_end_at_start` |
-| alt_width | number | The average hand length used when drawing `alt_duration` |
-| alt_minus_expected | number | `alt_duration − e_remaining`. Negative = the alternative was the shorter option in expectation, at the moment of the first offer. |
-| hands_json | — | **LEGACY.** Superseded by the `Hands` sheet (one row per hand, much easier to work with than this JSON blob). |
 | switch_pressed_at_task, switch_pressed_at_time | number, timestamp | **Step 1** — card position and timestamp when "Accept and switch" was first pressed, opening the confirm pop-up. If the respondent pressed Undo and tried again later, this reflects whichever press actually led to confirming. Blank unless `switch_taken = 1`. |
 | switch_decision_secs | number (seconds) | How long the respondent sat on the confirm pop-up: the gap between `switch_pressed_at_time` (step 1) and `switch_taken_at_time` (step 2). Blank unless `switch_taken = 1`. |
 | alt_phase_started_at | timestamp | When the alternative sequence actually began. Blank if never reached. |
-| outcome_summary | text | A ready-made, human-readable label (e.g. "switched at offer", "continued and forfeited") summarising this row — purely derived from the other columns, see `README.md` §14 for the full derivation table |
-| seq_attempt | number | 1 for a normal, un-interrupted attempt; 2, 3, … only if an earlier attempt at this `seq_n` was abandoned by a reload (see "Reload/attempt tracking") |
-| is_latest_attempt | 0/1 | **Filter to 1** to get one row per real sequence — see the top of this document |
+| forfeit_taken | 0/1 | Whether the respondent gave up this sequence |
+| forfeit_taken_at_task, forfeit_taken_at_time | number, timestamp | Card position and timestamp of the forfeit, if any |
+| auto_kicked | 0/1 | 1 if this sequence was cut short because its own mistakes (penalty) reached its own reward (`pay`) — see "Autokick" below. Distinct from `forfeit_taken`, which is voluntary. |
+| n_tasks_done | number | How many cards were actually completed in this sequence attempt |
+| earnings | £ | This sequence's GROSS bonus payout (`pay` if completed/switched, 0 otherwise) — **not yet net of this sequence's own penalty.** See `net_earnings` below for the actual amount owed. |
+| grid_pay | £ | Guaranteed per-grid pay earned this sequence (independent of `earnings`/`penalty`) |
+| penalty | £ | Mistake penalty (£0.01 per misclick) for this sequence — logged separately, not yet subtracted from `earnings` above |
+| net_earnings | £ | **The actual amount owed for this sequence** — `earnings` minus `penalty`, never negative. This is the number that actually counts. |
+| total_targets, total_found, total_false_pos, total_missed | number | Aggregated grid-click accuracy across the whole sequence |
+| tasks_json | JSON (text) | One entry per individual grid completed — see "`tasks_json` structure" below |
 
-**`tasks_json` structure** (one object per completed grid within that sequence):
+**`tasks_json` array structure** (one object per completed grid within that sequence):
 ```json
 [
   {
@@ -142,6 +140,7 @@ The fine-grained breakdown behind each `Responses` row — every hand that was a
 | prolific_pid, study_id, session_id, demo_mode | — | Same as the other sheets, repeated for convenience |
 | seq_n, seq_attempt | — | Which sequence/attempt this hand belongs to — matches the same columns on `Responses` |
 | hand_n | number | This hand's 1-based position within the sequence attempt (the hand with `hand_n = n_hands` on the matching `Responses` row is the one that ended the sequence) |
+| is_latest_attempt | 0/1 | Mirrors the parent `Responses` row's value — **filter to 1** for one row per real hand |
 | hand_len | number | This hand's total length (cards) |
 | live_pattern | text, e.g. `SSLSLS` | This hand's own live(`L`)/safe(`S`) pattern |
 | p_inside | 0–1 | This hand's own disclosed end-probability |
@@ -151,6 +150,13 @@ The fine-grained breakdown behind each `Responses` row — every hand that was a
 | end_pos | number | If `ends = 1`, which of this hand's own live cards it ended on (0-indexed) |
 | played_len | number | How many of this hand's cards were actually shown (all of them, unless it ended early) |
 | pause | number | This hand's own offer position — which card, within this hand, its offer appears on |
+| sunk_cost_at_pause | number | **"Sunk cost" at this hand's own pause** — total tasks (live+safe) already completed across the WHOLE sequence by that moment, not just within this hand (the sum of `active_passed_in_seq` + `inactive_passed_in_seq` below). Fixed at generation time, like `pause` — unlike `pause_secs`/`offer_fired_at` below, **not** blank when `wasted = 1`. |
+| left_pattern | text | This hand's own `live_pattern` up to (not including) its own pause — the `pause` cards **already completed** when the offer fires (0-indexed positions `0` to `pause-1`) |
+| right_pattern | text | This hand's own `live_pattern` from its own pause onward — **including the card not yet completed** at the moment the offer fires (`pause` is a count of completed cards, so the card sitting exactly at that position hasn't been played yet). `left_pattern + right_pattern` always equals `live_pattern`, with nothing skipped or duplicated. |
+| e_remaining_at_hand_start | number | Expected further main-sequence cards, calculated from **the very start of this hand** (before any of its own cards are known to have passed) — genuinely accounts for this hand's own real `p_inside`/length, plus the population constant for whatever uncertain hands might still follow |
+| e_end_at_hand_start | number | The expected TOTAL main-sequence length, as anticipated the moment this hand is dealt — `e_remaining_at_hand_start` plus this hand's own position in the sequence |
+| e_remaining_at_pause | number | Same idea as `e_remaining_at_hand_start`, but conditional on having **survived to this hand's own pause** — accounts for only what remains in this hand from there, plus uncertain future hands. For the section's FIRST hand, this is the exact figure `Responses.alt_duration`/`alt_minus_expected` are built around. |
+| e_end_at_pause | number | The expected TOTAL main-sequence length, as anticipated at this hand's own pause — `e_remaining_at_pause` plus how many cards have already gone by (this hand's own position in the sequence, plus `pause`) |
 | pause_secs | number (seconds) | How long THIS hand's own offer countdown actually ran for when shown (10–45s, redrawn independently every time). This is the entire accept/refuse-and-confirm window for this hand — the same countdown runs underneath both the initial ask step and the follow-up confirm step, uninterrupted. Blank if `wasted = 1`. |
 | offer_fired_at | timestamp | The real moment this hand's own offer screen appeared. Blank if `wasted = 1`. |
 | undo_count | number | How many times "Undo" was pressed on this hand's own confirm pop-up (a measure of indecision). 0 if the offer never opened or was never undone. |
@@ -160,7 +166,9 @@ The fine-grained breakdown behind each `Responses` row — every hand that was a
 | inactive_passed_in_hand, inactive_passed_in_seq | number | Same, for safe ("inactive") cards |
 | active_left_in_hand, active_left_in_seq | number | How many live cards remain — within this hand, vs. across the rest of the already-drawn sequence |
 | inactive_left_in_hand, inactive_left_in_seq | number | Same, for safe cards |
-| is_latest_attempt | 0/1 | Mirrors the parent `Responses` row's value — **filter to 1** for one row per real hand |
+| hand_started_at | timestamp | When the respondent's position actually entered this hand — real play time, not the offer window (`offer_fired_at` above is specifically about the offer, and can be blank even when this isn't). Covers every hand, including ones whose offer was wasted or never opened. |
+| hand_ended_at | timestamp | When the respondent's position actually left this hand. Same coverage as `hand_started_at`. Both blank iff this hand was never reached (a reload discarded the attempt first). |
+| hand_penalty | £ | The mistake penalty accrued specifically **during this hand** (not the sequence's running cumulative total — see `Responses.penalty` for that). Blank iff this hand was never reached (same rule as the two timestamps above) — `0` is itself a meaningful "reached it, made no mistakes," not the same as blank. |
 
 ---
 
@@ -171,6 +179,12 @@ If a respondent closes the study and comes back in a **new browser session** (no
 Rather than silently losing the abandoned attempt, it gets its **own row**, marked `outcome = 'abandoned_reload'`, with `seq_attempt` bumped up for the row that replaces it. This only happens if the respondent had made genuine progress (completed at least one grid) before the reload — an early reload with nothing done yet leaves no trace.
 
 **In practice:** almost every respondent has exactly one attempt per sequence (`seq_attempt = 1`, `is_latest_attempt = 1`) for all 5 rows. Just filter to `is_latest_attempt = 1` and this whole mechanism can be ignored — it only matters if you specifically want to study reload/abandonment behaviour.
+
+---
+
+## Autokick (why `auto_kicked`/`net_earnings` exist)
+
+A sequence is cut short the instant its own accumulated `penalty` reaches its own `pay` — there is nothing left it could pay out, so rather than letting the respondent keep making mistakes for no reason, it ends there and they move on to the next sequence. Logged as `outcome = 'autokicked'` and `auto_kicked = 1` on the `Responses` row, distinct from a voluntary `forfeit_taken`. `net_earnings` is `0` for that sequence (same as any other sequence that pays nothing), and whichever hand was open at that moment still gets a normal `hand_ended_at`/`hand_penalty` on the `Hands` sheet.
 
 ---
 

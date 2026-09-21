@@ -722,6 +722,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <p id="res-note-prolific2" style="font-size:.85rem;color:var(--ink2);">Your participation fee is paid immediately. Bonus payments are approved by hand, so please allow a couple of working days.</p>
   <!-- Student version only. -->
   <p id="res-note-student" style="display:none;font-size:.85rem;color:var(--ink2);margin-top:.7rem;">Wait for your responses to be registered before closing the window.</p>
+  <p id="res-note-student-auction" style="display:none;font-size:.85rem;color:var(--ink);font-weight:600;margin-top:.7rem;padding:.7rem .9rem;border:1.5px solid var(--blue);border-radius:4px;background:#eaf2ff;">Write down and remember your Points total above: you will need it for the auction.</p>
 
   <!-- Save status -->
   <div id="results-save-block" style="margin-top:1.5rem;border-top:1px solid var(--bdr);padding-top:1.2rem;">
@@ -908,7 +909,7 @@ if(!_prolificID && _isPilotStudy){
 
 // ── BACKEND ───────────────────────────────────────────────────────
 // Paste your deployed Apps Script URL here after deploying backend.txt
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxpIH29RnwkYy0CO75TPcQNHH_P-0KxShNCboKDvlVCfWKmQ6kfCBi1SCi9H08s7NpM5w/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzrNuBxk-88BCGvPCIuzQQQfzOAGFnCia5-_RYYTMAyaZPfALZFfS77wBFn7U5o_LADUA/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 const GRID_PAY_PER_TASK = 0.025; // £6/hr ÷ 3600s × 15s per task — guaranteed pay, tuned independently of the section bonus below (that's the extra, on-top reward, not part of this target)
@@ -1066,6 +1067,13 @@ const EMOJIS = [
 // ── SESSION ───────────────────────────────────────────────────────
 let SESSION = {
   consentAt:    null,   // ISO; never overwritten after first set
+  // Respondent-level milestones — each set once, never overwritten, same
+  // convention as consentAt. trainingEndedAt/experimentStartedAt are set
+  // together (finishTraining()) and will almost always be the same instant;
+  // kept as two separate fields anyway since they answer two different
+  // questions (Meta's data dictionary explains both).
+  trainingStartedAt: null, trainingEndedAt: null,
+  experimentStartedAt: null, experimentEndedAt: null,
   reloadLog:    [],     // [{seq_index, at}]
   totalReloads: 0,
   trainingBonus: 0,     // £0.10 credited once the training walkthrough is completed
@@ -1079,6 +1087,10 @@ let SESSION = {
   pidMissingFromLink: false, // true if PROLIFIC_PID was missing from the URL (pilot auto-gen or manual entry) — set once, never cleared; must persist across reloads, unlike the top-level _pidMissingFromLink flag which only reflects the CURRENT page load
   seqAttempts:  {},     // {seq_n: attemptCount} — bumped whenever a new-session reload discards an in-progress section's already-drawn hands and redraws fresh ones (see applyResume_/buildAbandonedRecord_); 1 if never bumped
   compCheckWrong: [0,0,0], // # incorrect attempts on the end-of-training comprehension check's Q1/Q2/Q3, before answering each correctly — see trainCompAnswer_
+  // Best-effort device/browser classification, captured once at consent
+  // (see detectDeviceBrowser_()/doConsent()) — never overwritten after
+  // first set, same convention as consentAt above.
+  deviceType: null, browser: null, userAgent: null,
 };
 
 // Same-tab reload detection (TAB_SESSION_KEY is declared up top, near the
@@ -1126,6 +1138,11 @@ let S = {
   // confirmTentative_/undoTentative_. Both null/cleared whenever no offer
   // is open.
   offerHandIdx: null, offerPendingChoice: null,
+  // Which main-phase hand (index into task.hands) is currently "open" for
+  // timing purposes — drives hand_started_at/hand_ended_at on that hand.
+  // null whenever no main-phase hand is open (alt phase, or between
+  // sequences) — see stampHandTransition_()/startSubtask()/endTask().
+  _handTimingIdx: null,
   penalty: 0,
   debugMode: _demoMode >= 1,
   log: [],          // completed section entries
@@ -1499,6 +1516,43 @@ function generateTasks(){
       hand.inactiveLeftInHand   = safeTotal - inactivePassedInHand;
       hand.activeLeftInSeq      = hand.activeLeftInHand + activeLeftLater;
       hand.inactiveLeftInSeq    = hand.inactiveLeftInHand + inactiveLeftLater;
+      // "Sunk cost" at this hand's own pause — total tasks (live+safe)
+      // already completed across the WHOLE sequence by that moment, not
+      // just within this hand. Just the sum of the two _in_seq fields
+      // above, kept as its own explicit field since it's the single number
+      // that actually matters for a sunk-cost analysis (the _in_hand/_in_seq
+      // active/inactive split is more granular than most uses need).
+      hand.sunkCostAtPause = hand.activePassedInSeq + hand.inactivePassedInSeq;
+      // left_pattern/right_pattern split THIS hand's own live/safe pattern
+      // at its own pause — left is the `pause` cards already completed
+      // (0-indexed positions 0..pause-1), right is everything from position
+      // `pause` onward, WHICH INCLUDES the card that is not yet completed
+      // at the moment the pause is offered (pause is a COUNT of completed
+      // cards — see pushLoop's own comment on `pause`, above). left+right
+      // always concatenate back to the full pattern, no gap, no overlap.
+      const livePatternStr = hand.live.map(v=>v?'L':'S').join('');
+      hand.leftPattern  = livePatternStr.slice(0, p);
+      hand.rightPattern = livePatternStr.slice(p);
+      // Two distinct expected-total-length figures for THIS hand, both
+      // genuinely accounting for its own real pInside/length (unlike the
+      // flat whole-experiment constant POP_MEAN_END/e_end_at_start) —
+      // eRemFullrandWith_ conditions on survival to the given local
+      // position within the hand, walking its REAL live positions, plus
+      // freshVal (POP_MEAN_END) for whatever uncertain hands might follow:
+      //   - "at hand start" (lp=0): before any of this hand's own cards are
+      //     known to have passed — what the sequence's expected total
+      //     length looks like the moment this hand is dealt, accounting for
+      //     the hand actually on offer plus uncertain future hands.
+      //   - "at pause" (lp=pause): conditional on having survived to this
+      //     hand's own pause — accounts for only what remains in THIS hand
+      //     from the pause onward, plus uncertain future hands. Exactly the
+      //     same formula the FIRST hand's own e_remaining/e_end_at_pause
+      //     have always used (see generateTasks()'s eRemAtPause below) —
+      //     generalised here to every hand, not just the first.
+      hand.eRemainingAtHandStart = eRemFullrandWith_(hand, 0, POP_MEAN_END);
+      hand.eEndAtHandStart       = hand.globalStart + hand.eRemainingAtHandStart;
+      hand.eRemainingAtPause     = eRemFullrandWith_(hand, p, POP_MEAN_END);
+      hand.eEndAtPause           = hand.globalStart + p + hand.eRemainingAtPause;
     }
 
     // True iff ANY hand in the chain wasted its own offer (regime 3 only) —
@@ -1809,6 +1863,9 @@ function buildSnapshot_(){
     pidMissingFromLink: SESSION.pidMissingFromLink,
     seqAttempts:  Object.assign({}, SESSION.seqAttempts),
     compCheckWrong: SESSION.compCheckWrong.slice(),
+    deviceType: SESSION.deviceType, browser: SESSION.browser, userAgent: SESSION.userAgent,
+    trainingStartedAt: SESSION.trainingStartedAt, trainingEndedAt: SESSION.trainingEndedAt,
+    experimentStartedAt: SESSION.experimentStartedAt, experimentEndedAt: SESSION.experimentEndedAt,
   };
 }
 
@@ -1861,18 +1918,21 @@ function buildFullData_(){
     training_comp_check_q1_wrong: SESSION.compCheckWrong[0],
     training_comp_check_q2_wrong: SESSION.compCheckWrong[1],
     training_comp_check_q3_wrong: SESSION.compCheckWrong[2],
-    // training_choice/_at: permanently blank now — the new in-context
-    // training (see the TRAINING section above) stages both branches for
-    // every participant instead of recording one free decision, so there's
-    // no longer an equivalent moment to log. Same legacy treatment as
-    // age/gender/student below (kept only so later columns never shift).
-    training_choice:       '',
-    training_choice_at:    '',
+    training_started_at:   SESSION.trainingStartedAt || '',
+    training_ended_at:     SESSION.trainingEndedAt || '',
+    experiment_started_at: SESSION.experimentStartedAt || '',
+    experiment_ended_at:   SESSION.experimentEndedAt || '',
     seq_frame_treatment:   SESSION.nSeqFrame || 5,
     total_earnings:        Math.round(totalEarnings*100)/100,
     total_grid_pay:        Math.round(totalGridPay*100)/100,
     total_grids_completed: totalGridsDone,
     total_penalty:         Math.round(totalPenalty*100)/100,
+    // The actual amount owed at the end of the whole study: total_earnings
+    // net of total_penalty, clamped at 0 (mistake penalties can never make
+    // the study cost the participant money — see also autokicked sequences,
+    // which stop a sequence the moment ITS OWN penalty reaches ITS OWN pay,
+    // so this should essentially never actually need the clamp in practice).
+    total_bonus_owed:      Math.max(0, Math.round((totalEarnings-totalPenalty)*100)/100),
     reload_count:          SESSION.totalReloads,
     reload_log:            SESSION.reloadLog,
     // IP-based geolocation (see fetchGeo_) — best-effort, may be blank if
@@ -1886,6 +1946,11 @@ function buildFullData_(){
     geo_ip:       (SESSION.geo && SESSION.geo.ip) || '',
     geo_provider: (SESSION.geo && SESSION.geo.provider) || '',
     geo_json:     JSON.stringify((SESSION.geo && SESSION.geo.raw) || {}),
+    // Best-effort device/browser classification, captured once at consent —
+    // see detectDeviceBrowser_()/doConsent().
+    device_type:  SESSION.deviceType || '',
+    browser:      SESSION.browser || '',
+    user_agent:   SESSION.userAgent || '',
   };
   // Map log entries to backend format; tasks_json = serialised per-grid array
   const sections = S.log.map(r => ({
@@ -1895,28 +1960,27 @@ function buildFullData_(){
     pay_tasks:       r.pay_tasks,
     // Which of the three draw orders this respondent uses (1/2/3, fixed).
     regime:          r.regime,           // META regime: 0 (alternates per hand), 1, or 2
-    // First hand's disclosed structure and end-probability. hands_json has
-    // the full realised chain (incl. each hand's own sub_regime); n_hands is
-    // how many hands actually ran. hands_json travels to the backend as
-    // structured data — upsertHandRows_ (backend.txt) explodes it into its
-    // own Hands-sheet row per hand rather than storing it as a JSON string
-    // on this Responses row.
-    hand_len:        r.hand_len,
-    live_pattern:    r.live_pattern,
+    // card_order is the whole-sequence flat summary; n_hands is how many
+    // hands actually ran; hands_json is the full realised chain (per-hand
+    // structure, offer, timing, penalty — incl. each hand's own sub_regime)
+    // as structured data — upsertHandRows_ (backend.txt) explodes it into
+    // its own Hands-sheet row per hand rather than storing it as a JSON
+    // string on this Responses row. First-hand-only fields that used to be
+    // repeated here too (hand_len/live_pattern/p_inside_first/pause/
+    // pause_max/pause_secs) were dropped as pure duplicates of that hand's
+    // own row on Hands (hand_n=1) — see README.md §9.
     card_order:      r.card_order,
-    p_inside_first:  r.p_inside_first,
     n_hands:         r.n_hands,
     hands_json:      r.hands_json || [],
-    // Expected total length at the start, and net of the offer position.
-    e_remaining:     r.e_remaining,
+    // Whole-experiment population constant — see the RESP_HEADER comment on
+    // this field. The equivalent figure for a real hand's own parameters
+    // (e_remaining_at_hand_start/e_end_at_hand_start/e_remaining_at_pause/
+    // e_end_at_pause) now lives only on the Hands sheet, every hand.
     e_end_at_start:  r.e_end_at_start,
-    e_end_at_pause:  r.e_end_at_pause,
     n_req:           r.n_req,
     // 1 iff the undisclosed hand cap forced the last hand to end — treat
     // these rows as right-censored at n_req.
     cap_bound:       r.cap_bound,
-    pause:           r.pause,
-    pause_max:       r.pause_max,
     // 1 iff the sequence ended before the offer could appear (regime 3
     // only) so no offer fired. No switch decision exists for these rows.
     offer_wasted:    r.offer_wasted,
@@ -1928,11 +1992,8 @@ function buildFullData_(){
     alt_base:        r.alt_base,
     alt_width:       r.alt_width,
     alt_minus_expected: r.alt_minus_expected,
-    pause_secs:      r.pause_secs,
     outcome:         r.outcome,
     outcome_summary: r.outcome_summary,
-    switch_offered:  r.switch_offered,
-    switch_at:       r.switch_at,
     switch_offered_at_task: r.switch_offered_at_task,
     switch_offered_at_time: r.switch_offered_at_time,
     switch_taken:    r.switch_taken,
@@ -1947,8 +2008,10 @@ function buildFullData_(){
     forfeit_taken_at_time: r.forfeit_taken_at_time,
     n_tasks_done:    r.n_tasks_done,
     earnings:        r.earnings,
+    net_earnings:    r.net_earnings,
     grid_pay:        r.grid_pay,
     penalty:         r.penalty,
+    auto_kicked:     r.auto_kicked,
     total_targets:   r.total_targets,
     total_found:     r.total_found,
     total_false_pos: r.total_false_pos,
@@ -1956,6 +2019,7 @@ function buildFullData_(){
     seq_reload_count:r.seq_reload_count,
     start_at:        r.start_at,
     seq_start_at_time: r.seq_start_at_time,
+    briefing_ended_at: r.briefing_ended_at,
     end_at:          r.end_at,
     tasks_json:      r.grids || [],
     seq_frame_treatment: r.seq_frame_treatment,
@@ -2051,10 +2115,17 @@ function applyResume_(snap, sameTab){
   SESSION.reloadLog  = (snap.reloadLog || []).slice();
   SESSION.totalReloads = snap.totalReloads || 0;
   SESSION.trainingBonus = snap.trainingBonus || 0;
+  SESSION.trainingStartedAt = snap.trainingStartedAt || null;
+  SESSION.trainingEndedAt = snap.trainingEndedAt || null;
+  SESSION.experimentStartedAt = snap.experimentStartedAt || null;
+  SESSION.experimentEndedAt = snap.experimentEndedAt || null;
   SESSION.trainingScenarioOrder = snap.trainingScenarioOrder || null;
   SESSION.trainingScenariosViewed = (snap.trainingScenariosViewed || []).slice();
   SESSION.geo = snap.geo || null;
   SESSION.pidMissingFromLink = snap.pidMissingFromLink || false;
+  SESSION.deviceType = snap.deviceType || null;
+  SESSION.browser = snap.browser || null;
+  SESSION.userAgent = snap.userAgent || null;
   SESSION.seqAttempts = snap.seqAttempts || {};
   SESSION.compCheckWrong = (snap.compCheckWrong && snap.compCheckWrong.length===3) ? snap.compCheckWrong.slice() : [0,0,0];
   SESSION.nSeqFrame  = snap.nSeqFrame != null ? snap.nSeqFrame : 5; // pre-existing sessions default to the untreated framing
@@ -2160,10 +2231,7 @@ function buildAbandonedRecord_(task, snap, attempt){
     seq_n:          task.index + 1,
     seq_attempt:    attempt,
     regime:         task.regime,
-    hand_len:       task.length,
-    live_pattern:   task.live.map(v=>v?'L':'S').join(''),
     card_order:     task.hands.map(h=>h.live.slice(0,h.playedLen).map(v=>v?'L':'S').join('')).join('|'),
-    p_inside_first: task.pInside,
     n_hands:        task.hands.length,
     // hands_json is still sent as structured data (not stringified) — the
     // backend explodes it into its own row per hand (Hands sheet, keyed by
@@ -2176,19 +2244,23 @@ function buildAbandonedRecord_(task, snap, attempt){
                       p_inside:h.pInside, sub_regime:h.subRegime, wasted:h.wasted?1:0,
                       ends:h.ends?1:0, end_pos:h.ends?h.endPos:null, played_len:h.playedLen,
                       pause:h.pause, pause_secs:h.pauseSecs||null, offer_fired_at:h.offerFiredAt||null,
+                      left_pattern:h.leftPattern, right_pattern:h.rightPattern,
                       undo_count:h.undoCount||0, auto_refused:h.autoRefused?1:0, auto_confirmed:h.autoConfirmed?1:0,
                       active_passed_in_hand:h.activePassedInHand, active_passed_in_seq:h.activePassedInSeq,
                       inactive_passed_in_hand:h.inactivePassedInHand, inactive_passed_in_seq:h.inactivePassedInSeq,
                       active_left_in_hand:h.activeLeftInHand, active_left_in_seq:h.activeLeftInSeq,
                       inactive_left_in_hand:h.inactiveLeftInHand, inactive_left_in_seq:h.inactiveLeftInSeq,
+                      sunk_cost_at_pause: h.sunkCostAtPause,
+                      e_remaining_at_hand_start: Math.round(h.eRemainingAtHandStart*1000)/1000,
+                      e_end_at_hand_start:       Math.round(h.eEndAtHandStart*1000)/1000,
+                      e_remaining_at_pause:      Math.round(h.eRemainingAtPause*1000)/1000,
+                      e_end_at_pause:            Math.round(h.eEndAtPause*1000)/1000,
+                      hand_started_at:h.handStartedAt||null, hand_ended_at:h.handEndedAt||null,
+                      hand_penalty: h.handPenalty!=null ? h.handPenalty : null,
                     })),
-    e_remaining:    Math.round(task.expectedRemaining*1000)/1000,
     e_end_at_start: Math.round(task.expectedStartEnd*1000)/1000,
-    e_end_at_pause: Math.round(task.expectedMainEnd*1000)/1000,
     n_req:          task.nReq,
     cap_bound:      task.capBound ? 1 : 0,
-    pause:          task.pause,
-    pause_max:      task.pauseMax,
     offer_wasted:   task.offerWasted ? 1 : 0,
     alt_duration:   task.altDuration,
     alt_end:        task.altEnd,
@@ -2197,20 +2269,18 @@ function buildAbandonedRecord_(task, snap, attempt){
     alt_base:       Math.round(task.altBase*1000)/1000,
     alt_width:      task.altWidth,
     alt_minus_expected: Math.round((task.altDuration-task.expectedRemaining)*1000)/1000,
-    // The FIRST hand's own offer-screen duration, same convention as
-    // pause/pause_max above — blank if that hand's own offer was wasted (no
-    // offer screen was ever shown for it). Every hand's own value (including
-    // this one) also goes into hands_json below.
-    pause_secs:     (task.hands[0] && task.hands[0].pauseSecs) || null,
     outcome:        'abandoned_reload',
     outcome_summary: 'abandoned before reload — superseded by a later attempt',
     n_tasks_done:   nTasksDone,
     earnings:       0,
+    net_earnings:   0, // an abandoned attempt was never paid out
     grid_pay:       Math.round(nTasksDone * GRID_PAY_PER_TASK * 100) / 100,
     penalty:        snap.penalty || 0,
+    auto_kicked:    0, // a reload discarding the attempt is not an autokick
     seq_reload_count: (snap.reloadLog||[]).filter(r=>r.seq_index===task.index).length,
     start_at:       task.startAt || null,
     seq_start_at_time: task.startAt || null,
+    briefing_ended_at: task.briefingEndedAt || null,
     end_at:         new Date().toISOString(),
     seq_frame_treatment: snap.nSeqFrame || 5,
     seq_is_bonus:   isBonusIdx_(task.index) ? 1 : 0,
@@ -2227,9 +2297,37 @@ function retryBootstrap(){
   bootstrapApp();
 }
 
+// Best-effort device/browser classification from the user agent string —
+// no external library (this is a static page with no build step), just a
+// handful of well-known substring checks. Good enough for research
+// filtering (e.g. "did mobile respondents behave differently"), not meant
+// to be pixel-perfect UA parsing — a genuinely unusual browser just falls
+// through to 'Other'/'Desktop'.
+function detectDeviceBrowser_(){
+  const ua = (navigator.userAgent || '');
+  let deviceType = 'Desktop';
+  if(/iPad|Tablet(?!.*Mobile)|(Android(?!.*Mobile))/i.test(ua)) deviceType = 'Tablet';
+  else if(/Mobi|iPhone|iPod|Android/i.test(ua)) deviceType = 'Mobile';
+  let browser = 'Other';
+  if(/Edg\//.test(ua)) browser = 'Edge';
+  else if(/OPR\/|Opera/.test(ua)) browser = 'Opera';
+  else if(/CriOS/.test(ua)) browser = 'Chrome (iOS)';
+  else if(/FxiOS/.test(ua)) browser = 'Firefox (iOS)';
+  else if(/Chrome\//.test(ua)) browser = 'Chrome'; // checked before Safari — Chrome's UA also contains "Safari/"
+  else if(/Firefox\//.test(ua)) browser = 'Firefox';
+  else if(/Safari\//.test(ua)) browser = 'Safari';
+  return { deviceType, browser, userAgent: ua };
+}
+
 // ── CONSENT ───────────────────────────────────────────────────────
 function doConsent(){
   if(!SESSION.consentAt) SESSION.consentAt = new Date().toISOString();
+  if(!SESSION.deviceType){
+    const d = detectDeviceBrowser_();
+    SESSION.deviceType = d.deviceType;
+    SESSION.browser = d.browser;
+    SESSION.userAgent = d.userAgent;
+  }
   if(SESSION.nSeqFrame == null) SESSION.nSeqFrame = Math.random()<0.5 ? 4 : 5;
   // META regime is fixed once per respondent and reused for all 5 sections
   // — see generateTasks()/drawLoopOffer_(). 1, 2, or 3 fixes every hand's
@@ -2443,6 +2541,7 @@ function submitSurvey(){
     endsMeetNow, endsMeetPast, endsMeetFuture,
     risk, patience,
   };
+  if(!SESSION.trainingStartedAt) SESSION.trainingStartedAt = new Date().toISOString();
   trainStep=1;
   trainingActive=true;
   trainEverFlashed = new Set();
@@ -3243,6 +3342,8 @@ function finishTraining(){
   trainingActive=false;
   updateDebugTrainingSkipBtn_();
   SESSION.trainingBonus = TRAIN.pay;
+  if(!SESSION.trainingEndedAt) SESSION.trainingEndedAt = new Date().toISOString();
+  if(!SESSION.experimentStartedAt) SESSION.experimentStartedAt = new Date().toISOString();
   SESSION.phase = 'experiment';
   startExperiment(); // sets S.tasks — must run before saveProgress captures the snapshot
   saveProgress(false);
@@ -3337,6 +3438,13 @@ function graceRevealRest_(){
 function graceStart(){
   el('grace-countdown-block').style.display='none';
   kill();
+  // The moment the pre-sequence briefing actually ends — "Start sequence"
+  // pressed, about to run the callback that shows the first real card.
+  // Distinct from task.startAt (see startTask()), which is stamped slightly
+  // later; this is specifically "briefing over", useful e.g. to see how
+  // long a participant actually spent reading the disclosure.
+  const task=S.tasks[S.taskIdx];
+  if(task && !task.briefingEndedAt) task.briefingEndedAt = new Date().toISOString();
   if(_graceCallback){ const cb=_graceCallback; _graceCallback=null; cb(); }
 }
 
@@ -3405,9 +3513,52 @@ function flashSwitchAvailable(){
   setTimeout(()=>{ p.classList.remove('switch-flash'); }, 1500);
 }
 
+// Marks a hand as "opened" for timing purposes — its own start timestamp
+// and a snapshot of S.penalty at that moment (so closeHandTiming_ below can
+// later work out how much penalty accrued DURING just this hand, not the
+// sequence's running cumulative total). Idempotent — only the first call
+// for a given hand actually sets anything.
+function openHandTiming_(hand, now){
+  if(!hand.handStartedAt) hand.handStartedAt = now;
+  if(hand.penaltyAtStart == null) hand.penaltyAtStart = S.penalty;
+}
+// Marks a hand as "closed" — its own end timestamp and the penalty accrued
+// specifically during it (current cumulative S.penalty minus whatever it
+// was when this hand opened, per openHandTiming_ above). Idempotent, same
+// as openHandTiming_.
+function closeHandTiming_(hand, now){
+  if(!hand.handEndedAt) hand.handEndedAt = now;
+  if(hand.handPenalty == null){
+    hand.handPenalty = Math.max(0, Math.round((S.penalty - (hand.penaltyAtStart||0))*100)/100);
+  }
+}
+
+// Timestamps hand_started_at/hand_ended_at (and hand_penalty, via open/
+// closeHandTiming_ above) on task.hands[] the moment the current position
+// moves from one main-phase hand into the next (or out of the main phase
+// entirely, e.g. switching to alt) — called from wherever S.subtaskDone/
+// S.phase might have just changed (startSubtask() below and
+// proceedAfterSubmit()), and finalised in endTask() for whichever hand is
+// still open when the sequence itself ends (nothing else will ever run
+// after that to catch it). A no-op whenever the hand hasn't actually
+// changed since the last call, so calling it from multiple places is safe.
+function stampHandTransition_(){
+  const task = S.tasks[S.taskIdx];
+  if(!task) return;
+  const loc = (S.phase==='main') ? locateCard_(task, S.subtaskDone) : null;
+  const newIdx = loc ? loc.handIdx : null;
+  const oldIdx = S._handTimingIdx;
+  if(oldIdx === newIdx) return;
+  const now = new Date().toISOString();
+  if(oldIdx != null && task.hands[oldIdx]) closeHandTiming_(task.hands[oldIdx], now);
+  if(newIdx != null && task.hands[newIdx]) openHandTiming_(task.hands[newIdx], now);
+  S._handTimingIdx = newIdx;
+}
+
 // ── SUBTASK (grid) ────────────────────────────────────────────────
 function startSubtask(){
   kill();
+  stampHandTransition_();
   const _ov=el('noact-overlay'); if(_ov) _ov.style.display='none'; // never linger into a new subtask
   S.checked=new Set();
   S.mouseMoved=false;
@@ -3573,7 +3724,14 @@ function submitMatrix(){
       }
     }
     updateStats();
+    // Autokick: this sequence's own accumulated mistake penalty has now
+    // reached its own reward — nothing further it does can pay out, so it
+    // ends here rather than letting the participant keep making penalty-
+    // only progress. Takes precedence over the "no activity" screen (there
+    // is nothing left to hold them here for). See endTask('autokicked').
+    const kicked = task && S.penalty >= task.pay;
     addTimer(setTimeout(()=>{
+      if(kicked){ endTask('autokicked'); return; }
       if(noActivity) showNoActivityScreen_(); else proceedAfterSubmit();
     }, 800));
     return;
@@ -3598,6 +3756,10 @@ function acknowledgeNoActivity_(){
 
 function proceedAfterSubmit(){
   S.subtaskDone++;
+  // Stamped here (not just in startSubtask() below) so a hand whose own
+  // offer fires on its very first card (pause=0) still gets hand_started_at
+  // right when it's entered, rather than only once the offer is resolved.
+  stampHandTransition_();
   animateHand_(); // a task genuinely completed → slide the deck (or reload a new sequence)
   const task=S.tasks[S.taskIdx];
 
@@ -3820,11 +3982,10 @@ function confirmForfeit(){
 }
 
 // ── DECIDE ────────────────────────────────────────────────────────
-// WT_E dropped the separate switch-confirm overlay entirely: accepting the
-// offer is a single immediate action from the two buttons on the offer
-// banner itself (see showOfferScreen()/decide('switch') below), not a
-// press-then-confirm flow, so there is no "deciding, dialog open" state to
-// defer a natural completion through any more either.
+// decide('switch') here is the ONLY place (besides showOfferScreen()'s own
+// timeout branch) that actually commits an offer — pressing "Accept and
+// switch" alone never does, it only opens the confirm popup (see
+// tentativeChoice_()/confirmTentative_()/undoTentative_()).
 // Current total tasks completed so far this section, across both legs —
 // used for forfeit bookkeeping and (via S.altStartPos) for n_tasks_done.
 function totalTasksSoFar_(){
@@ -3873,22 +4034,20 @@ function decide(choice){
 // Glance-friendly summary of what actually happened this section, built
 // purely from the raw timing/flag fields already logged below (outcome,
 // switch_offered(_at_task), switch_taken, switch_pressed_at_task,
-// forced_outside, alt_phase_started_at, forfeit_taken) — it is not a new
+// alt_phase_started_at, forfeit_taken, auto_kicked) — it is not a new
 // source of truth, just a fixed label attached to a combination of them so
-// the sheet reads at a glance instead of requiring a pivot. Exactly one of
-// nine values (see README §14 for the full derivation table):
-//   forfeited before offer / continued and completed /
-//   switched at offer / switched after continuing /
-//   continued and forced switch / continued and forfeited /
-//   switched and forfeited / switched after continuing and forfeited /
-//   continued and forced switched and forfeited
+// the sheet reads at a glance instead of requiring a pivot. See README §14
+// for the full, up-to-date derivation table (every string this function
+// can return).
 function computeOutcomeSummary_(o){
   if(!o.enteredAlt){
-    // Never reached the alternative sequence at all — either forfeited
-    // straight out of the main sequence, or completed it naturally.
+    // Never reached the alternative sequence at all — either forfeited,
+    // auto-kicked, or completed it naturally straight out of the main
+    // sequence.
     if(o.forfeited) return o.offered ? 'continued and forfeited' : 'forfeited before offer';
+    if(o.autoKicked) return o.offered ? 'continued and auto-kicked' : 'auto-kicked before offer';
     if(o.completed) return 'continued and completed';
-    return null; // unreachable: every section ends completed, forfeited, or having entered alt
+    return null; // unreachable: every section ends completed, forfeited, auto-kicked, or having entered alt
   }
   if(o.taken){
     // Voluntary switch — "at offer" iff they accepted at the exact task
@@ -3899,14 +4058,18 @@ function computeOutcomeSummary_(o){
     // branch for why pressedAtTask always equals switch_taken_at_task).
     const continuedPastOffer = o.offered && o.pressedAtTask!=null && o.offeredAtTask!=null && o.pressedAtTask > o.offeredAtTask;
     const base = continuedPastOffer ? 'switched after continuing' : 'switched at offer';
-    return o.forfeited ? base+' and forfeited' : base;
+    if(o.forfeited) return base+' and forfeited';
+    if(o.autoKicked) return base+' and auto-kicked';
+    return base;
   }
   // Under a memoryless hazard the sequence always ends on its own, so
   // there is no window-end branch that can push someone into the
   // alternative. Reaching the alternative without a voluntary switch is
   // therefore not a reachable state; kept as a defensive label rather than
   // silently mislabelling it as a voluntary switch if it ever occurs.
-  return o.forfeited ? 'entered alt without switching and forfeited' : 'entered alt without switching';
+  if(o.forfeited) return 'entered alt without switching and forfeited';
+  if(o.autoKicked) return 'entered alt without switching and auto-kicked';
+  return 'entered alt without switching';
 }
 
 // Confetti burst on the section-complete screen — only for a genuine reward
@@ -4002,8 +4165,21 @@ function endTask(outcome){
   task.completed = outcome==='completed';
   task.switched  = outcome==='switched';
   task.forfeited = outcome==='forfeited';
+  // 1 iff this sequence was force-ended because its own accumulated
+  // mistake penalty reached its own reward — see the autokick check in
+  // submitMatrix(). Distinct from a voluntary forfeit.
+  task.autoKicked = outcome==='autokicked';
   task.earnings  = (task.completed || task.switched) ? task.pay : 0;
   if(task.offerAtTask==null) task.offerAtTask=S.subtaskDone;
+
+  // Whichever hand was still "open" for timing purposes never got a
+  // hand_ended_at/hand_penalty from stampHandTransition_() — nothing else
+  // will run after this to catch it, since the sequence itself is ending
+  // right here.
+  if(S._handTimingIdx != null && task.hands[S._handTimingIdx]){
+    closeHandTiming_(task.hands[S._handTimingIdx], new Date().toISOString());
+  }
+  S._handTimingIdx = null; // next sequence starts fresh
 
   // Total tasks done across main + alt paths. S.altStartPos is the TRUE
   // number of main-phase tasks completed at the moment of switching (set
@@ -4036,6 +4212,12 @@ function endTask(outcome){
   const totalMissed   = grids.reduce((a,g)=>a+g.n_missed,   0);
   const seqReloads    = SESSION.reloadLog.filter(r=>r.seq_index===task.index).length;
 
+  // The actual amount owed for this sequence — earnings net of its own
+  // penalty, clamped at 0. Used both in the log row below and in the
+  // per-sequence completion message (M), which used to show task.pay
+  // un-adjusted for any mistakes made this sequence.
+  const netEarnings = Math.max(0, Math.round((task.earnings-S.penalty)*100)/100);
+
   const outcomeSummary = computeOutcomeSummary_({
     offered:        !!S.offerShown,
     offeredAtTask:  S.offerShown ? task.offerAtTask : null,
@@ -4044,6 +4226,7 @@ function endTask(outcome){
     enteredAlt:     task.altPhaseStartedAt != null,
     forfeited:      outcome==='forfeited',
     completed:      outcome==='completed',
+    autoKicked:     outcome==='autokicked',
   });
 
   S.log.push({
@@ -4055,22 +4238,16 @@ function endTask(outcome){
     seq_attempt:   SESSION.seqAttempts[task.index+1] || 1,
     pay:           task.pay,
     regime:        task.regime,          // META regime for this respondent: 0 (alternates per hand), 1, 2, or 3
-    hand_len:      task.length,          // first hand's total task count
-    // First hand's live/safe pattern, one char per task in order (L=live,
-    // can end the hand; S=safe, cannot) — e.g. "SSLSLS". Mixed throughout,
-    // not a block of S then a block of L. See hands_json for every hand's.
-    live_pattern:  task.live.map(v=>v?'L':'S').join(''),
     // The FULL card-by-card order actually presented across the whole main
     // sequence, hand-separated by "|" — each hand's live/safe pattern
     // truncated to played_len (cards after an early end were never shown).
     // e.g. "SSLSLS|LSL" = a 6-card hand that survived, then a 3-card hand
-    // that ended on its 3rd card. Reconstructable from hands_json too; kept
-    // here as one flat, directly-readable field for the whole sequence.
+    // that ended on its 3rd card. A whole-sequence aggregate, NOT
+    // reconstructable from any single Hands row — kept here as the one flat
+    // field, unlike hand_len/live_pattern/p_inside/pause/pause_secs, which
+    // used to be logged here too for the FIRST hand only and were dropped as
+    // pure duplicates of that hand's own row on the Hands sheet (hand_n=1).
     card_order:    task.hands.map(h=>h.live.slice(0,h.playedLen).map(v=>v?'L':'S').join('')).join('|'),
-    // First hand's disclosed end-probability — the one the regime and offer
-    // are built around. Every hand carries its own; see hands_json for the
-    // full chain and n_hands for how many hands the section actually ran.
-    p_inside_first: task.pInside,
     n_hands:       task.hands.length,
     // Full realised chain of hands (one object per hand, in order): its
     // live/safe pattern and p_inside, which of {1,2,3} governed ITS offer
@@ -4093,29 +4270,66 @@ function endTask(outcome){
                      p_inside:h.pInside, sub_regime:h.subRegime, wasted:h.wasted?1:0,
                      ends:h.ends?1:0, end_pos:h.ends?h.endPos:null, played_len:h.playedLen,
                      pause:h.pause, pause_secs:h.pauseSecs||null, offer_fired_at:h.offerFiredAt||null,
+                     // left_pattern/right_pattern split THIS hand's own
+                     // live/safe pattern at its own pause — left is the
+                     // `pause` cards already completed (0-indexed positions
+                     // 0..pause-1), right is position `pause` onward, WHICH
+                     // INCLUDES the card not yet completed at the moment the
+                     // pause is offered (pause is a COUNT of completed
+                     // cards, not an index past the uncompleted one).
+                     left_pattern:h.leftPattern, right_pattern:h.rightPattern,
                      undo_count:h.undoCount||0, auto_refused:h.autoRefused?1:0, auto_confirmed:h.autoConfirmed?1:0,
                      active_passed_in_hand:h.activePassedInHand, active_passed_in_seq:h.activePassedInSeq,
                      inactive_passed_in_hand:h.inactivePassedInHand, inactive_passed_in_seq:h.inactivePassedInSeq,
                      active_left_in_hand:h.activeLeftInHand, active_left_in_seq:h.activeLeftInSeq,
                      inactive_left_in_hand:h.inactiveLeftInHand, inactive_left_in_seq:h.inactiveLeftInSeq,
+                     // "Sunk cost" at this hand's own pause — total tasks
+                     // (live+safe) already completed across the WHOLE
+                     // sequence by that moment (= the two _in_seq fields
+                     // above, summed). Fixed at generation time, like them.
+                     sunk_cost_at_pause: h.sunkCostAtPause,
+                     // Two expected-total-length figures genuinely specific
+                     // to THIS hand's own real pInside/length (unlike the
+                     // flat whole-experiment constant e_end_at_start below,
+                     // which never varies by hand) — see the generation-time
+                     // comment above (eRemFullrandWith_) for the exact
+                     // formula. "At hand start" is before any of this hand's
+                     // own cards are known to have passed; "at pause" is
+                     // conditional on having survived to this hand's own
+                     // pause, accounting for only what remains in THIS hand
+                     // from there plus uncertain future hands.
+                     e_remaining_at_hand_start: Math.round(h.eRemainingAtHandStart*1000)/1000,
+                     e_end_at_hand_start:       Math.round(h.eEndAtHandStart*1000)/1000,
+                     e_remaining_at_pause:      Math.round(h.eRemainingAtPause*1000)/1000,
+                     e_end_at_pause:            Math.round(h.eEndAtPause*1000)/1000,
+                     // Set at RUNTIME by stampHandTransition_()/open|
+                     // closeHandTiming_(), the moment the current position
+                     // actually enters/leaves this hand — NOT fixed at
+                     // generation time like everything else above.
+                     // hand_started_at/hand_ended_at blank iff this hand was
+                     // never reached at all (a reload discarded the attempt
+                     // before getting here). hand_penalty is the mistake
+                     // penalty accrued specifically DURING this hand (not
+                     // the sequence's running cumulative total) — 0 if none,
+                     // same blank-iff-never-reached rule (null, not 0, since
+                     // 0 is itself a meaningful "reached it, no mistakes").
+                     hand_started_at:h.handStartedAt||null, hand_ended_at:h.handEndedAt||null,
+                     hand_penalty: h.handPenalty!=null ? h.handPenalty : null,
                    })),
-    // Expected total main-sequence length at the start (first-hand actuals +
-    // population means for later hands — see expectedTotalTasks_), and the
-    // same figure net of the offer position.
-    e_remaining:   Math.round(task.expectedRemaining*1000)/1000,
+    // A whole-experiment population CONSTANT (never varies by hand/sequence/
+    // respondent — see POP_MEAN_END) — NOT this section's own first-hand
+    // actuals. The equivalent figure genuinely specific to a real hand's own
+    // parameters now lives only on the Hands sheet (e_remaining_at_hand_start/
+    // e_end_at_hand_start/e_remaining_at_pause/e_end_at_pause, every hand —
+    // this Responses row used to repeat just the FIRST hand's own version as
+    // e_remaining/e_end_at_pause, which was dropped as pure duplication of
+    // that hand's own row on Hands, hand_n=1).
     e_end_at_start: Math.round(task.expectedStartEnd*1000)/1000,
-    e_end_at_pause: Math.round(task.expectedMainEnd*1000)/1000,
     n_req:         task.nReq,
     // 1 when the UNDISCLOSED hand cap (CFG.maxHands) forced the last hand to
     // end, rather than the section ending on its own draw. Treat these rows
     // as right-censored at n_req.
     cap_bound:     task.capBound ? 1 : 0,
-    // Which of the three draw orders (fixed per respondent — regime:
-    // task.regime above) placed the offer relative to the first hand's
-    // ending. Regime 1 leaks; regime 2 is flat and never wastes; regime 3
-    // is flat but can waste the offer (see offer_wasted).
-    pause:         task.pause,
-    pause_max:     task.pauseMax,
     // 1 when the sequence ended before the offer could appear (only under
     // regime 3), so no offer and no switch decision exists for this section.
     // Exclude these when modelling the switch decision.
@@ -4131,15 +4345,8 @@ function endTask(outcome){
     alt_base:      Math.round(task.altBase*1000)/1000,
     alt_width:     task.altWidth,
     alt_minus_expected: Math.round(altMinusExpected*1000)/1000,
-    // The FIRST hand's own offer-screen duration, same convention as
-    // pause/pause_max above — blank if that hand's own offer was wasted (no
-    // offer screen was ever shown for it). Every hand's own value (including
-    // this one) also goes into hands_json above.
-    pause_secs:    (task.hands[0] && task.hands[0].pauseSecs) || null,
     outcome,
     outcome_summary: outcomeSummary,
-    switch_offered: S.offerShown ? 1 : 0,
-    switch_at:      S.offerShown ? task.offerAtTask : null, // kept for backward compat — same value as switch_offered_at_task
     switch_offered_at_task: S.offerShown ? task.offerAtTask : null,
     switch_offered_at_time: S.offerShown ? task.offerAtTime : null,
     switch_taken:   task.switchTaken ? 1 : 0,
@@ -4160,8 +4367,17 @@ function endTask(outcome){
     forfeit_taken_at_time: task.forfeitTaken ? task.forfeitTakenAtTime : null,
     n_tasks_done:  nTasksDone,
     earnings:      task.earnings,
+    // The actual amount owed for THIS sequence: earnings net of its own
+    // penalty, clamped at 0 (see also auto_kicked below — a sequence is
+    // force-ended the moment its own penalty reaches its own pay, so this
+    // should never actually need the clamp in practice).
+    net_earnings:  netEarnings,
     grid_pay:      gridPay,
     penalty:       S.penalty,
+    // 1 iff this sequence was force-ended because its accumulated mistake
+    // penalty reached its own reward (task.pay) — see the autokick check in
+    // submitMatrix(). Distinct from a voluntary forfeit_taken.
+    auto_kicked:   task.autoKicked ? 1 : 0,
     total_targets: totalTargets,
     total_found:   totalFound,
     total_false_pos: totalFalsePos,
@@ -4169,17 +4385,24 @@ function endTask(outcome){
     seq_reload_count: seqReloads,
     start_at:      task.startAt || null,
     seq_start_at_time: task.startAt || null, // explicit alias of start_at, requested by name
+    briefing_ended_at: task.briefingEndedAt || null, // "Start sequence" pressed on the pre-sequence grace screen — see graceStart()
     end_at:        new Date().toISOString(),
     grids:         grids,
     seq_frame_treatment: SESSION.nSeqFrame || 5,
     seq_is_bonus:  isBonusIdx_(task.index) ? 1 : 0,
   });
 
-  const H={ completed:'Sequence complete', switched:'Sequence complete', forfeited:'Sequence given up' };
+  // Penalty note appended whenever this sequence actually had one — shows
+  // the net amount actually earned, not just the gross reward, since a
+  // sequence's own mistakes are deducted from its own reward specifically
+  // (not just from the whole-study total at the very end).
+  const penaltyNote = S.penalty>0 ? ` (after ${money_(S.penalty)} in penalties: <strong>${money_(netEarnings)}</strong> net)` : '';
+  const H={ completed:'Sequence complete', switched:'Sequence complete', forfeited:'Sequence given up', autokicked:'Sequence ended' };
   const M={
-    completed: `The main sequence ended after ${task.nReq} ${task.nReq===1?'card':'cards'}. You earned <strong>${money_(task.pay)}</strong>.`,
-    switched:  `You finished the alternative sequence. You earned <strong>${money_(task.pay)}</strong>.`,
+    completed: `The main sequence ended after ${task.nReq} ${task.nReq===1?'card':'cards'}. You earned <strong>${money_(task.pay)}</strong>${penaltyNote}.`,
+    switched:  `You finished the alternative sequence. You earned <strong>${money_(task.pay)}</strong>${penaltyNote}.`,
     forfeited: `You gave up this sequence, so its reward was not earned. Your other earnings are unaffected.`,
+    autokicked: `Your mistakes in this sequence used up its entire reward, so it ended here. Your other earnings are unaffected.`,
   };
   el('tc-h').textContent  = H[outcome];
   el('tc-msg').innerHTML  = M[outcome];
@@ -4201,6 +4424,11 @@ function nextTask(){
 const SHOW_UP_FEE = 1.50; // fixed Prolific base payment — never varies with performance
 
 function showResults(){
+  // The moment the last section actually finished — distinct from
+  // study_complete_at (backend.txt), which is when the final SAVE is
+  // confirmed, not when the participant stopped playing (those two can be
+  // seconds apart, or much longer if the save has to retry).
+  if(!SESSION.experimentEndedAt) SESSION.experimentEndedAt = new Date().toISOString();
   const trainingBonus = SESSION.trainingBonus||0;
   let totalSectionBonus=0, totalPenalty=0;
 
@@ -4212,8 +4440,11 @@ function showResults(){
   // Two separate payment streams: the bonus reward (training bonus +
   // section completion bonuses, net of mistake penalties — manually
   // approved) and the show-up fee (fixed Prolific base pay, paid
-  // immediately, untouched by penalties or performance).
-  const bonusReward = Math.round((trainingBonus + totalSectionBonus - totalPenalty)*100)/100;
+  // immediately, untouched by penalties or performance). Clamped at 0 —
+  // mistakes can never make the study cost the participant money; matches
+  // total_bonus_owed in buildFullData_() (same formula, computed again
+  // there for the backend payload).
+  const bonusReward = Math.max(0, Math.round((trainingBonus + totalSectionBonus - totalPenalty)*100)/100);
   const showUpFee   = SHOW_UP_FEE;
 
   el('res-bonus-line').textContent = 'Your bonus reward: '+money_(bonusReward);
@@ -4226,6 +4457,7 @@ function showResults(){
   el('res-note-prolific1').style.display = _isStudentPilot ? 'none' : '';
   el('res-note-prolific2').style.display = _isStudentPilot ? 'none' : '';
   el('res-note-student').style.display = _isStudentPilot ? 'block' : 'none';
+  el('res-note-student-auction').style.display = _isStudentPilot ? 'block' : 'none';
   el('results-saved-prolific').style.display = _isStudentPilot ? 'none' : 'inline';
   el('results-saved-student').style.display = _isStudentPilot ? 'inline' : 'none';
   el('results-error-note-prolific').style.display = _isStudentPilot ? 'none' : '';
