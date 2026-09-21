@@ -208,6 +208,7 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 #st-board{
   display:grid;grid-template-columns:180px minmax(0,1fr) 180px;
   gap:1.1rem;align-items:start;justify-content:center;width:100%;max-width:900px;margin:0 auto;
+  position:relative;
 }
 .st-col{display:flex;flex-direction:column;gap:.75rem;}
 @media(max-width:820px){
@@ -666,6 +667,56 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
         </div>
       </div>
 
+      <!-- Forfeit overlay — a complete white overlay confined to the board
+           itself (not the full viewport): it must hide whatever's happening
+           behind it completely, since the grid can still be auto-submitting
+           and a section can still genuinely finish while this is open (see
+           openForfeitConfirm()'s own comment / endTaskOrDefer_()), and even
+           a very faint hint of a colour-flash or a card-stack slide showing
+           through would be a real, if minor, leak of "something just
+           happened" while the participant is deciding whether to give up.
+           Its HEIGHT is set as a fixed pixel value by sizeBoardOverlay_()
+           every time it opens (a bit taller than #st-board's own height at
+           that moment), NOT tracked live off #st-board's height (e.g. via
+           inset:0/100%) — otherwise the overlay itself would visibly
+           resize if the board underneath resizes while it's open (the
+           offer's ask sub-block expanding, say), which is exactly the kind
+           of leak this overlay exists to prevent. height:100% below is only
+           the pre-JS fallback. -->
+      <div id="forfeit-overlay" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:#fff;border:2.5px solid var(--ink);border-radius:14px;box-shadow:0 5px 0 rgba(26,26,24,.16);z-index:600;align-items:center;justify-content:center;">
+        <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
+          <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Give up this sequence</div>
+          <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Are you sure?</div>
+          <p style="font-size:.83rem;color:var(--ink2);margin-bottom:1.2rem;">You will not receive this sequence's reward. You keep your earlier sequences and your participation fee, and you move on to the next sequence.</p>
+          <div style="display:flex;gap:.75rem;justify-content:center;">
+            <button class="btn btn-red" onclick="confirmForfeit()">Give up</button>
+            <button class="btn btn-outline" onclick="closeForfeitConfirm()">Keep going</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Offer confirm/undo overlay — step 2 of the accept/refuse flow (step
+           1, the ask, stays inline in the offer box; see tentativeChoice_()).
+           A genuine popup, like the forfeit dialog above, so it is
+           unmistakably a confirmation step rather than more inline text; same
+           board-scoped complete white overlay as the forfeit dialog, for the
+           same reason, including its fixed-height-set-by-JS sizing — see
+           the forfeit overlay's own comment above. The SAME offer countdown
+           keeps running underneath and is mirrored here (see
+           showOfferScreen()'s tick) so it stays visible while deciding. -->
+      <div id="offer-confirm-overlay" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:#fff;border:2.5px solid var(--ink);border-radius:14px;box-shadow:0 5px 0 rgba(26,26,24,.16);z-index:600;align-items:center;justify-content:center;">
+        <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
+          <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
+          <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Do you confirm your choice?</div>
+          <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1rem;" id="offer-confirm-text"></p>
+          <p style="font-size:.78rem;color:var(--ink2);margin-bottom:1.2rem;font-family:var(--mono);">The offer ends in <strong id="offer-confirm-cd-n">—</strong>s</p>
+          <div style="display:flex;gap:.75rem;justify-content:center;">
+            <button class="btn btn-blue" onclick="confirmTentative_()">Confirm</button>
+            <button class="btn btn-outline" onclick="undoTentative_()">Undo</button>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- Training tip box: docked below the board, in normal document flow. -->
@@ -790,37 +841,9 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 </div></div>
 </div>
 
-<!-- Forfeit overlay -->
-<div id="forfeit-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:600;align-items:center;justify-content:center;">
-  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
-    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Give up this sequence</div>
-    <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Are you sure?</div>
-    <p style="font-size:.83rem;color:var(--ink2);margin-bottom:1.2rem;">You will not receive this sequence's reward. You keep your earlier sequences and your participation fee, and you move on to the next sequence.</p>
-    <div style="display:flex;gap:.75rem;justify-content:center;">
-      <button class="btn btn-red" onclick="confirmForfeit()">Give up</button>
-      <button class="btn btn-outline" onclick="closeForfeitConfirm()">Keep going</button>
-    </div>
-  </div>
-</div>
-
-<!-- Offer confirm/undo overlay — step 2 of the accept/refuse flow (step 1,
-     the ask, stays inline in the offer box; see tentativeChoice_()). A
-     genuine full-screen popup, like the forfeit dialog above, so it is
-     unmistakably a confirmation step rather than more inline text. The
-     SAME offer countdown keeps running underneath and is mirrored here
-     (see showOfferScreen()'s tick) so it stays visible while deciding. -->
-<div id="offer-confirm-overlay" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(240,238,232,0.92);z-index:600;align-items:center;justify-content:center;">
-  <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
-    <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
-    <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Do you confirm your choice?</div>
-    <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1rem;" id="offer-confirm-text"></p>
-    <p style="font-size:.78rem;color:var(--ink2);margin-bottom:1.2rem;font-family:var(--mono);">The offer ends in <strong id="offer-confirm-cd-n">—</strong>s</p>
-    <div style="display:flex;gap:.75rem;justify-content:center;">
-      <button class="btn btn-blue" onclick="confirmTentative_()">Confirm</button>
-      <button class="btn btn-outline" onclick="undoTentative_()">Undo</button>
-    </div>
-  </div>
-</div>
+<!-- Forfeit overlay and offer confirm/undo overlay are now defined inline
+     inside #st-board — see there for why they're scoped to the board
+     rather than the full viewport. -->
 
 <!-- Debug bar -->
 <div id="debug-bar" style="display:none;position:fixed;bottom:0;left:0;width:100%;z-index:9999;background:#fffbe6;border-top:1px solid #e6c800;padding:.25rem .75rem;font-family:IBM Plex Mono,monospace;font-size:.68rem;color:#7a6000;line-height:1.5;box-sizing:border-box;">
@@ -1143,6 +1166,13 @@ let S = {
   // null whenever no main-phase hand is open (alt phase, or between
   // sequences) — see stampHandTransition_()/startSubtask()/endTask().
   _handTimingIdx: null,
+  // Whether the "Give up" confirm dialog is currently open, and — while it
+  // is — an outcome ('completed'/'switched'/'autokicked') that finished in
+  // the background but was deferred rather than shown immediately, so the
+  // participant genuinely cannot tell whether the task in front of the
+  // dialog was the last one until they close it. See openForfeitConfirm()/
+  // endTaskOrDefer_().
+  forfeitOverlayOpen: false, forfeitPendingOutcome: null,
   penalty: 0,
   debugMode: _demoMode >= 1,
   log: [],          // completed section entries
@@ -3751,10 +3781,10 @@ function submitMatrix(){
     // reached its own reward — nothing further it does can pay out, so it
     // ends here rather than letting the participant keep making penalty-
     // only progress. Takes precedence over the "no activity" screen (there
-    // is nothing left to hold them here for). See endTask('autokicked').
+    // is nothing left to hold them here for). See endTaskOrDefer_().
     const kicked = task && S.penalty >= task.pay;
     addTimer(setTimeout(()=>{
-      if(kicked){ endTask('autokicked'); return; }
+      if(kicked){ endTaskOrDefer_('autokicked'); return; }
       if(noActivity) showNoActivityScreen_(); else proceedAfterSubmit();
     }, 800));
     return;
@@ -3787,7 +3817,7 @@ function proceedAfterSubmit(){
   const task=S.tasks[S.taskIdx];
 
   if(S.phase==='alt' && S.subtaskDone>=task.altDuration){
-    endTask('switched'); return;
+    endTaskOrDefer_('switched'); return;
   }
 
   // FULLRAND: the offer recurs at each loop's own pause (task.offerAt).
@@ -3802,7 +3832,7 @@ function proceedAfterSubmit(){
   }
 
   if(S.phase==='main' && S.subtaskDone>=task.nReq){
-    endTask('completed'); return;
+    endTaskOrDefer_('completed'); return;
   }
 
   updateStats(); redrawProg();
@@ -3936,7 +3966,8 @@ function tentativeChoice_(choice){
   if(txt) txt.textContent = choice==='switch'
     ? 'You have decided to switch to the alternative.'
     : 'You have decided to stay in the main sequence.';
-  const overlay=el('offer-confirm-overlay'); if(overlay) overlay.style.display='flex';
+  const overlay=el('offer-confirm-overlay');
+  if(overlay){ sizeBoardOverlay_(overlay); overlay.style.display='flex'; }
 }
 
 // Step 2, Confirm: commits the tentative choice from tentativeChoice_. This
@@ -3946,7 +3977,8 @@ function tentativeChoice_(choice){
 function confirmTentative_(){
   if(trainingActive) return;
   if(!S.switchAvailable || S.offerPendingChoice == null) return;
-  const overlay=el('offer-confirm-overlay'); if(overlay) overlay.style.display='none';
+  const overlay=el('offer-confirm-overlay');
+  if(overlay){ resetBoardOverlay_(overlay); overlay.style.display='none'; }
   decide(S.offerPendingChoice);
 }
 
@@ -3962,7 +3994,8 @@ function undoTentative_(){
     task.hands[hIdx].undoCount = (task.hands[hIdx].undoCount||0) + 1;
   }
   S.offerPendingChoice = null;
-  const overlay=el('offer-confirm-overlay'); if(overlay) overlay.style.display='none';
+  const overlay=el('offer-confirm-overlay');
+  if(overlay){ resetBoardOverlay_(overlay); overlay.style.display='none'; }
   const offerBox=el('st-instr-offer'); if(offerBox) offerBox.classList.add('is-expanded');
   const askBlock=el('st-offer-ask'); if(askBlock) askBlock.style.display='block';
 }
@@ -3989,17 +4022,61 @@ function hideOfferBanner_(){
 }
 
 // ── FORFEIT ───────────────────────────────────────────────────────
-function openForfeitConfirm(){
-  kill();
-  el('forfeit-overlay').style.display='flex';
+// Deliberately does NOT kill() the running subtask/offer on open — the
+// underlying grid keeps auto-submitting, and any open offer's own countdown
+// keeps ticking in real time, exactly as if this dialog weren't there,
+// invisible behind the (opaque, full-screen) overlay. That's what makes
+// "Keep going" a genuine resume rather than a reset: nothing was ever torn
+// down, so there's nothing to rebuild — an offer that was open is still
+// open (same remaining time); one that genuinely elapsed while this was up
+// has already correctly auto-resolved by the time it's revealed again; a
+// grid that was mid-play just kept going. The only thing actually
+// intercepted is a NATURAL section completion (endTaskOrDefer_(), used at
+// every 'completed'/'switched'/'autokicked' call site) — that alone is
+// deferred rather than shown immediately, so the participant genuinely
+// cannot tell whether the task in front of the dialog was the last one
+// until they close it.
+// Fixes the given board overlay's height as a static pixel value, a bit
+// taller than #st-board's own height right now, instead of letting it track
+// #st-board live (see the overlay's own HTML comment for why). Re-measured
+// fresh on every open; resetBoardOverlay_() clears it again on close.
+function sizeBoardOverlay_(overlay){
+  const board = el('st-board');
+  if(!board || !overlay) return;
+  overlay.style.height = (board.getBoundingClientRect().height + 100) + 'px';
 }
-function closeForfeitConfirm(){
+function resetBoardOverlay_(overlay){
+  if(overlay) overlay.style.height = '';
+}
+function openForfeitConfirm(){
+  S.forfeitOverlayOpen = true;
+  const overlay = el('forfeit-overlay');
+  sizeBoardOverlay_(overlay);
+  overlay.style.display='flex';
+}
+function closeForfeitConfirm(){ // "Keep going"
+  resetBoardOverlay_(el('forfeit-overlay'));
   el('forfeit-overlay').style.display='none';
-  if(trainingActive) return; // no real section is running during the walkthrough
-  startSubtask();
+  // Reset regardless of trainingActive below — the real overlay (and this
+  // flag) can genuinely open during the training walkthrough too (screen 7
+  // highlights the real forfeit button), and leaving it stuck true would
+  // wrongly defer every real completion for the rest of the session.
+  S.forfeitOverlayOpen = false;
+  if(trainingActive) return; // no real section is running during the walkthrough — nothing below applies
+  // If a section genuinely finished in the background while deciding, that
+  // was deferred instead of acted on immediately — reveal it now. Otherwise
+  // nothing was ever interrupted, so there is nothing to resume.
+  if(S.forfeitPendingOutcome){
+    const outcome = S.forfeitPendingOutcome;
+    S.forfeitPendingOutcome = null;
+    endTask(outcome);
+  }
 }
 function confirmForfeit(){
+  resetBoardOverlay_(el('forfeit-overlay'));
   el('forfeit-overlay').style.display='none';
+  S.forfeitOverlayOpen = false; // reset regardless of trainingActive below — see closeForfeitConfirm()'s own comment
+  S.forfeitPendingOutcome = null; // a voluntary give-up always wins, silently discarding whatever finished in the background
   if(trainingActive) return;
   decide('forfeit');
 }
@@ -4021,7 +4098,7 @@ function decide(choice){
   if(choice==='continue'){
     kill();
     hideOfferBanner_();
-    if(S.subtaskDone >= task.nReq){ endTask('completed'); return; }
+    if(S.subtaskDone >= task.nReq){ endTaskOrDefer_('completed'); return; }
     showScreen('subtask');
     startSubtask();
   } else if(choice==='switch'){
@@ -4202,6 +4279,18 @@ function spawnConfetti_(){
     }
   }
   tick();
+}
+
+// A NATURAL section completion ('completed'/'switched'/'autokicked' — never
+// a voluntary switch/forfeit, which call endTask() directly) — deferred
+// instead of shown immediately if the "Give up" dialog is currently open,
+// so the participant genuinely cannot tell whether the task in front of the
+// dialog was the last one until they close it. See openForfeitConfirm()'s
+// own comment and closeForfeitConfirm()/confirmForfeit() for the other end
+// of this.
+function endTaskOrDefer_(outcome){
+  if(S.forfeitOverlayOpen){ S.forfeitPendingOutcome = outcome; return; }
+  endTask(outcome);
 }
 
 // ── END TASK ──────────────────────────────────────────────────────
