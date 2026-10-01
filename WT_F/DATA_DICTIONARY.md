@@ -1,0 +1,195 @@
+# WT_F — Data Dictionary
+
+Two sheets (tabs): `Meta` and `Responses`. Each section is **one sequence**, and everything about it lives on its `Responses` row.
+
+- **`Meta`** — one row per respondent (survey answers, running totals, milestones).
+- **`Responses`** — one row per respondent × sequence (1–5) × attempt.
+
+**Join:** `Responses` → `Meta` on `prolific_pid`.
+
+**Before analysing `Responses`: filter to `is_latest_attempt = 1`** (one row per real sequence — see "Reload/attempt tracking" below).
+
+Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen for the in-class student version — same number).
+
+---
+
+## Sheet: `Meta` (one row per respondent)
+
+| Column | Type | Description |
+|---|---|---|
+| prolific_pid | text | Prolific ID (student version: the ID/name typed in) |
+| study_id | text | `pilot`, `studentpilot`, or the real Prolific study ID |
+| session_id | text | Prolific session ID |
+| demo_mode | 0/1/2 | 0 = real respondent; 1/2 = internal testing |
+| consent_at | timestamp | "I consent" clicked (blank for the student version) |
+| training_started_at, training_ended_at | timestamp | Walkthrough start / end (comprehension check passed) |
+| experiment_started_at, experiment_ended_at | timestamp | First real sequence started / last one finished |
+| study_complete_at | timestamp | Final save succeeded. Blank = not finished |
+| last_updated_iso | timestamp | Most recent save |
+| sections_done | number | Sequences finished (0–5); attempts discarded by a reload are not counted |
+| total_earnings | £ | Gross bonus so far (sequence rewards), before penalties |
+| total_grid_pay | £ | Running total of per-card pay |
+| total_grids_completed | number | Running total of cards completed |
+| training_bonus | £ | Always 0: the walkthrough is not paid (column kept so it can be switched back on via `TRAINING_BONUS`) |
+| total_penalty | £ | Sum of mistake penalties |
+| final_bonus | £ | **Amount owed**: total_earnings − total_penalty, never negative (≤ `reward_pool` ≤ £1.50). Penalties from every row count, including forfeited, auto-kicked and abandoned attempts — so this is generally *not* the sum of `net_earnings` |
+| reload_count, reload_log_json | number, JSON | New-session returns, and which section each happened in |
+| resume_snapshot_json | JSON | Technical resume state (cleared at the end) |
+| seq_frame_treatment | 4 or 5 | Told the study has 4 or 5 sequences (everyone plays 5) |
+| employment_status, labor_income, marstat, hh_others, family_contributors, education | — | Background survey (labor_income only if employed/self-employed; family_contributors only if hh_others > 0) |
+| ends_meet_now, ends_meet_past, ends_meet_future | text | SOEP 7-point "make ends meet" scale |
+| risk, patience | 0–10 | Dohmen et al. (2011) / Falk et al. (2016) single items |
+| geo_country, geo_region, geo_city, geo_ip, geo_provider, geo_json | text | IP geolocation, best-effort |
+| device_type, browser, user_agent | text | Best-effort device classification at consent |
+| pid_missing_from_link | 0/1 | 1 if the ID was typed in / auto-generated |
+| training_scenario_order, training_scenarios_viewed | text | Legacy, always blank |
+| training_comp_check_q1_wrong, _q2_wrong, _q3_wrong | number | Wrong attempts on each comprehension question (0 = right first time). Q2 is now "what happens if you reach the end without a winning card" |
+| reward_pool | £ | Total of the five sequence rewards, drawn once per respondent: Uniform{1.00, 1.05, …, 1.50}. Split at random across the sequences (each ≥ £0.10, in £0.05 units) — see `pay` in `Responses` |
+| regime | 0/1/2/3 | Offer-placement rule, drawn once per respondent: uniform on {0,1,2,3}, or on {0,1,2} in `pilot` / `studentpilot`. Same as `Responses.regime` |
+
+---
+
+## Sheet: `Responses` (one row per respondent × sequence × attempt)
+
+### The sequence's own draw (fixed before it starts)
+
+| Column | Type | Description |
+|---|---|---|
+| prolific_pid, study_id, session_id, demo_mode | — | As in `Meta` |
+| seq_n | 1–5 | Which sequence |
+| seq_attempt | number | 1 normally; 2, 3… only after a reload discarded an earlier attempt |
+| is_latest_attempt | 0/1 | **Filter to 1** |
+| pay | £ | The sequence's reward: its share of the respondent's `reward_pool` (≥ £0.10, multiple of £0.05; the five add up to the pool), independent of the sequence's own draw |
+| regime | 0/1/2/3 | Respondent's offer-placement rule, fixed for all 5 sequences (never 3 in `pilot` / `studentpilot`) |
+| sub_regime | 1/2/3 | Rule that actually governed THIS sequence (differs from `regime` only when regime = 0, which re-rolls 1 or 2 per sequence) |
+| seq_len | 10–15 | Number of cards in the main sequence (all visible from the start) |
+| live_pattern | text, e.g. `SLSSLL` | Card-by-card pattern: L = orange (can be the winning card), S = white. Last card always L |
+| n_live | number | Orange cards in the pattern |
+| p_inside | 0.10–0.90 | Disclosed chance the sequence contains the winning card |
+| p_quintile | 1–5 | Quintile bin `p_inside` was drawn from (each respondent gets each bin once) |
+| ends | 0/1 | 1 if the winning card is in the sequence |
+| end_pos | number | Card number (1-indexed) of the winning card; blank if `ends = 0` |
+| n_req | number | Main cards that would be played with no switch/forfeit: `end_pos`, or `seq_len` if there is no winning card (then the participant is moved onto the alternative) |
+| pause | number | Cards completed when the offer appears (0 = before the first card); centred Beta(2,2) over the sequence, truncated before the winning card when the ending is drawn first |
+| offer_wasted | 0/1 | 1 if the winning card came at or before `pause`, so the offer never appeared (only possible when `sub_regime = 3`) |
+| alt_duration | number | Length of the alternative (cards). **What the participant sees and does** if they take it — at the offer, later via the button, or when moved onto it automatically |
+| alt_global_end | number | Overall card count at which the alternative ends if taken the moment it's offered = `pause + alt_duration`. Drawn uniformly from the hidden "shadow window" right after the main one: `seq_len+1 … 2·seq_len` |
+| alt_window_lo, alt_window_hi | number | That shadow window's bounds (`seq_len+1`, `2·seq_len`) |
+| active_passed_at_pause, inactive_passed_at_pause | number | Orange / white cards already completed at the offer (sum = `pause`) |
+| active_left_at_pause, inactive_left_at_pause | number | Orange / white cards still ahead in the sequence at the offer |
+| left_pattern, right_pattern | text | `live_pattern` split at `pause` (left = already done; right = from the next card on) |
+| p_ahead_at_pause | 0–1 | Participant-perspective probability the winning card is still ahead at the offer (Bayes: disclosed p, uniform over orange cards, orange cards already passed ruled out) |
+| e_rem_at_pause | number | Expected further cards **if staying**, from the offer: winning card still ahead (uniform over remaining orange cards), else rest of the sequence + the alternative |
+| e_rem_at_start | number | Same formula at card 0 (before any card), with the same `alt_duration`. `e_rem_at_pause − e_rem_at_start` is the update in expected remaining cards produced by the cards passed before the offer (the alternative held fixed). Note the participant does not yet know `alt_duration` at card 0 |
+| alt_minus_expected | number | `alt_duration − e_rem_at_pause`. Negative = switching at the offer is the shorter option in expectation |
+| seq_frame_treatment | 4/5 | As in `Meta` |
+| seq_is_bonus | 0/1 | 1 for the unannounced 5th sequence of respondents told "4" |
+
+### Timing, outcome, decisions
+
+| Column | Type | Description |
+|---|---|---|
+| start_at, seq_start_at_time | timestamp | Sequence started (same value) |
+| briefing_ended_at | timestamp | "Start sequence" pressed on the briefing screen |
+| end_at | timestamp | Sequence ended |
+| seq_reload_count | number | New-session returns while this sequence was current |
+| outcome_summary | text | **The outcome** — see the table below |
+| card_order | text | Main cards actually played, in order (`live_pattern` truncated to `n_main_tasks_done`) |
+| alt_revealed | 0/1 | The alternative's length was shown (offer fired, or a same-tab reload landed past the offer point) |
+| switch_offered_at_task, switch_offered_at_time | number, timestamp | When the offer banner appeared (blank if it never did) |
+| pause_secs | 10–45 | The offer banner's randomised countdown |
+| penalty_at_pause | £ | This sequence's mistake penalty accumulated when the offer fired (blank if it never fired). The full per-card record is in `tasks_json` |
+| deliberation_secs | seconds | Banner shown → offer resolved (accept or stay, confirmed or timed out) |
+| offer_choice | text | `accept` / `refuse` (includes letting the time run out) |
+| offer_undo_count | number | "Undo" presses on the offer's confirm popup |
+| auto_refused | 0/1 | Countdown ran out before any choice (default: stay) |
+| auto_confirmed | 0/1 | Countdown ran out on the confirm popup, auto-committing the pending choice |
+| switch_taken | 0/1 | **Voluntary** switch to the alternative |
+| switch_source | text | `offer` (the banner) or `button` (the blue Alternative button afterwards) |
+| switch_taken_at_task, switch_taken_at_time | number, timestamp | Main cards completed / time when the switch was confirmed |
+| switch_pressed_at_task, switch_pressed_at_time | number, timestamp | The press that led to it ("Accept and switch", or opening the button dialog) |
+| switch_decision_secs | seconds | Press → confirm |
+| alt_button_opens, alt_button_undos | number | Times the Alternative button dialog was opened / closed with "Keep going" |
+| switched_at | number | Main cards completed when the voluntary switch was confirmed (= `switch_taken_at_task`); blank if no voluntary switch |
+| switched_at_pause | 0/1 | 1 iff the switch was taken on the offer banner (i.e. at `pause`) |
+| auto_switched | 0/1 | Moved onto the alternative automatically because the sequence ran out without a winning card |
+| auto_switch_at_time | timestamp | When that happened |
+| alt_phase_started_at | timestamp | When the alternative started (voluntary or automatic); blank if never |
+| forfeit_taken | 0/1 | Gave up the sequence |
+| forfeit_phase | text | `main` or `alt` |
+| forfeit_taken_at_task, forfeit_taken_at_time | number, timestamp | Total cards done (main + alternative) / time |
+| forfeited_at | number | Cards completed **in the phase where they gave up** (main cards if `forfeit_phase = main`, alternative cards if `alt`); blank if no forfeit |
+| auto_kicked | 0/1 | Ended because the sequence's own mistake penalty reached its reward |
+| n_main_tasks_done, n_alt_tasks_done, n_tasks_done | number | Cards completed in the main sequence, in the alternative, total |
+| earnings | £ | Gross reward: `pay` if the winning card was found or the alternative completed (voluntary or automatic), else 0 |
+| grid_pay | £ | Per-card pay for this sequence |
+| penalty | £ | Mistake penalty (£0.01 per misclick) |
+| net_earnings | £ | This sequence's earnings − penalty, never negative. What is actually paid is `Meta.final_bonus` (penalties of unpaid sequences still count there) |
+| total_targets, total_found, total_false_pos, total_missed | number | Grid accuracy, summed over the whole sequence |
+| tasks_json | JSON | Every card played, main and alternative (see below) |
+
+### Exit point and expected-duration benchmarks
+
+The **exit point** is where the participant left the main sequence; `sunk_cost_at_exit` is the number of main cards **completed** at that moment. Switching while on card 2 → 1; finding the winning card on card 2 → 2.
+
+| `exit_type` | How the main sequence was left | `sunk_cost_at_exit` |
+|---|---|---|
+| `switch` | Voluntary switch (offer banner or button) | Main cards completed at the switch (= `switched_at`) |
+| `winning_card` | Found the winning card | `n_main_tasks_done` (= `end_pos`) |
+| `no_winning_card` | Reached the end, moved onto the alternative automatically | `seq_len` |
+| `forfeit` | Gave up during the main sequence | Main cards completed |
+| `autokick` | Penalty reached the reward during the main sequence | Main cards completed |
+
+A forfeit or autokick *during the alternative* keeps the exit type of how the main sequence was left (`switch` or `no_winning_card`).
+
+At a natural end the outcome is known, so the benchmarks take their realised values: `winning_card` → `e_rem_at_exit = 0`, `p_ahead_at_exit = 0`, `switch_gain_at_exit = −alt_duration`; `no_winning_card` → `e_rem_at_exit = alt_duration`, `p_ahead_at_exit = 0`, `switch_gain_at_exit = 0`. For switch / forfeit / autokick they are the participant-perspective expectations at that point.
+
+| Column | Type | Description |
+|---|---|---|
+| exit_type | text | See above |
+| sunk_cost_at_exit | number | Main cards completed at the exit point |
+| alt_available_at_exit | 0/1 | 1 if the alternative could be chosen at the exit point (offer not wasted and `sunk_cost_at_exit ≥ pause`). When 0, the `switch_*_at_exit` comparisons are counterfactual |
+| p_ahead_at_exit | 0–1 | As `p_ahead_at_pause`, at the exit point |
+| e_rem_at_exit | number | As `e_rem_at_pause`, at the exit point: expected further cards if staying |
+| penalty_at_exit | £ | Mistake penalty from the main cards completed up to the exit point (including the last one) |
+| switch_gain_at_pause | number | `e_rem_at_pause − alt_duration`: expected cards saved by switching at the offer. **> 0 ⇒ switching is better in expectation** (= −`alt_minus_expected`) |
+| switch_better_at_pause | 0/1 | 1 iff `switch_gain_at_pause > 0` |
+| switch_gain_at_exit | number | `e_rem_at_exit − alt_duration`: same comparison at the exit point (switching at any point means doing `alt_duration` cards) |
+| switch_better_at_exit | 0/1 | 1 iff `switch_gain_at_exit > 0` |
+
+Reading them together: `switch_taken = 1` with `switch_better_at_exit = 0` is a switch that costs cards in expectation. For sequences that ran to a natural end, `switch_*_at_exit` reflect the realised outcome, not a decision; the benchmark at any earlier position (e.g. before the last card played, `n_main_tasks_done − 1`) can be rebuilt from `live_pattern`, `p_inside` and `alt_duration` with the same formula.
+
+### `outcome_summary`
+
+| Label | Meaning |
+|---|---|
+| `continued and found the winning card` | Saw the offer, stayed, found the winning card |
+| `found the winning card before the offer` | Winning card came before the offer point (offer wasted) |
+| `switched at offer` | Accepted on the offer banner, completed the alternative |
+| `switched later via button` | Refused/let the offer lapse, later switched with the button, completed the alternative |
+| `auto-switched (no winning card)` | No winning card; moved onto the alternative and completed it |
+| `continued and forfeited` / `forfeited before offer` | Gave up during the main sequence |
+| `continued and auto-kicked` / `auto-kicked before offer` | Penalty reached the reward during the main sequence |
+| any of the three alternative labels + ` and forfeited` / ` and auto-kicked` | Reached the alternative, then gave up / was auto-kicked |
+| `abandoned before reload — superseded by a later attempt` | Attempt discarded by a new-session reload |
+
+### `tasks_json` structure
+
+```json
+[
+  { "grid_n": 1, "phase": "main", "target": "😊", "all_emojis": ["😊", "😅", "…"],
+    "n_targets": 4, "n_found": 4, "n_false_pos": 0, "n_missed": 0,
+    "no_activity": false, "first_move_at": "2026-10-01T10:01:23.456Z" }
+]
+```
+`phase` is `main` or `alt`; `grid_n` counts within its phase. `no_activity` = no click/movement during that card.
+
+---
+
+## Reload/attempt tracking
+
+A **new-session** return (tab closed, other device) mid-sequence restarts that sequence with a fresh draw, so nobody can reload to peek at how it plays out. If real progress had been made, the abandoned attempt gets its own row (`outcome_summary = 'abandoned before reload — …'`, `is_latest_attempt = 0`) and the replacement gets `seq_attempt + 1`. A same-tab refresh resumes exactly where it was; if it lands past the offer point, the offer counts as lapsed and the alternative is available from the button. Filter to `is_latest_attempt = 1` and this can be ignored.
+
+## Autokick
+
+A sequence ends the moment its own `penalty` reaches its own `pay` (`auto_kicked = 1`, `net_earnings = 0`), distinct from a voluntary forfeit.
