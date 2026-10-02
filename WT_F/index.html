@@ -407,20 +407,25 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <div class="lbl">Welcome</div>
   <h1>Welcome</h1>
   <p>Thank you for your interest in our study! Please take the time to read the following text carefully. By pressing the consent button below, you confirm that you have read the information presented and that you are willing to participate in the study.</p>
-  <p>This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, and an experimental module part in which you complete simple visual tasks and can earn a bonus on top of your fixed participation fee.</p>
-  <p>The bonus reward is awarded on top of your fixed earnings from study participation. You will be able to complete the study earlier if you feel that your bonus rewards are too low.</p>
+  <p id="consent-intro-paid">This study focuses on your experience managing earnings and time, and is divided into two modules: a short questionnaire, and an experimental module part in which you complete simple visual tasks and can earn a bonus on top of your fixed participation fee.</p>
+  <p id="consent-intro-paid2">The bonus reward is awarded on top of your fixed earnings from study participation. You will be able to complete the study earlier if you feel that your bonus rewards are too low.</p>
+  <!-- STUDY_ID=pilot only (unpaid): no economic rewards mentioned — the
+       task pays in Points. Swapped in at load, see the INIT block. -->
+  <p id="consent-intro-pilot" style="display:none;">This study focuses on how people manage their time, and is divided into two modules: a short questionnaire, and an experimental module in which you complete simple visual tasks and can earn points.</p>
 
   <details style="margin:1.4rem 0;border:1px solid var(--bdr);">
     <summary style="cursor:pointer;padding:.7rem 1rem;font-family:var(--mono);font-size:.78rem;font-weight:600;letter-spacing:.04em;background:var(--bg);user-select:none;">▸ Consent form (click to read)</summary>
     <div style="padding:1rem 1.2rem;font-size:.85rem;line-height:1.6;">
-      <p>The data collected will be used for research purposes only. Any responses you provide will be completely anonymous, as no identifying information will be collected during the study. Prolific will allow us to link your choices to your gender, age, and other demographics, but we will receive no identifying information about you, and we will not be able to link this information to your name.</p>
+      <p>The data collected will be used for research purposes only. Any responses you provide will be completely anonymous, as no identifying information will be collected during the study.<span id="consent-prolific-demog"> Prolific will allow us to link your choices to your gender, age, and other demographics, but we will receive no identifying information about you, and we will not be able to link this information to your name.</span></p>
       <p>If you give us your permission by completing and submitting the study, we plan to discuss/publish the results in an academic forum. The study data, which does not contain any personal information, may be shared with cooperation partners for collaborative analysis and made publicly accessible via research databases or scientific publications. Please note that once study data are publicly accessible, their further distribution by others cannot be ruled out and falls beyond the area of influence or responsibility of the IMT School for Advanced Studies Lucca. This study is conducted in accordance with the laws D. Lgs. 196/2003 and UE GDPR 679/2016 on data protection. The experimental protocol and the management of the study data has been approved by the Joint Ethical Committee of the Universities "Scuola Superiore Sant'Anna", "Scuola Normale Superiore", and "IMT Scuola Alti Studi Lucca" (N: n. 23/2026, April 30).</p>
       <p>You can reach out to Michele Cantarella (michele.cantarella@imtlucca.it) if you have any questions related to this study or if you wish your response to be deleted.</p>
-      <p>By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
+      <p id="consent-final-prolific">By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside your Prolific ID. If you do not consent, select "I do not consent," and you will be redirected to Prolific. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
+      <!-- STUDY_ID=pilot only — no Prolific (swapped in at load, see INIT). -->
+      <p id="consent-final-pilot" style="display:none;">By selecting "I consent" below, you agree to participate in this study, understand the information above, and consent to participate in this project. Your consent will be timestamped and stored alongside an anonymous participant code. If you do not consent, select "I do not consent" and close this page. You can revoke your consent at any time by leaving the study before completion. Incomplete responses will be deleted once we have finished collecting responses.</p>
     </div>
   </details>
 
-  <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site. You'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
+  <p id="consent-popup-note" style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please allow pop-ups for this site. You'll be redirected to Prolific in a new tab at the end of the study to confirm your submission.</p>
   <p style="font-size:.78rem;color:var(--ink2);margin-bottom:.5rem;">⚠ Please avoid reloading or refreshing the page during the study. If you accidentally close the tab or leave, please contact the research team.</p>
   <div class="btn-row">
     <button class="btn" onclick="doConsent()">I consent →</button>
@@ -918,7 +923,17 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <div class="lbl">Status</div>
   <h1>Thank you</h1>
   <p>We have already received a completed response from you for this study.</p>
-  <p style="margin-top:.4rem;">You can close this page. If you think this is a mistake, contact the research team through Prolific.</p>
+  <p id="already-done-contact" style="margin-top:.4rem;">You can close this page. If you think this is a mistake, contact the research team through Prolific.</p>
+</div></div>
+</div>
+
+<!-- ═══ SCREEN: No consent (STUDY_ID=pilot only — Prolific respondents are
+     redirected to Prolific instead, see doNotConsent()) ═══ -->
+<div id="screen-no-consent" class="screen">
+<div class="wrap"><div class="card">
+  <div class="lbl">Status</div>
+  <h1>Thank you</h1>
+  <p>You chose not to take part in this study. You can close this page.</p>
 </div></div>
 </div>
 
@@ -1041,13 +1056,13 @@ function backendConfigured_(){
 }
 
 // Every reward/penalty amount shown to a participant goes through this —
-// £ for Prolific respondents, "Points" for the in-class student version
-// (studentpilot). n may be negative (penalties); the sign is rendered
-// before the currency mark/number rather than inside toFixed(2).
+// £ for Prolific respondents, "Points" for both unpaid versions (pilot and
+// the in-class studentpilot). n may be negative (penalties); the sign is
+// rendered before the currency mark/number rather than inside toFixed(2).
 function money_(n){
   const sign = n<0 ? '-' : '';
   const abs = Math.abs(n);
-  return _isStudentPilot ? (sign+abs.toFixed(2)+' Points') : (sign+'£'+abs.toFixed(2));
+  return _isAnyPilot ? (sign+abs.toFixed(2)+' Points') : (sign+'£'+abs.toFixed(2));
 }
 
 async function fetchWithTimeout_(url, opts, ms){
@@ -2044,6 +2059,19 @@ function applyResume_(snap, sameTab){
   }
 
   // phase === 'experiment'
+  // Left on the section-result screen (the section is already logged, but
+  // "Continue" was never pressed, so taskIdx still points at it): move on to
+  // the next section instead of replaying a finished one — replaying it
+  // would log it twice and pay it twice.
+  if(S.log.some(r=>r.seq_n===S.taskIdx+1 && !/^abandoned/.test(r.outcome_summary||''))){
+    S.taskIdx++;
+    S.subtaskDone=0; S.phase='main'; S.switchAvailable=false; S.altStartPos=0; S.pendingOutcome=null;
+    if(S.taskIdx>=CFG.numTasks){ showResults(); return; }
+    S.tasks = (sameTab && Array.isArray(snap.tasks) && snap.tasks.length===CFG.numTasks) ? snap.tasks : generateTasks();
+    gracePeriod(()=>startTask());
+    saveProgress(false);
+    return;
+  }
   if(sameTab && Array.isArray(snap.tasks) && snap.tasks.length===CFG.numTasks){
     // Exact resume: keep the section's already-drawn parameters and pick
     // up exactly where it left off instead of restarting it.
@@ -2260,6 +2288,7 @@ function submitManualPid_(){
 }
 
 function doNotConsent(){
+  if(_isPilotStudy){ showScreen('no-consent'); return; } // not on Prolific — nowhere to send them
   window.location.href = 'https://app.prolific.com/submissions/complete?cc=' + NO_CONSENT_CODE;
 }
 
@@ -2963,7 +2992,7 @@ function trainScreen6_(){
   trainPaint_({done:1});
   trainLightUpTo_(['panel-penalty']);
   renderTip_(
-    'Penalties for misclicks (£0.01 per mistake) are shown below the reward and are subtracted from your final total. Penalties accumulate across sequences and are still applied even if you forfeited or switched.',
+    'Penalties for misclicks ('+money_(0.01)+' per mistake) are shown below the reward and are subtracted from your final total. Penalties accumulate across sequences and are still applied even if you forfeited or switched.',
     tipContinue_()
   );
 }
@@ -4196,21 +4225,26 @@ function showResults(){
   const bonusReward = Math.max(0, Math.round((trainingBonus + totalSectionBonus - totalPenalty)*100)/100);
   const showUpFee   = SHOW_UP_FEE;
 
-  el('res-bonus-line').textContent = 'Your bonus reward: '+money_(bonusReward);
+  el('res-bonus-line').textContent = (_isPilotStudy ? 'Your total: ' : 'Your bonus reward: ')+money_(bonusReward);
   el('res-showup-line').textContent = 'Your show up fee: '+money_(showUpFee);
+  // Unpaid pilot (Points): no show-up fee and no payment notes.
+  if(_isPilotStudy){
+    el('res-note-prolific1').textContent = 'Your total has your penalties subtracted.';
+  }
 
   // Student version: no Prolific show-up fee, no training/penalty or
   // hand-approval explanation, and a plain "wait before closing" note
   // instead — see the results screen HTML and completeStudy_() below.
-  el('res-showup-line').style.display = _isStudentPilot ? 'none' : '';
+  el('res-showup-line').style.display = _isAnyPilot ? 'none' : '';
   el('res-note-prolific1').style.display = _isStudentPilot ? 'none' : '';
-  el('res-note-prolific2').style.display = _isStudentPilot ? 'none' : '';
+  el('res-note-prolific2').style.display = _isAnyPilot ? 'none' : '';
   el('res-note-student').style.display = _isStudentPilot ? 'block' : 'none';
   el('res-note-student-auction').style.display = _isStudentPilot ? 'block' : 'none';
-  el('results-saved-prolific').style.display = _isStudentPilot ? 'none' : 'inline';
-  el('results-saved-student').style.display = _isStudentPilot ? 'inline' : 'none';
-  el('results-error-note-prolific').style.display = _isStudentPilot ? 'none' : '';
-  el('results-error-note-student').style.display = _isStudentPilot ? 'block' : 'none';
+  el('results-saved-prolific').style.display = _isAnyPilot ? 'none' : 'inline';
+  el('results-saved-student').style.display = _isAnyPilot ? 'inline' : 'none';
+  // The Prolific error note promises payment — not for either unpaid version.
+  el('results-error-note-prolific').style.display = _isAnyPilot ? 'none' : '';
+  el('results-error-note-student').style.display = _isAnyPilot ? 'block' : 'none';
 
   // Persisted BEFORE attempting to send, so a reload/closed tab/dead
   // connection right here resumes straight back to this screen and retries
@@ -4245,7 +4279,7 @@ async function completeStudy_(){
   if(ok){
     el('results-saved').style.display='block';
     try{ localStorage.removeItem('wtstudy_resume_' + (_prolificID||'anon')); } catch(e){}
-    if(!_isStudentPilot) prolificRedirect_(); // students never came from Prolific — nowhere to redirect them back to
+    if(!_isAnyPilot) prolificRedirect_(); // neither unpaid version came from Prolific — nowhere to redirect them back to
   } else {
     el('results-error-code').textContent = 'ERR-' + Date.now().toString(36).toUpperCase();
     el('results-error').style.display='block';
@@ -4369,6 +4403,18 @@ function debugStop(){
 
 // ── INIT ─────────────────────────────────────────────────────────
 window.addEventListener('load', ()=>{
+  // Unpaid pilot, not run on Prolific: consent without the participation
+  // fee / bonus and without any Prolific reference.
+  if(_isPilotStudy){
+    el('consent-intro-paid').style.display='none';
+    el('consent-intro-paid2').style.display='none';
+    el('consent-intro-pilot').style.display='';
+    el('consent-prolific-demog').style.display='none';
+    el('consent-final-prolific').style.display='none';
+    el('consent-final-pilot').style.display='';
+    el('consent-popup-note').style.display='none';
+    el('already-done-contact').innerHTML='You can close this page. If you think this is a mistake, contact Michele Cantarella (michele.cantarella@imtlucca.it).';
+  }
   redrawProg();
   bootstrapApp();
 });
