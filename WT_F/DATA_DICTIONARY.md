@@ -66,7 +66,7 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | live_pattern | text, e.g. `SLSSLL` | Card-by-card pattern: L = orange (can be the winning card), S = white. Last card always L |
 | n_live | number | Orange cards in the pattern |
 | p_inside | 0.10–0.90 | Disclosed chance the sequence contains the winning card |
-| p_quintile | 1–5 | Quintile bin `p_inside` was drawn from (each respondent gets each bin once) |
+| p_quintile | 1–5 | Band `p_inside` was drawn from: [10%, 90%] cut into 5 of equal width → 1 = 10–25, 2 = 30–40, 3 = 45–55, 4 = 60–70, 5 = 75–90 (each respondent gets each band once) |
 | ends | 0/1 | 1 if the winning card is in the sequence |
 | end_pos | number | Card number (1-indexed) of the winning card; blank if `ends = 0` |
 | n_req | number | Main cards that would be played with no switch/forfeit: `end_pos`, or `seq_len` if there is no winning card (then the participant is moved onto the alternative) |
@@ -78,10 +78,12 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | active_passed_at_pause, inactive_passed_at_pause | number | Orange / white cards already completed at the offer (sum = `pause`) |
 | active_left_at_pause, inactive_left_at_pause | number | Orange / white cards still ahead in the sequence at the offer |
 | left_pattern, right_pattern | text | `live_pattern` split at `pause` (left = already done; right = from the next card on) |
-| p_ahead_at_pause | 0–1 | Participant-perspective probability the winning card is still ahead at the offer (Bayes: disclosed p, uniform over orange cards, orange cards already passed ruled out) |
-| e_rem_at_pause | number | Expected further cards **if staying**, from the offer: winning card still ahead (uniform over remaining orange cards), else rest of the sequence + the alternative |
-| e_rem_at_start | number | Same formula at card 0 (before any card), with the same `alt_duration`. `e_rem_at_pause − e_rem_at_start` is the update in expected remaining cards produced by the cards passed before the offer (the alternative held fixed). Note the participant does not yet know `alt_duration` at card 0 |
-| alt_minus_expected | number | `alt_duration − e_rem_at_pause`. Negative = switching at the offer is the shorter option in expectation |
+| e_rem_at_start | number | **Expected length of the main sequence at its start**, in cards: what the participant can expect knowing `seq_len`, the pattern and `p_inside` |
+| e_rem_at_pause | number | **Expected main-sequence cards still to play** at the offer, if they keep going (up to the winning card, or to the end if there is none) |
+| p_ahead_at_pause | 0–1 | Probability the winning card is still ahead at the offer |
+| alt_minus_expected | number | `alt_duration` − expected cards to the reward if staying at the offer (`e_rem_at_pause` + (1 − `p_ahead_at_pause`) × `alt_duration`, since without a winning card they are moved onto the alternative). Negative = switching at the offer is the shorter option in expectation |
+
+**How the expectations are computed.** All `e_rem_*` / `p_ahead_*` columns use the beliefs participants are given, and never depend on the regime (participants know nothing about regimes): the winning card is in the sequence with probability `p_inside` and, if it is, equally likely to be on any orange card; at a given point, the orange cards already passed without a win are ruled out (Bayes). With `W` orange cards, `k` cards done and `a` orange cards still ahead: P(no win so far) = 1 − (W − a)·p/W; `p_ahead` = (a·p/W) / P(no win so far); `e_rem` = [Σ over orange cards m > k of (p/W)(m − k) + (1 − p)(seq_len − k)] / P(no win so far).
 | seq_frame_treatment | 4/5 | As in `Meta` |
 | seq_is_bonus | 0/1 | 1 for the unannounced 5th sequence of respondents told "4" |
 
@@ -142,7 +144,7 @@ The **exit point** is where the participant left the main sequence; `sunk_cost_a
 
 A forfeit or autokick *during the alternative* keeps the exit type of how the main sequence was left (`switch` or `no_winning_card`).
 
-At a natural end the outcome is known, so the benchmarks take their realised values: `winning_card` → `e_rem_at_exit = 0`, `p_ahead_at_exit = 0`, `switch_gain_at_exit = −alt_duration`; `no_winning_card` → `e_rem_at_exit = alt_duration`, `p_ahead_at_exit = 0`, `switch_gain_at_exit = 0`. For switch / forfeit / autokick they are the participant-perspective expectations at that point.
+At a natural end the main sequence is over: `e_rem_at_exit = 0`, `p_ahead_at_exit = 0`, and `switch_gain_at_exit` is the realised comparison (`winning_card` → −`alt_duration`; `no_winning_card` → 0, since the alternative had to be done anyway). For switch / forfeit / autokick they are the expectations at that point.
 
 | Column | Type | Description |
 |---|---|---|
@@ -150,11 +152,11 @@ At a natural end the outcome is known, so the benchmarks take their realised val
 | sunk_cost_at_exit | number | Main cards completed at the exit point |
 | alt_available_at_exit | 0/1 | 1 if the alternative could be chosen at the exit point (offer not wasted and `sunk_cost_at_exit ≥ pause`). When 0, the `switch_*_at_exit` comparisons are counterfactual |
 | p_ahead_at_exit | 0–1 | As `p_ahead_at_pause`, at the exit point |
-| e_rem_at_exit | number | As `e_rem_at_pause`, at the exit point: expected further cards if staying |
+| e_rem_at_exit | number | As `e_rem_at_pause`, at the exit point: expected main-sequence cards still to play |
 | penalty_at_exit | £ | Mistake penalty from the main cards completed up to the exit point (including the last one) |
-| switch_gain_at_pause | number | `e_rem_at_pause − alt_duration`: expected cards saved by switching at the offer. **> 0 ⇒ switching is better in expectation** (= −`alt_minus_expected`) |
+| switch_gain_at_pause | number | Expected cards saved by switching at the offer: [`e_rem_at_pause` + (1 − `p_ahead_at_pause`) × `alt_duration`] − `alt_duration`. **> 0 ⇒ switching is better in expectation** (= −`alt_minus_expected`) |
 | switch_better_at_pause | 0/1 | 1 iff `switch_gain_at_pause > 0` |
-| switch_gain_at_exit | number | `e_rem_at_exit − alt_duration`: same comparison at the exit point (switching at any point means doing `alt_duration` cards) |
+| switch_gain_at_exit | number | Same comparison at the exit point, with `e_rem_at_exit` and `p_ahead_at_exit` (switching at any point means doing `alt_duration` cards) |
 | switch_better_at_exit | 0/1 | 1 iff `switch_gain_at_exit > 0` |
 
 Reading them together: `switch_taken = 1` with `switch_better_at_exit = 0` is a switch that costs cards in expectation. For sequences that ran to a natural end, `switch_*_at_exit` reflect the realised outcome, not a decision; the benchmark at any earlier position (e.g. before the last card played, `n_main_tasks_done − 1`) can be rebuilt from `live_pattern`, `p_inside` and `alt_duration` with the same formula.

@@ -76,10 +76,11 @@ Per sequence:
 ```
 L        ~ Uniform{10, …, 15}
 orange[k] ~ Bernoulli(0.4) independently, k = 1 … L−1;   orange[L] = 1
-pInside  = round( clamp( Normal(0.50, 0.20), 0.10, 0.90 ) × 20 ) / 20
+pInside  ~ uniform within the sequence's band, rounded to 5%
+           bands: [0.10, 0.90] cut into 5 of equal width → 10–25 | 30–40 | 45–55 | 60–70 | 75–90 (%)
 ```
 
-`pInside` is **quintile-stratified**: a shuffled ordering of the five equal-mass quintiles of its distribution is fixed per participant at consent, and sequence *i* draws from quintile *i*, so every participant sees each quintile once, in random order. If the sequence contains the winning card, it is uniform over the orange cards.
+`pInside` is **stratified**: a shuffled ordering of the five bands is fixed per participant at consent, and sequence *i* draws from the *i*-th band in that order (without replacement), so every participant sees each band once, in random order. Each 5% value belongs to exactly one band and all values within a band are equally likely. If the sequence contains the winning card, it is uniform over the orange cards.
 
 The offer position `pause` (cards completed when the offer appears, 0 … L−1) is drawn from a Beta(2, 2) distribution over the sequence, discretised into one slice per card (`P(pause = k)` ∝ Beta(2,2) mass on [k/L, (k+1)/L]): offers are centred and rarely come at the very start or end. The four regimes govern the joint draw with the ending:
 
@@ -110,7 +111,7 @@ REGIME 0  per-sequence mixture: each sequence independently re-draws Regime 1 or
 
 ### 31. Primary Outcomes (explanation)
 
-All four come from the `Responses` sheet (one row per participant × sequence × attempt). Outcome 1 is `offer_choice = 'accept'` among rows with `offer_wasted = 0`. Outcome 2 is built from each row's `pause`, `switch_source`, `switch_taken_at_task`, `n_main_tasks_done` and the card pattern: for every card position t from `pause` onward at which the participant was still in the main sequence and the offer banner had closed, y = 1 iff the button switch happened at t. The state at each decision point is fully reconstructable from the logged pattern (`live_pattern`), `pInside`, `L`, `pause` and `alt_duration`: orange and white cards already completed, orange and white cards left, the updated probability that the winning card is still ahead, and the expected further cards if staying (the instrument's own formula, logged at the offer as `p_ahead_at_pause` and `e_rem_at_pause`).
+All four come from the `Responses` sheet (one row per participant × sequence × attempt). Outcome 1 is `offer_choice = 'accept'` among rows with `offer_wasted = 0`. Outcome 2 is built from each row's `pause`, `switch_source`, `switch_taken_at_task`, `n_main_tasks_done` and the card pattern: for every card position t from `pause` onward at which the participant was still in the main sequence and the offer banner had closed, y = 1 iff the button switch happened at t. The state at each decision point is fully reconstructable from the logged pattern (`live_pattern`), `pInside`, `L`, `pause` and `alt_duration`: orange and white cards already completed, orange and white cards left, the updated probability that the winning card is still ahead, the expected main-sequence cards still to play, and the expected cards to the reward if staying (that plus the alternative if there is no winning card). These use the instrument's own formulas — logged as `p_ahead_at_*` and `e_rem_at_*` at the start, at the offer and where the main sequence was left — computed with the beliefs participants are given (winning card present with probability `pInside`, uniform over orange cards, independent of the offer), never with the regime.
 
 The sunk-time regressors are the orange cards and white cards already completed. Their sum is elapsed time; their difference is its composition. Neither enters a normatively correct decision rule.
 
@@ -135,7 +136,7 @@ Between-subjects, two orthogonal individual-level randomizations, crossed, with 
 
 **Randomization B — horizon framing (2 arms, 50/50):** told the study has four or five sequences. All complete five; those told four receive the fifth as an unannounced bonus sequence.
 
-**Within-subject:** each participant sees each quintile of the probability distribution once, in random order; lengths, patterns, offer positions, alternatives and rewards are redrawn every sequence.
+**Within-subject:** each participant sees each of the five probability bands once, in random order; lengths, patterns, offer positions, alternatives and rewards are redrawn every sequence.
 
 After consent and the survey, a sixteen-step walkthrough on the real task screen teaches the grid task, orange and white cards, the probability, the offer, the persistent alternative button and the automatic move to the alternative, ending with a three-question comprehension check (progress gated; wrong answers counted). The walkthrough is not paid.
 
@@ -145,26 +146,26 @@ Simulated design moments (15,000 sequences per arm):
 
 | | P(winning card) | offer wasted | E[L] | E[alt_duration] | alt_minus_expected mean / SD | P(alternative shorter in expectation) | E[cards to reward, never switching] |
 |---|---|---|---|---|---|---|---|
-| Regime 0 | 0.46 | 0 | 12.5 | 14.0 | −0.04 / 3.9 | 0.56 | 18.0 |
-| Regime 1 | 0.52 | 0 | 12.5 | 14.5 | 0.09 / 4.1 | 0.55 | 16.4 |
-| Regime 2 | 0.40 | 0 | 12.5 | 13.4 | −0.23 / 3.7 | 0.58 | 19.4 |
-| Regime 3 | 0.53 | 0.22 | 12.5 | 13.6 | −0.20 / 3.7 | 0.57 | 19.7 |
+| Regime 0 | 0.45 | 0 | 12.5 | 14.0 | −0.23 / 4.4 | 0.58 | 18.2 |
+| Regime 1 | 0.50 | 0 | 12.5 | 14.6 | −0.09 / 4.6 | 0.57 | 16.8 |
+| Regime 2 | 0.38 | 0 | 12.5 | 13.5 | −0.38 / 4.2 | 0.60 | 19.7 |
+| Regime 3 | 0.50 | 0.20 | 12.5 | 13.5 | −0.45 / 4.1 | 0.60 | 20.0 |
 
-(`alt_minus_expected` = `alt_duration` minus the expected further cards if staying, at the offer.)
+(`alt_minus_expected` = `alt_duration` minus the expected cards to the reward if staying, at the offer: remaining main cards plus the alternative if there is no winning card.)
 
 Three properties are not neutral across arms and are recorded here so the remedies are on record before data collection:
 
-**(i) The chance of a winning card differs by arm** (0.40 under Regime 2, where surviving the offer point lowers it, vs ≈0.52 under Regimes 1 and 3), and with it the expected cards to the reward. Raw between-arm comparisons conflate the informational manipulation with this; §5.4 specifies the conditional comparison as primary.
+**(i) The chance of a winning card differs by arm** (0.38 under Regime 2, where surviving the offer point lowers it, vs ≈0.50 under Regimes 1 and 3), and with it the expected cards to the reward. Raw between-arm comparisons conflate the informational manipulation with this; §5.4 specifies the conditional comparison as primary.
 
 **(ii) Under Regime 1 the offer's position is informative**: an offer can only come before the winning card, so a later offer signals a later (or no) winning card. Regimes 2 and 3 are flat in this respect.
 
-**(iii) Regime 3 wastes 22% of offers** (the winning card came before the offer point). Those sequences carry no offer decision and are dropped from the offer and hazard panels, selecting on early endings; handled in §5.4 and §9.
+**(iii) Regime 3 wastes 20% of offers** (the winning card came before the offer point). Those sequences carry no offer decision and are dropped from the offer and hazard panels, selecting on early endings; handled in §5.4 and §9.
 
 The composition regressor at the offer (orange minus white cards completed) has SD ≈ 2.2–2.4 cards, of which 86–91% of the variance lies within cells of (L, pause, pInside).
 
 ### 36. Randomization Method
 
-Client-side, in the participant's browser, at consent (`Math.random()`), recorded immediately with the consent timestamp. Regime uniform over four arms; framing an independent fair coin; quintile order a Fisher–Yates shuffle. All three are stored in the resume snapshot and restored on any reload. A `?regime=` URL override exists for testing only; it is inert without the parameter and such sessions are identifiable and excluded.
+Client-side, in the participant's browser, at consent (`Math.random()`), recorded immediately with the consent timestamp. Regime uniform over four arms; framing an independent fair coin; band order a Fisher–Yates shuffle. All three are stored in the resume snapshot and restored on any reload. A `?regime=` URL override exists for testing only; it is inert without the parameter and such sessions are identifiable and excluded.
 
 ### 37. Randomization Unit — Individual participant.
 
@@ -351,9 +352,9 @@ No exclusion on the `no_activity` flag or grid accuracy in the primary specifica
 
 ## 11. Known limitations, recorded before data collection
 
-1. **The chance of a winning card differs by arm** (0.40 vs ≈0.52), so raw arm comparisons are not clean informational effects (§5.4).
+1. **The chance of a winning card differs by arm** (0.38 vs ≈0.50), so raw arm comparisons are not clean informational effects (§5.4).
 2. **Regime 1's offer position is informative** about the ending.
-3. **Regime 3 wastes 22% of offers**, selecting its effective sample toward later endings.
+3. **Regime 3 wastes 20% of offers**, selecting its effective sample toward later endings.
 4. **Switching at the offer is never faster than finding the winning card**, by construction; this is what makes staying a genuine gamble and is disclosed only through the observed alternative length.
 5. **The alternative's length is fixed once offered**; switching later restarts on the same number of cards, so later switches are mechanically less attractive than earlier ones at a given state — the forward-looking vector accounts for this.
 6. **The reward varies across sequences** (£0.10 upward in £0.05 steps, the five summing to a per-participant pool of £1.00–£1.50), independently of the draw; it enters as a control. Because the five sum to the pool, a sequence's reward is mildly negatively correlated with the others' — but participants never see the pool or the split in advance.
@@ -374,7 +375,7 @@ The instrument is a single HTML file; the backend a Google Apps Script writing t
 | # | Decision | Why it matters | Recommendation |
 |---|---|---|---|
 | **1** | **Per-card pay is logged but not paid.** `grid_pay` (£0.025 per card) is written to every row, but the results screen pays only rewards − penalties, plus the fixed £1.50 show-up fee. | The registered payment structure must match what is paid. | Decide whether to pay it; if not, drop it from the payment description. |
-| **2** | **Arms differ in the chance of a winning card** (0.40 vs ≈0.52). | Raw arm comparisons are not informational effects. | Keep; register §5.4 and lead with B3. |
+| **2** | **Arms differ in the chance of a winning card** (0.38 vs ≈0.50). | Raw arm comparisons are not informational effects. | Keep; register §5.4 and lead with B3. |
 | **3** | **Offer position distribution** (Beta(2,2), truncated before the ending in Regime 1). | Sets how much variation in elapsed time exists at the offer, and Regime 1's leak. | Keep, or flatten (Beta(1,1)) if the pilot shows too few early/late offers for A2. |
 | **4** | Prolific screening: countries, approval rate, prior-participation exclusions. | Registry country field; external validity. | Exclude anyone who took part in an earlier version of this task. |
 | **5** | Which documents are public at registration. | The source reveals hidden parameters. | Withhold instrument and README until complete; publish the consent text. |

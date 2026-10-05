@@ -1170,10 +1170,9 @@ const CFG = {
   // this probability — NOT tied to pInside, which governs only whether the
   // winning card is in the window at all. See drawLiveMask_().
   liveMarkP:  0.4,
-  // End probability: Normal(mean,sd) clamped to [min,max], rounded to the
-  // nearest 5% so the disclosed figure reads clean.
-  pInsideMean: 0.50,
-  pInsideSd:   0.20,
+  // End probability: [min,max] cut into 5 equal-width bands; each section
+  // draws from its own band (no band repeated), uniformly, rounded to the
+  // nearest 5% — see P_QUINTILES_.
   pInsideMin:  0.10,
   pInsideMax:  0.90,
   // Offer position: Beta(a,a) over the window (a>1 → centred, offers at the
@@ -1357,57 +1356,33 @@ function drawPause_(L, maxPause){
 }
 
 // ── QUINTILE-STRATIFIED PROBABILITY ─────────────────────────────────
-// A respondent's 5 sections could otherwise land unluckily skewed (several
-// low-pInside sections in a row, purely by chance). The real distribution
-// (Normal(pInsideMean,pInsideSd), clamped to [pInsideMin,pInsideMax],
-// rounded to the nearest 5%) is split into 5 bins of EQUAL PROBABILITY MASS;
-// SESSION.pQuintileOrder (shuffled once at consent) assigns one bin to each
-// section, so every respondent sees exactly one section from each bin, in
-// random order.
+// [pInsideMin,pInsideMax] = [10%,90%] is cut into 5 bands of EQUAL WIDTH
+// (16 points each: 10–26, 26–42, 42–58, 58–74, 74–90).
+// SESSION.pQuintileOrder (shuffled once at consent) assigns one band to each
+// section — drawn without replacement, so every respondent sees exactly one
+// section from each band, in random order. Within its band pInside is drawn
+// uniformly and rounded to the nearest 5%.
+//
+// Rounding is done so that bands never overlap: each 5% value belongs to the
+// band containing it (10–25, 30–40, 45–55, 60–70, 75–90), and the draw is
+// uniform over those values — the same as a uniform draw over the band's
+// share of the line followed by rounding, with no value reachable from two
+// bands.
 const P_GRID_ = (function(){
   const g=[]; for(let v=CFG.pInsideMin; v<=CFG.pInsideMax+1e-9; v+=0.05) g.push(Math.round(v*20)/20);
   return g;
 })();
-// Probability mass of the clamped-normal distribution landing on each 5%
-// grid value, by numerically integrating the Normal density (fine Riemann
-// sum). Boundary buckets (pInsideMin/pInsideMax) additionally absorb
-// everything clamped onto them from outside the range.
 const P_QUINTILES_ = (function(){
-  const gaussPdf = x => Math.exp(-0.5*((x-CFG.pInsideMean)/CFG.pInsideSd)**2);
-  const SUB = 400, lo = 0.5*(CFG.pInsideMin - (CFG.pInsideMax-CFG.pInsideMin)), hi = 0.5*(CFG.pInsideMax + (CFG.pInsideMax-CFG.pInsideMin)+1); // wide enough to catch the clamped tails
-  const mass = P_GRID_.map(()=>0);
-  const step = (hi-lo)/SUB;
-  for(let k=0;k<SUB;k++){
-    const x = lo + (k+0.5)*step;
-    const clamped = Math.min(CFG.pInsideMax, Math.max(CFG.pInsideMin, x));
-    const v = Math.round(clamped*20)/20;
-    const idx = P_GRID_.indexOf(v);
-    if(idx!==-1) mass[idx] += gaussPdf(x)*step;
-  }
-  const tot = mass.reduce((a,b)=>a+b,0);
-  const norm = mass.map(m=>m/tot);
-  // Walk the (already-ordered) grid, cutting into 5 contiguous groups as
-  // close to 20% mass each as possible (the distribution is unimodal, so a
-  // quantile bin is always a contiguous probability range).
-  const bins = []; let acc=0, startIdx=0;
-  for(let i=0;i<P_GRID_.length;i++){
-    acc += norm[i];
-    const isLast = i===P_GRID_.length-1;
-    const wouldOvershoot = acc >= (bins.length+1)*0.2 - 1e-9;
-    if((wouldOvershoot && bins.length<4) || isLast){
-      bins.push({ lo: P_GRID_[startIdx], hi: P_GRID_[i] });
-      startIdx = i+1;
-    }
-  }
-  while(bins.length<5) bins.push(bins[bins.length-1]); // degenerate guard, should not trigger
-  return bins;
+  const w = (CFG.pInsideMax - CFG.pInsideMin)/5;
+  return [0,1,2,3,4].map(k=>{
+    const edgeLo = CFG.pInsideMin + k*w, edgeHi = CFG.pInsideMin + (k+1)*w;
+    const values = P_GRID_.filter(v => v >= edgeLo-1e-9 && (k===4 ? v <= edgeHi+1e-9 : v < edgeHi-1e-9));
+    return { lo: values[0], hi: values[values.length-1], values };
+  });
 })();
-// Draw pInside from bin `qIdx` (0-4): uniform within the bin's [lo,hi]
-// range, then rounded to the nearest 5%.
+// Draw pInside from band `qIdx` (0-4): uniform over its 5% values.
 function drawPInsideFromQuintile_(qIdx){
-  const b = P_QUINTILES_[qIdx];
-  const raw = b.lo + Math.random()*(b.hi - b.lo);
-  return Math.round(raw*20)/20;
+  return pick(P_QUINTILES_[qIdx].values);
 }
 
 // The sequence's live/safe pattern: every card but the last is
@@ -1424,22 +1399,32 @@ function liveTaskNumbersOf_(live){
   return out;
 }
 
-// Participant-perspective expected number of FURTHER cards if they keep
-// going from local position lp (cards already done), given the disclosed
-// pInside, the visible pattern, and an alternative of altDur cards they'd
-// be moved onto if the window runs out: conditional on no winning card
-// among the orange cards already passed, it is uniform over the orange cards
-// still ahead with the remaining mass, else the rest of the window plus the
-// alternative. Logged at the offer as e_rem_at_pause.
-function eRemaining_(win, lp, altDur){
+// ── Participant-perspective benchmarks ──
+// Participants know nothing about the regimes, so every benchmark uses the
+// beliefs of the plain model they are told about (= regime 3, independent of
+// the offer): the winning card is in the sequence w.p. pInside and, if so,
+// equally likely on each orange card. They see seq_len, the pattern and
+// pInside from the start. At lp cards completed with no winning card yet,
+// orange cards already passed are ruled out (Bayes). The regime is never used.
+//
+// Expected number of MAIN-sequence cards still to play from lp, if they keep
+// going: up to the winning card, or to the end of the sequence if there is
+// none. At lp = 0 this is the expected length of the main sequence.
+function eRemaining_(win, lp){
   const L=win.length, p=win.pInside, W=win.liveTaskNumbers.length;
   const aheadLive = win.liveTaskNumbers.filter(m=>m>lp);
   const passedLive = W - aheadLive.length;
   const survive = 1 - passedLive*(p/W);
   let sumEnd = 0;
   for(const m of aheadLive) sumEnd += (p/W)*(m-lp);
-  const failTerm = (1-p)*((L-lp) + altDur);
-  return survive>0 ? (sumEnd + failTerm)/survive : (L-lp) + altDur;
+  return survive>0 ? (sumEnd + (1-p)*(L-lp))/survive : (L-lp);
+}
+// Expected cards still to do to EARN THE REWARD if they keep going from lp:
+// the remaining main cards plus, if there turns out to be no winning card,
+// the alternative they are then moved onto. Compared with altDur (switching
+// now) for the switch_gain_* benchmarks.
+function stayCost_(win, lp, altDur){
+  return eRemaining_(win, lp) + (1 - pAhead_(win, lp))*altDur;
 }
 // Same conditioning: probability the winning card is still ahead at lp.
 function pAhead_(win, lp){
@@ -1560,11 +1545,11 @@ function generateTasks(){
              activeLeftAtPause: liveTotal - activePassed, inactiveLeftAtPause: (length - liveTotal) - inactivePassed,
              leftPattern: livePattern.slice(0, pause), rightPattern: livePattern.slice(pause),
              pAheadAtPause: pAhead_(win, pause),
-             eRemAtPause:   eRemaining_(win, pause, altDuration),
-             // Same benchmark at card 0, with the same (realised) alternative,
-             // so e_rem_at_pause − e_rem_at_start isolates the update from the
-             // cards passed before the offer.
-             eRemAtStart:   eRemaining_(win, 0, altDuration),
+             eRemAtPause:   eRemaining_(win, pause),
+             stayCostAtPause: stayCost_(win, pause, altDuration),
+             // Expected length of the main sequence as seen at its start
+             // (seq_len, pattern and pInside are all known then).
+             eRemAtStart:   eRemaining_(win, 0),
              // Runtime state.
              penaltyAtPause:null, // this sequence's penalty when the offer fired (set in showOfferScreen)
              altRevealed:false, autoSwitched:false, autoSwitchAtTime:null,
@@ -2133,9 +2118,11 @@ function staticSeqFields_(task){
     left_pattern:   task.leftPattern,
     right_pattern:  task.rightPattern,
     p_ahead_at_pause:   r3(task.pAheadAtPause),
-    e_rem_at_pause:     r3(task.eRemAtPause),
-    e_rem_at_start:     r3(task.eRemAtStart),
-    alt_minus_expected: r3(task.altDuration - task.eRemAtPause),
+    // Recomputed from the sequence itself (not the stored task fields), so a
+    // snapshot saved by an earlier build still logs the current definitions.
+    e_rem_at_pause:     r3(eRemaining_(task, task.pause)),
+    e_rem_at_start:     r3(eRemaining_(task, 0)),
+    alt_minus_expected: r3(task.altDuration - stayCost_(task, task.pause, task.altDuration)), // < 0 ⇒ switching at the offer is shorter in expectation
     seq_frame_treatment: SESSION.nSeqFrame || 5,
     seq_is_bonus:   isBonusIdx_(task.index) ? 1 : 0,
   };
@@ -3486,7 +3473,7 @@ function updateStats(){
         `Sequence: <b>${maskStr}</b> (${task.length} cards), pInside <b>${Math.round(task.pInside*100)}%</b> (quintile ${task.pQuintileIdx+1})`,
         `Winning card: <b>${task.ends ? 'card '+task.endPos : 'none → auto-switch after card '+task.length}</b>`,
         `Offer after: <b>${task.offerWasted ? '<span style="color:#c84b2f">WASTED</span>' : task.pause+' cards'}</b>`,
-        `Alt: <b>${task.altDuration}</b> cards (global end ${task.altGlobalEnd} ∈ [${task.altWindowLo},${task.altWindowHi}]), E[rem|stay]@offer <b>${task.eRemAtPause.toFixed(2)}</b>, P(win ahead)@offer <b>${Math.round(task.pAheadAtPause*100)}%</b>`,
+        `Alt: <b>${task.altDuration}</b> cards (global end ${task.altGlobalEnd} ∈ [${task.altWindowLo},${task.altWindowHi}]), E[main cards left]@offer <b>${eRemaining_(task, task.pause).toFixed(2)}</b>, E[cost if staying] <b>${stayCost_(task, task.pause, task.altDuration).toFixed(2)}</b>, P(win ahead)@offer <b>${Math.round(task.pAheadAtPause*100)}%</b>`,
         `Pay: <b>${money_(task.pay)}</b> (pool ${money_(SESSION.rewardPool||0)}: ${(SESSION.rewardSplit||[]).map(money_).join(' / ')})`,
         `Reloads this seq: <b>${SESSION.reloadLog.filter(r=>r.seq_index===task.index).length}</b>`,
         `Seq frame: <b>${SESSION.nSeqFrame}</b>${isBonusIdx_(task.index)?' <b style="color:#2a7a4b">(bonus)</b>':''}`,
@@ -4060,21 +4047,25 @@ function endTask(outcome){
   else if(outcome==='forfeited'){ exitType='forfeit'; exitPos=nMain; }
   else { exitType='autokick'; exitPos=nMain; }
   const r3x = x => Math.round(x*1000)/1000;
-  // At a natural end the outcome is known: winning card found → nothing
-  // left (0 cards, nothing ahead); ran out → the alternative, for sure.
-  const eRemAtExit = exitType==='winning_card' ? 0
-                   : exitType==='no_winning_card' ? task.altDuration
-                   : eRemaining_(task, exitPos, task.altDuration);
-  const pAheadAtExit = (exitType==='winning_card' || exitType==='no_winning_card') ? 0 : pAhead_(task, exitPos);
+  // At a natural end the main sequence is over: 0 main cards left, nothing
+  // ahead. Cost of having stayed: 0 if the winning card was found, the whole
+  // alternative if it ran out.
+  const naturalEnd = exitType==='winning_card' || exitType==='no_winning_card';
+  const eRemAtExit = naturalEnd ? 0 : eRemaining_(task, exitPos);
+  const pAheadAtExit = naturalEnd ? 0 : pAhead_(task, exitPos);
+  const stayCostAtExit = exitType==='winning_card' ? 0
+                       : exitType==='no_winning_card' ? task.altDuration
+                       : stayCost_(task, exitPos, task.altDuration);
   // Penalty from the main-sequence cards completed before the exit decision.
   const penaltyAtExit = Math.round((task.grids||[])
     .filter(g=>g.phase==='main' && g.grid_n<=exitPos)
     .reduce((a,g)=>a+(g.n_missed+g.n_false_pos)*0.01, 0)*100)/100;
   // Switching at any point means doing alt_duration cards (fixed once
-  // offered); staying means e_rem cards in expectation. gain > 0 ⇒ switching
-  // is better in expectation.
-  const gainAtPause = task.eRemAtPause - task.altDuration;
-  const gainAtExit  = eRemAtExit - task.altDuration;
+  // offered); staying means stayCost_ cards in expectation (remaining main
+  // cards + the alternative if there is no winning card). gain > 0 ⇒
+  // switching is better in expectation.
+  const gainAtPause = stayCost_(task, task.pause, task.altDuration) - task.altDuration;
+  const gainAtExit  = stayCostAtExit - task.altDuration;
 
   // Real gap between the switch being pressed (offer: "Accept and switch",
   // step 1; button: the dialog opening) and being committed (Confirm, or a
