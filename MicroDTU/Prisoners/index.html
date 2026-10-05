@@ -117,6 +117,7 @@
     <div>
       <div class="k">Years in prison</div>
       <div class="v" id="total"></div>
+      <div class="s" id="total-split"></div>
     </div>
   </div>
 
@@ -215,7 +216,7 @@
 </div>
 
 <script>
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbyMMSa0l5EaMaBaIWNz3HaOidmFPXxC1b6MyyN5V5SA3gtnqr4T29_Gfs7Kx2tpggYqgg/exec";
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwx12sYDtDZz0zRKxLMbfsYqOjq3lix1JgGOl2HyB2z7C5AdcxDdMcda55g8NUGhYfGtw/exec";
 const POLL_MS = 3000;
 
 const PAYOFF = { confess:{ confess:-5, silent:-1 }, silent:{ confess:-10, silent:-2 } };
@@ -284,6 +285,8 @@ function renderStatus(){
   $("rounds-left").textContent = s.admin ? "Unlimited" : s.roundsLeft;
   $("penalty-line").textContent = s.admin ? "" : "Each round not played: " + fmt(s.missedRound) + " years";
   $("total").textContent = fmt(s.total);
+  $("total-split").textContent = s.phase1Total === null ? ""
+    : "Phase 1: " + fmt(s.phase1Total) + ", Phase 2: " + fmt(s.phaseTotal);
 }
 
 function incomingHtml(ids, label){
