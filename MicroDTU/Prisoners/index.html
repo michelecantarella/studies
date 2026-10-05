@@ -61,13 +61,7 @@
   .incoming{ background:var(--mark); border-radius:4px; padding:12px; margin:12px 0; }
   .incoming p{ margin:0 0 8px 0; }
   .incoming .btn{ background:var(--text); }
-  .partners{ display:flex; gap:8px; margin:0 0 12px 0; }
-  .partner{
-    flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:4px; background:var(--bg);
-    font-size:15px; cursor:pointer; color:var(--text); word-break:break-all;
-  }
-  .partner small{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }
-  .partner:disabled{ opacity:.45; cursor:default; }
+
 
   .choices{ display:flex; gap:10px; margin:14px 0; }
   .choice{
@@ -138,10 +132,16 @@
 
   <!-- Home: new interrogation -->
   <section id="v-home">
+    <div class="block" id="locked-game" style="display:none;">
+      <h2>Next interrogation with</h2>
+      <div class="big" id="locked-partner"></div>
+      <p class="muted" id="locked-line"></p>
+      <button class="btn" id="next-btn" type="button">Start next round</button>
+      <div class="note" id="locked-note"></div>
+    </div>
     <div class="block" id="new-game">
       <h2>New interrogation</h2>
       <p class="muted" id="home-rule"></p>
-      <div class="partners" id="partners"></div>
       <div id="home-incoming"></div>
       <label for="partner-id">Partner's ID</label>
       <input type="text" id="partner-id" autocomplete="off" autocapitalize="characters">
@@ -215,7 +215,7 @@
 </div>
 
 <script>
-const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwZrZ50QpgIY1k2nqyGGt-TVCXOMlqfqDQZkRnTQrfc4yPTwW4GPE9C3XN5EBK7PYuaxw/exec";
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbyMMSa0l5EaMaBaIWNz3HaOidmFPXxC1b6MyyN5V5SA3gtnqr4T29_Gfs7Kx2tpggYqgg/exec";
 const POLL_MS = 3000;
 
 const PAYOFF = { confess:{ confess:-5, silent:-1 }, silent:{ confess:-10, silent:-2 } };
@@ -296,16 +296,20 @@ function incomingHtml(ids, label){
 function renderHome(){
   const s = STATE;
   const done = !s.admin && s.roundsLeft <= 0;
-  $("new-game").style.display = done ? "none" : "block";
+  const locked = !done && s.lockedPartner;
+  $("locked-game").style.display = locked ? "block" : "none";
+  $("new-game").style.display = done || locked ? "none" : "block";
   $("all-done").style.display = done ? "block" : "none";
 
-  // phase 2: the partners chosen so far, tap to fill the ID
-  $("partners").innerHTML = s.partners.map(p =>
-    '<button class="partner" type="button" data-fill="' + esc(p.id) + '"' + (p.played >= p.max ? ' disabled' : '') + '>' +
-    esc(p.id) + '<small>' + p.played + ' of ' + p.max + ' rounds</small></button>').join("");
-  $("partners").style.display = s.partners.length ? "flex" : "none";
-  $("home-rule").textContent = s.partnersFull
-    ? "You play only with your two partners."
+  // phase 2: locked to the current partner until 3 rounds are done
+  if (locked) {
+    const p = s.partners.find(x => x.id === s.lockedPartner);
+    $("locked-partner").textContent = s.lockedPartner;
+    $("locked-line").textContent = "Round " + (p.played + 1) + " of " + p.max + " with this partner.";
+    $("locked-note").textContent = "";
+  }
+  $("home-rule").textContent = (PHASE === "2" && s.partners.length && !s.admin)
+    ? "Now find your second partner. You will play 3 rounds together."
     : PHASE_RULE[PHASE];
   $("partner-id").value = "";
   const mine = s.partners.map(p => p.id);
@@ -355,6 +359,8 @@ function renderResult(r){
   $("r-theirs").textContent = LABEL[r.theirs];
   $("r-theirpay").textContent = fmt(r.theirPayoff);
   $("matrix-result").innerHTML = matrixHtml([r.mine, r.theirs]);
+  const next = STATE.lockedPartner && STATE.roundsLeft > 0;
+  $("continue-btn").textContent = next ? "Next round with " + STATE.lockedPartner : "Continue";
   show("v-result");
 }
 
@@ -455,10 +461,8 @@ document.addEventListener("click", async e => {
   act({ action: "request", partner: partner }, "home-note");
 });
 
-$("partners").addEventListener("click", e => {
-  const b = e.target.closest("[data-fill]");
-  if (b && !b.disabled) $("partner-id").value = b.dataset.fill;
-});
+$("next-btn").addEventListener("click", () =>
+  act({ action: "request", partner: STATE.lockedPartner }, "locked-note"));
 
 $("cancel-btn").addEventListener("click", () => act({ action: "cancel" }, "hs-note"));
 
@@ -473,7 +477,14 @@ $("submit-btn").addEventListener("click", () => {
   act({ action: "choose", choice: CHOICE }, "choose-note");
 });
 
-$("continue-btn").addEventListener("click", () => route(STATE, null));
+$("continue-btn").addEventListener("click", () => {
+  if (STATE.lockedPartner && STATE.roundsLeft > 0) {
+    renderHome();
+    act({ action: "request", partner: STATE.lockedPartner }, "locked-note");
+  } else {
+    route(STATE, null);
+  }
+});
 
 // ---------- start ----------
 
