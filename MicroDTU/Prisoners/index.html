@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prisoners' Dilemma</title>
+<style>
+  :root{
+    --bg:#F7F7F5;
+    --text:#1C1C1C;
+    --muted:#6B6B6B;
+    --line:#D8D8D4;
+    --accent:#1C1C1C;
+    --mark:#F2D16B;
+    --error:#A3261B;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--text);
+    font-family:Arial, Helvetica, sans-serif; font-size:16px;
+    min-height:100vh;
+  }
+  .idbar{
+    position:sticky; top:0; z-index:5; background:var(--text); color:#fff;
+    padding:10px 20px; display:none;
+  }
+  .idbar .inner{ max-width:520px; margin:0 auto; display:flex; align-items:baseline; justify-content:space-between; gap:12px; }
+  .idbar .lbl{ font-size:13px; opacity:.7; }
+  .idbar .val{ font-family:Georgia, 'Times New Roman', serif; font-size:30px; letter-spacing:.02em; word-break:break-all; }
+  .idbar button{ background:none; border:none; color:#fff; opacity:.6; font-size:12px; text-decoration:underline; cursor:pointer; padding:0; }
+
+  .wrap{ max-width:520px; margin:0 auto; padding:20px 20px 60px; }
+  h1{ font-family:Georgia, 'Times New Roman', serif; font-size:24px; font-weight:400; margin:0 0 6px 0; }
+  h2{ font-family:Georgia, 'Times New Roman', serif; font-size:19px; font-weight:400; margin:26px 0 10px 0; }
+  p{ line-height:1.45; margin:0 0 12px 0; }
+  .muted{ color:var(--muted); font-size:14px; }
+  label{ display:block; font-size:13px; color:var(--muted); margin-bottom:4px; }
+  input[type=text]{
+    width:100%; padding:12px; border:1px solid var(--line); border-radius:4px;
+    background:#fff; color:var(--text); font-size:18px; margin-bottom:12px;
+    text-transform:uppercase;
+  }
+  input[readonly]{ background:var(--bg); }
+  .btn{
+    width:100%; padding:14px; background:var(--accent); color:#fff; border:none; border-radius:4px;
+    font-size:16px; cursor:pointer;
+  }
+  .btn.secondary{ background:#fff; color:var(--text); border:1px solid var(--line); margin-top:10px; }
+  .btn:disabled{ opacity:.4; cursor:default; }
+  .note{ font-size:14px; min-height:18px; margin-top:8px; color:var(--error); }
+
+  .status{ display:none; gap:10px; margin:0 0 6px 0; }
+  .status > div{ flex:1; background:#fff; border:1px solid var(--line); border-radius:4px; padding:10px 12px; }
+  .status .k{ font-size:12px; color:var(--muted); }
+  .status .v{ font-family:Georgia, 'Times New Roman', serif; font-size:28px; }
+  .status .s{ font-size:12px; color:var(--muted); }
+
+  .block{ background:#fff; border:1px solid var(--line); border-radius:4px; padding:16px; margin-top:16px; }
+  .block h2{ margin-top:0; }
+  .big{ font-family:Georgia, 'Times New Roman', serif; font-size:34px; word-break:break-all; margin:2px 0 8px 0; }
+  .incoming{ background:var(--mark); border-radius:4px; padding:12px; margin:12px 0; }
+  .incoming p{ margin:0 0 8px 0; }
+  .incoming .btn{ background:var(--text); }
+  .partners{ display:flex; gap:8px; margin:0 0 12px 0; }
+  .partner{
+    flex:1; padding:10px 6px; border:1px solid var(--line); border-radius:4px; background:var(--bg);
+    font-size:15px; cursor:pointer; color:var(--text); word-break:break-all;
+  }
+  .partner small{ display:block; color:var(--muted); font-size:12px; margin-top:2px; }
+  .partner:disabled{ opacity:.45; cursor:default; }
+
+  .choices{ display:flex; gap:10px; margin:14px 0; }
+  .choice{
+    flex:1; padding:22px 8px; border:2px solid var(--line); border-radius:6px; background:#fff;
+    font-size:18px; cursor:pointer; color:var(--text);
+  }
+  .choice.on{ border-color:var(--text); background:var(--mark); }
+
+  table.matrix{ border-collapse:collapse; width:100%; background:#fff; font-size:15px; }
+  table.matrix th, table.matrix td{ border:1px solid var(--line); padding:9px 6px; text-align:center; }
+  table.matrix th{ font-weight:400; color:var(--muted); font-size:13px; }
+  table.matrix td.hit{ background:var(--mark); font-weight:700; }
+  .matrix-cap{ font-size:13px; color:var(--muted); margin-top:6px; }
+
+  .reveal{ display:flex; gap:10px; margin:14px 0; }
+  .reveal div{ flex:1; background:#fff; border:1px solid var(--line); border-radius:4px; padding:12px; }
+  .reveal .who{ font-size:13px; color:var(--muted); word-break:break-all; }
+  .reveal .what{ font-size:18px; margin:4px 0; }
+  .reveal .pay{ font-family:Georgia, 'Times New Roman', serif; font-size:30px; }
+
+  table.hist{ border-collapse:collapse; width:100%; font-size:14px; }
+  table.hist th, table.hist td{ border-bottom:1px solid var(--line); padding:7px 4px; text-align:left; }
+  table.hist th{ font-weight:400; color:var(--muted); font-size:12px; }
+  table.hist td:last-child, table.hist th:last-child{ text-align:right; }
+
+  .waiting{ display:flex; align-items:center; gap:10px; margin:16px 0; }
+  .dot{ width:10px; height:10px; border-radius:50%; background:var(--text); animation:pulse 1.2s infinite; flex:none; }
+  @keyframes pulse{ 50%{ opacity:.2; } }
+  @media (prefers-reduced-motion: reduce){ .dot{ animation:none; } }
+
+  section{ display:none; }
+  section.show{ display:block; }
+  :focus-visible{ outline:2px solid var(--text); outline-offset:2px; }
+</style>
+</head>
+<body>
+
+<div class="idbar" id="idbar">
+  <div class="inner">
+    <div><div class="lbl">Your ID</div><div class="val" id="me"></div></div>
+    <button id="change-id" type="button">Change</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="status" id="status">
+    <div>
+      <div class="k">Rounds left</div>
+      <div class="v" id="rounds-left"></div>
+      <div class="s" id="penalty-line"></div>
+    </div>
+    <div>
+      <div class="k">Years in prison</div>
+      <div class="v" id="total"></div>
+    </div>
+  </div>
+
+  <!-- Login -->
+  <section id="v-login">
+    <h1>Prisoners' Dilemma</h1>
+    <p class="muted" id="phase-line"></p>
+    <label for="my-id">Your ID (student number or name)</label>
+    <input type="text" id="my-id" autocomplete="off" autocapitalize="characters">
+    <button class="btn" id="join-btn" type="button">Join</button>
+    <div class="note" id="login-note"></div>
+  </section>
+
+  <!-- Home: new interrogation -->
+  <section id="v-home">
+    <div class="block" id="new-game">
+      <h2>New interrogation</h2>
+      <p class="muted" id="home-rule"></p>
+      <div class="partners" id="partners"></div>
+      <div id="home-incoming"></div>
+      <label for="partner-id">Partner's ID</label>
+      <input type="text" id="partner-id" autocomplete="off" autocapitalize="characters">
+      <button class="btn" id="start-btn" type="button">Start interrogation</button>
+      <div class="note" id="home-note"></div>
+    </div>
+    <div class="block" id="all-done" style="display:none;">
+      <p style="margin:0;">You have played all rounds in this phase.</p>
+    </div>
+
+    <h2>Payoffs</h2>
+    <div id="matrix-home"></div>
+
+    <div id="history-box" style="display:none;">
+      <h2>Your rounds</h2>
+      <table class="hist"><thead><tr><th>#</th><th>Partner</th><th>You</th><th>Partner</th><th>Years</th></tr></thead>
+      <tbody id="history"></tbody></table>
+    </div>
+  </section>
+
+  <!-- Handshake: waiting for the partner to enter my ID -->
+  <section id="v-handshake">
+    <div class="block">
+      <h2>Waiting for</h2>
+      <div class="big" id="hs-partner"></div>
+      <div class="waiting"><div class="dot"></div><span>Ask them to enter your ID: <strong id="hs-me"></strong></span></div>
+      <div id="hs-incoming"></div>
+      <button class="btn secondary" id="cancel-btn" type="button">Cancel</button>
+      <div class="note" id="hs-note"></div>
+    </div>
+  </section>
+
+  <!-- Paired: choose -->
+  <section id="v-choose">
+    <div class="block">
+      <h2>You are paired with</h2>
+      <div class="big" id="choose-partner"></div>
+      <p class="muted">Check that this is the person in front of you. Your partner sees your choice only after both of you have chosen.</p>
+      <div class="choices">
+        <button class="choice" data-choice="confess" type="button">Confess</button>
+        <button class="choice" data-choice="silent" type="button">Stay silent</button>
+      </div>
+      <button class="btn" id="submit-btn" type="button" disabled>Submit choice</button>
+      <div class="note" id="choose-note"></div>
+    </div>
+    <h2>Payoffs</h2>
+    <div id="matrix-choose"></div>
+  </section>
+
+  <!-- Waiting for the partner's choice -->
+  <section id="v-wait">
+    <div class="block">
+      <h2>Paired with</h2>
+      <div class="big" id="wait-partner"></div>
+      <p>You chose: <strong id="wait-choice"></strong></p>
+      <div class="waiting"><div class="dot"></div><span>Waiting for your partner to choose.</span></div>
+    </div>
+  </section>
+
+  <!-- Result -->
+  <section id="v-result">
+    <h1>Result</h1>
+    <div class="reveal">
+      <div><div class="who">You</div><div class="what" id="r-mine"></div><div class="pay" id="r-mypay"></div></div>
+      <div><div class="who" id="r-partner"></div><div class="what" id="r-theirs"></div><div class="pay" id="r-theirpay"></div></div>
+    </div>
+    <div id="matrix-result"></div>
+    <button class="btn" id="continue-btn" type="button" style="margin-top:16px;">Continue</button>
+  </section>
+
+</div>
+
+<script>
+const BACKEND_URL = "https://script.google.com/macros/s/AKfycbwZrZ50QpgIY1k2nqyGGt-TVCXOMlqfqDQZkRnTQrfc4yPTwW4GPE9C3XN5EBK7PYuaxw/exec";
+const POLL_MS = 3000;
+
+const PAYOFF = { confess:{ confess:-5, silent:-1 }, silent:{ confess:-10, silent:-2 } };
+const LABEL = { confess:"Confess", silent:"Stay silent" };
+
+const PHASE = new URLSearchParams(location.search).get("phase");
+const PHASE_RULE = {
+  "1": "Play each round with a different partner.",
+  "2": "Choose two partners and play 3 rounds with each."
+};
+
+let ME = localStorage.getItem("pd_id") || "";
+let STATE = null;
+let CHOICE = "";
+let pollTimer = null;
+let busy = false;
+
+const $ = id => document.getElementById(id);
+const fmt = n => (n < 0 ? "\u2212" + Math.abs(n) : String(n));
+const norm = s => String(s || "").trim().replace(/\s+/g, " ").toUpperCase();
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+function show(view){
+  document.querySelectorAll("section").forEach(s => s.classList.toggle("show", s.id === view));
+  const inGame = view !== "v-login";
+  $("idbar").style.display = inGame ? "block" : "none";
+  $("status").style.display = inGame ? "flex" : "none";
+  window.scrollTo(0, 0);
+}
+
+function matrixHtml(hit){
+  // rows: you, columns: partner. Cells: your payoff, partner's payoff
+  const opts = ["confess", "silent"];
+  const head = '<tr><th></th>' + opts.map(o => '<th>Partner<br>' + LABEL[o] + '</th>').join("") + '</tr>';
+  const rows = opts.map(r => '<tr><th>You<br>' + LABEL[r] + '</th>' + opts.map(c => {
+    const on = hit && hit[0] === r && hit[1] === c ? ' class="hit"' : '';
+    return '<td' + on + '>' + fmt(PAYOFF[r][c]) + ', ' + fmt(PAYOFF[c][r]) + '</td>';
+  }).join("") + '</tr>').join("");
+  return '<table class="matrix">' + head + rows + '</table>' +
+    '<div class="matrix-cap">Years in prison: yours, then your partner\'s.</div>';
+}
+
+async function post(body){
+  const r = await fetch(BACKEND_URL, {
+    method: "POST",
+    headers: { "Content-Type": "text/plain;charset=utf-8" },
+    body: JSON.stringify(Object.assign({ phase: PHASE, id: ME }, body))
+  });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d;
+}
+
+async function fetchState(){
+  const url = BACKEND_URL + "?action=state&phase=" + PHASE + "&id=" + encodeURIComponent(ME);
+  const r = await fetch(url, { cache: "no-store" });
+  const d = await r.json();
+  if (d.error) throw new Error(d.error);
+  return d;
+}
+
+// ---------- rendering ----------
+
+function renderStatus(){
+  const s = STATE;
+  $("rounds-left").textContent = s.admin ? "Unlimited" : s.roundsLeft;
+  $("penalty-line").textContent = s.admin ? "" : "Each round not played: " + fmt(s.missedRound) + " years";
+  $("total").textContent = fmt(s.total);
+}
+
+function incomingHtml(ids, label){
+  return ids.map(x =>
+    '<div class="incoming"><p><strong>' + esc(x) + '</strong> entered your ID.</p>' +
+    '<button class="btn" type="button" data-play="' + esc(x) + '">' + label + ' ' + esc(x) + '</button></div>'
+  ).join("");
+}
+
+function renderHome(){
+  const s = STATE;
+  const done = !s.admin && s.roundsLeft <= 0;
+  $("new-game").style.display = done ? "none" : "block";
+  $("all-done").style.display = done ? "block" : "none";
+
+  // phase 2: the partners chosen so far, tap to fill the ID
+  $("partners").innerHTML = s.partners.map(p =>
+    '<button class="partner" type="button" data-fill="' + esc(p.id) + '"' + (p.played >= p.max ? ' disabled' : '') + '>' +
+    esc(p.id) + '<small>' + p.played + ' of ' + p.max + ' rounds</small></button>').join("");
+  $("partners").style.display = s.partners.length ? "flex" : "none";
+  $("home-rule").textContent = s.partnersFull
+    ? "You play only with your two partners."
+    : PHASE_RULE[PHASE];
+  $("partner-id").value = "";
+  const mine = s.partners.map(p => p.id);
+  const inc = s.partnersFull ? s.incoming.filter(x => mine.includes(x)) : s.incoming;
+  $("home-incoming").innerHTML = incomingHtml(inc, "Play with");
+  $("home-note").textContent = "";
+
+  $("matrix-home").innerHTML = matrixHtml(null);
+  $("history-box").style.display = s.rounds.length ? "block" : "none";
+  $("history").innerHTML = s.rounds.map((r, i) =>
+    '<tr><td>' + (i + 1) + '</td><td>' + esc(r.partner) + '</td><td>' + LABEL[r.mine] + '</td><td>' +
+    LABEL[r.theirs] + '</td><td>' + fmt(r.myPayoff) + '</td></tr>').join("");
+  show("v-home");
+}
+
+function renderHandshake(){
+  const s = STATE;
+  $("hs-partner").textContent = s.pending.partner;
+  $("hs-me").textContent = ME;
+  const others = s.incoming.filter(x => x !== s.pending.partner);
+  $("hs-incoming").innerHTML = others.length
+    ? '<p class="muted" style="margin-top:12px;">Wrong ID?</p>' + incomingHtml(others, "Play with")
+    : "";
+  show("v-handshake");
+}
+
+function renderChoose(){
+  $("choose-partner").textContent = STATE.current.partner;
+  CHOICE = "";
+  document.querySelectorAll(".choice").forEach(b => b.classList.remove("on"));
+  $("submit-btn").disabled = true;
+  $("choose-note").textContent = "";
+  $("matrix-choose").innerHTML = matrixHtml(null);
+  show("v-choose");
+}
+
+function renderWait(){
+  $("wait-partner").textContent = STATE.current.partner;
+  $("wait-choice").textContent = LABEL[STATE.current.mine];
+  show("v-wait");
+}
+
+function renderResult(r){
+  $("r-mine").textContent = LABEL[r.mine];
+  $("r-mypay").textContent = fmt(r.myPayoff);
+  $("r-partner").textContent = r.partner;
+  $("r-theirs").textContent = LABEL[r.theirs];
+  $("r-theirpay").textContent = fmt(r.theirPayoff);
+  $("matrix-result").innerHTML = matrixHtml([r.mine, r.theirs]);
+  show("v-result");
+}
+
+// Decide which screen to show from a fresh state.
+// roundsBefore: rounds done before this update, to detect a just-finished round.
+let currentView = "";
+function route(s, roundsBefore){
+  STATE = s;
+  renderStatus();
+  if (roundsBefore !== null && s.rounds.length > roundsBefore) {
+    stopPolling(); currentView = "result";
+    renderResult(s.rounds[s.rounds.length - 1]);
+    return;
+  }
+  if (s.current && !s.current.mine) {
+    stopPolling();
+    if (currentView !== "choose") { currentView = "choose"; renderChoose(); }
+    return;
+  }
+  if (s.current && s.current.mine) { currentView = "wait"; renderWait(); startPolling(); return; }
+  if (s.pending) { currentView = "handshake"; renderHandshake(); startPolling(); return; }
+  stopPolling(); currentView = "home"; renderHome();
+}
+
+function startPolling(){
+  if (pollTimer) return;
+  pollTimer = setInterval(async () => {
+    if (busy) return;
+    try {
+      const before = STATE.rounds.length;
+      route(await fetchState(), before);
+    } catch (e) { /* keep polling */ }
+  }, POLL_MS);
+}
+function stopPolling(){ if (pollTimer) clearInterval(pollTimer); pollTimer = null; }
+
+async function act(body, noteId){
+  if (busy) return; busy = true;
+  document.querySelectorAll("button").forEach(b => b.dataset.wasDisabled = b.disabled);
+  document.querySelectorAll(".btn").forEach(b => b.disabled = true);
+  $(noteId).textContent = "";
+  try {
+    const before = STATE ? STATE.rounds.length : null;
+    route(await post(body), before);
+  } catch (e) {
+    $(noteId).textContent = e.message || "Could not connect. Try again.";
+  }
+  document.querySelectorAll(".btn").forEach(b => b.disabled = b.dataset.wasDisabled === "true");
+  if (currentView === "choose") $("submit-btn").disabled = !CHOICE;
+  busy = false;
+}
+
+async function enter(){
+  $("me").textContent = ME;
+  route(await post({ action: "join" }), null);
+}
+
+// ---------- events ----------
+
+$("join-btn").addEventListener("click", async () => {
+  const id = norm($("my-id").value);
+  if (!id) { $("login-note").textContent = "Enter your ID."; return; }
+  $("join-btn").disabled = true;
+  $("login-note").textContent = "";
+  ME = id;
+  try {
+    await enter();
+    localStorage.setItem("pd_id", ME);
+  } catch (e) {
+    $("login-note").textContent = e.message || "Could not connect. Try again.";
+  }
+  $("join-btn").disabled = false;
+});
+
+$("change-id").addEventListener("click", () => {
+  stopPolling();
+  localStorage.removeItem("pd_id");
+  ME = ""; STATE = null; currentView = ""; $("my-id").value = "";
+  show("v-login");
+});
+
+$("start-btn").addEventListener("click", () => {
+  const partner = norm($("partner-id").value);
+  if (!partner) { $("home-note").textContent = "Enter your partner's ID."; return; }
+  if (partner === ME) { $("home-note").textContent = "Enter your partner's ID, not yours."; return; }
+  act({ action: "request", partner: partner }, "home-note");
+});
+
+// "X entered your ID" buttons, on home and on the handshake screen
+document.addEventListener("click", async e => {
+  const b = e.target.closest("[data-play]");
+  if (!b) return;
+  const partner = b.dataset.play;
+  if (STATE.pending) {
+    await act({ action: "cancel" }, "hs-note");
+    if (STATE.pending) return;
+  }
+  act({ action: "request", partner: partner }, "home-note");
+});
+
+$("partners").addEventListener("click", e => {
+  const b = e.target.closest("[data-fill]");
+  if (b && !b.disabled) $("partner-id").value = b.dataset.fill;
+});
+
+$("cancel-btn").addEventListener("click", () => act({ action: "cancel" }, "hs-note"));
+
+document.querySelectorAll(".choice").forEach(b => b.addEventListener("click", () => {
+  CHOICE = b.dataset.choice;
+  document.querySelectorAll(".choice").forEach(x => x.classList.toggle("on", x === b));
+  $("submit-btn").disabled = false;
+}));
+
+$("submit-btn").addEventListener("click", () => {
+  if (!CHOICE) return;
+  act({ action: "choose", choice: CHOICE }, "choose-note");
+});
+
+$("continue-btn").addEventListener("click", () => route(STATE, null));
+
+// ---------- start ----------
+
+if (PHASE !== "1" && PHASE !== "2") {
+  $("phase-line").textContent = "This link is incomplete. Scan the QR code on the slides again.";
+  $("join-btn").disabled = true;
+  show("v-login");
+} else {
+  $("phase-line").textContent = "Phase " + PHASE + ". " + PHASE_RULE[PHASE];
+  if (ME) {
+    enter().catch(e => { $("login-note").textContent = e.message; show("v-login"); });
+  } else {
+    show("v-login");
+  }
+}
+</script>
+</body>
+</html>
