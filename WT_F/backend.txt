@@ -146,7 +146,7 @@ var RESP_HEADER = [
   'pay', 'regime', 'sub_regime',
   'seq_len', 'live_pattern', 'n_live', 'p_inside', 'p_quintile',
   'ends', 'end_pos', 'n_req',
-  'pause', 'offer_wasted',
+  'pause', 'pause_never_shown',
   'alt_duration', 'alt_global_end', 'alt_window_lo', 'alt_window_hi',
   'active_passed_at_pause', 'inactive_passed_at_pause',
   'active_left_at_pause', 'inactive_left_at_pause',
@@ -154,30 +154,28 @@ var RESP_HEADER = [
   'p_ahead_at_pause', 'e_rem_at_pause', 'e_rem_at_start', 'alt_minus_expected',
   'seq_frame_treatment', 'seq_is_bonus',
   // ── Timestamps / reloads ──
-  'start_at', 'end_at', 'seq_start_at_time', 'briefing_ended_at',
+  'start_at', 'end_at', 'briefing_ended_at',
   'seq_reload_count',
   // ── Outcome ──
   'outcome_summary', 'card_order', 'alt_revealed',
-  // ── The offer banner ──
-  'switch_offered_at_task', 'switch_offered_at_time',
-  'pause_secs', 'penalty_at_pause', 'deliberation_secs', 'offer_choice', 'offer_undo_count',
-  'auto_refused', 'auto_confirmed',
-  // ── Voluntary switch (offer banner or Alternative button) ──
-  'switch_taken', 'switch_source',
-  'switch_taken_at_task', 'switch_taken_at_time',
-  'switch_pressed_at_task', 'switch_pressed_at_time', 'switch_decision_secs',
-  'alt_button_opens', 'alt_button_undos',
-  'switched_at', 'switched_at_pause',
-  // ── Exit point: the last stay-or-leave decision in the main sequence ──
+  // ── The pause (when the alternative is offered) ──
+  'pause_started_at_time', 'pause_duration_secs', 'pause_elapsed_secs', 'pause_outcome',
+  'penalty_at_pause',
+  // ── Switching (only with the Alternative button, during the pause or later) ──
+  'switched', 'switched_at_pause', 'switched_at', 'switched_at_time',
+  'switch_pressed_at', 'switch_pressed_at_time', 'switch_decision_secs',
+  'switch_dialog_opens', 'switch_dialog_cancels',
+  // ── Main sequence ran out without a winning card ──
+  'no_winning_card', 'no_winning_card_at_time',
+  // ── The alternative actually started ──
+  'alt_started', 'alt_started_at_time',
+  // ── Give up / autokick ──
+  'forfeited', 'forfeited_in', 'forfeited_at', 'forfeited_at_time', 'auto_kicked',
+  // ── Exit point (where the main sequence was left) and benchmarks ──
   'exit_type', 'sunk_cost_at_exit', 'alt_available_at_exit',
   'p_ahead_at_exit', 'e_rem_at_exit', 'penalty_at_exit',
   'switch_gain_at_pause', 'switch_better_at_pause',
   'switch_gain_at_exit', 'switch_better_at_exit',
-  // ── Automatic switch (window ran out without a winning card) ──
-  'auto_switched', 'auto_switch_at_time', 'alt_phase_started_at',
-  // ── Forfeit / autokick ──
-  'forfeit_taken', 'forfeit_phase', 'forfeit_taken_at_task', 'forfeit_taken_at_time',
-  'forfeited_at', 'auto_kicked',
   // ── Effort and earnings ──
   'n_main_tasks_done', 'n_alt_tasks_done', 'n_tasks_done',
   'earnings', 'grid_pay', 'penalty', 'net_earnings',

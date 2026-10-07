@@ -11,7 +11,7 @@
 
 ## 1. What the study measures
 
-How people manage sunk time when a task has an uncertain end. In each of 5 sections, participants work through a **sequence of cards** (each card is a short grid task) to earn the section's reward. The sequence may or may not contain a **winning card**: finding it ends the sequence and pays the reward. At some point an **alternative sequence** of known, fixed length is offered at the same reward; once offered it stays available. If the sequence runs out without a winning card, the participant is **moved onto the alternative automatically** and still earns the reward by completing it. Giving up (forfeit) loses the reward.
+How people manage sunk time when a task has an uncertain end. In each of 5 sections, participants work through a **sequence of cards** (each card is a short grid task) to earn the section's reward. The sequence may or may not contain a **winning card**: finding it ends the sequence and pays the reward. At some point an **alternative sequence** of known, fixed length is offered at the same reward; once offered it stays available. If the sequence runs out without a winning card, the participant **can still switch to the alternative** (or give up) and earns the reward by completing it. Giving up (forfeit) loses the reward.
 
 Every card is marked **orange** (it can be the winning card) or **white** (it can't), mixed at random, so the time already spent in a sequence splits into time spent under genuine risk of finishing (orange) and time that could never have finished it (white).
 
@@ -74,7 +74,7 @@ A 3×3 grid of emoji revealed left to right, one cell every 500 ms (4.5 s), then
 
 ### The offer
 
-When the offer point is reached (§5), the instruction line is replaced by a banner: "The alternative sequence is now available — Do you accept the offer? *N* cards", with **Accept and switch** / **Refuse and stay** and a countdown of Uniform[10, 45] s. Pressing either button opens a confirm popup (**Confirm** / **Undo**) while the same countdown keeps running. If time runs out with no choice, the participant stays (`auto_refused`); if it runs out on the confirm popup, the pending choice is committed (`auto_confirmed`). No card runs while the banner is open.
+When the offer point is reached (§5) the task **pauses**: the instruction line is replaced by a banner "The alternative sequence is now available", with "The task will resume in *N* seconds" (Uniform[10, 45] s) and a **Resume now** button, and the Alternative button turns blue, shows its length and flashes. **Switching is done only with the Alternative button** (now or later), which opens a dialog (**Confirm switch** / **Keep going**). A switch confirmed during the pause is logged as `switched_at_pause = 1`, `pause_outcome = switched`; Resume now = `pause_outcome = resume_now`; the countdown running out = `timeout`. If it runs out while the dialog is open, the task resumes only when the dialog is closed with Keep going. Every opening of the switch dialog is counted in `switch_dialog_opens` (and "Keep going" in `switch_dialog_cancels`). No card runs while the banner is open; when it closes without a switch the Alternative button flashes again.
 
 ### The alternative
 
@@ -86,12 +86,12 @@ Section label, then two equal panels side by side in the task screen's panel sty
 
 > Remember:
 > • Only orange cards can be the winning card.
-> • If you reach the end without finding the winning card, you are moved to the alternative automatically: you still earn your reward by completing it.
+> • If you reach the end without finding the winning card, you can still switch to the alternative: you still earn your reward by completing it.
 > • Once offered, the alternative remains available until the end of the sequence.
 
 then "Start sequence". For the unannounced 5th sequence of the "4" framing group, a bonus-sequence message comes first (§7).
 - When the offer fires, the panel turns **blue** with the length.
-- After the banner closes (refused or lapsed), the blue panel is a **button**: clicking it opens a dialog ("Switch to the alternative? You will complete *N* cards…" — **Confirm switch** / **Keep going**). It stays available until the main sequence ends.
+- After the pause, the blue panel stays a **button**: clicking it opens the same dialog ("Switch to the alternative? You will complete *N* cards…" — **Confirm switch** / **Keep going**). It stays available until the main sequence ends.
 - Taking the alternative, by any route, restarts progress on a fixed run of `alt_duration` cards; there is no switching back.
 
 ### Give up
@@ -182,11 +182,11 @@ Composition of elapsed time at the offer (orange − white cards already done): 
 
 Staged on the real task screen: everything is dimmed except what the current step explains, with a demo sequence (10 cards, orange at 3, 6 and 10, 40%, alternative of 11 cards, £0.10) and a tip box with Back/Continue.
 
-1. The grid task · 2. one practice round · 3. the sequence as a stack of cards (10–15, all visible) · 4. sequence counter (says 4 or 5 per the framing treatment) · 5. reward (earned by the winning card or by completing the alternative) · 6. penalties · 7. give up · 8. the probability of a winning card · 9. white cards · 10. orange cards, the last one always orange · 11. the offer — the alternative's length is revealed only then · 12. accept or refuse · 13. the offer screen is short, but the alternative stays available from the blue button; switching can't be undone · 14. no winning card → moved onto the alternative automatically, reward kept · 15. ready (no payment for the walkthrough) · 16. comprehension check.
+1. The grid task · 2. one practice round · 3. the sequence as a stack of cards (10–15, all visible) · 4. sequence counter (says 4 or 5 per the framing treatment) · 5. reward (earned by the winning card or by completing the alternative) · 6. penalties · 7. give up · 8. the probability of a winning card · 9. white cards · 10. orange cards, the last one always orange · 11. the offer — the alternative's length is revealed only then · 12. switching = clicking the Alternative button (the only way), can't be undone · 13. the pause is short (Resume now), the alternative stays available afterwards · 14. no winning card → they can still switch to the alternative and earn the reward · 15. ready (no payment for the walkthrough) · 16. comprehension check.
 
 **Comprehension check** (must be answered correctly in order; wrong answers are counted per question and the options reshuffled, never putting the right answer back where the participant just clicked):
 1. How do I win my reward? → *By finding a winning card or by completing the alternative.*
-2. What happens if I reach the end of the sequence without finding a winning card? → *I am moved to the alternative automatically, and I still earn my reward by completing it.*
+2. What happens if I reach the end of the sequence without finding a winning card? → *I can still switch to the alternative, and earn my reward by completing it.*
 3. What happens if I switch to the alternative? → *My progress resets and I cannot switch back to the main sequence.*
 
 ---
@@ -205,9 +205,9 @@ Half the respondents are told the study has 5 sequences, half that it has 4. Eve
 | Per-card pay | £0.025 per card | Logged (`grid_pay`), not shown on the results screen |
 | Mistake penalty | −£0.01 per miss / wrong click | Subtracted from the total bonus: penalties accumulate across sequences and apply even if a sequence is forfeited, switched or abandoned by a reload (as the training says). A sequence ends by autokick when its own penalty reaches its own reward |
 | Training bonus | none | `TRAINING_BONUS = 0` (Meta `training_bonus` kept, always 0), so the bonus never exceeds the £1.50 pool cap |
-| Show-up fee | £1.50 | Fixed, paid by Prolific |
+| Show-up fee | £1.25 | Fixed, paid by Prolific |
 
-Results screen: "Your bonus reward" = rewards − penalties, never negative, so at most £1.50 (`Meta.final_bonus`), approved manually; "Your show up fee" = £1.50. Section result screen shows the net amount when there were penalties, and confetti for a paid sequence.
+Results screen: "Your bonus reward" = rewards − penalties, never negative, so at most £1.50 (`Meta.final_bonus`), approved manually; "Your show up fee" = £1.25. Section result screen shows the net amount when there were penalties, and confetti for a paid sequence.
 
 ---
 
@@ -256,14 +256,15 @@ The debug bar shows the regime (and this sequence's sub-regime), the card patter
 
 | Label | When |
 |---|---|
-| `continued and found the winning card` | Saw the offer, stayed, found the winning card |
-| `found the winning card before the offer` | The winning card came before the offer point (offer wasted, regime 3) |
-| `switched at offer` | Accepted on the offer banner, completed the alternative |
-| `switched later via button` | Refused / let the offer lapse, later switched with the button, completed the alternative |
-| `auto-switched (no winning card)` | No winning card, moved onto the alternative, completed it |
-| `forfeited before offer` / `continued and forfeited` | Gave up in the main sequence |
-| `auto-kicked before offer` / `continued and auto-kicked` | Autokick in the main sequence |
-| any of the three alternative labels + ` and forfeited` / ` and auto-kicked` | Reached the alternative, then gave up / was auto-kicked |
+| `found the winning card` | Stayed after the pause, found the winning card |
+| `found the winning card before the pause` | The winning card came before the pause point (no pause; regime 3) |
+| `switched at the pause` | Switched during the pause, completed the alternative |
+| `switched after the pause` | Switched later with the Alternative button, completed the alternative |
+| `no winning card, took the alternative` | No winning card, chose the alternative, completed it |
+| `no winning card, gave up` | No winning card, gave up on the "No winning card" screen |
+| `gave up before the pause` / `gave up after the pause` | Gave up in the main sequence |
+| `auto-kicked before the pause` / `auto-kicked after the pause` | Autokick in the main sequence |
+| any of the three alternative labels + `, then gave up` / `, then auto-kicked` | Started the alternative, then gave up / was auto-kicked |
 | `abandoned before reload — superseded by a later attempt` | Discarded by a new-session reload |
 
 ---
@@ -273,7 +274,7 @@ The debug bar shows the regime (and this sequence's sub-regime), the card patter
 ```js
 const BACKEND_URL = 'PASTE_WT_F_APPS_SCRIPT_URL_HERE'; // Apps Script /exec URL (§2)
 const COMPLETION_CODE = 'C194BROI', NO_CONSENT_CODE = 'C1E6TYZR';
-const GRID_PAY_PER_TASK = 0.025, SHOW_UP_FEE = 1.50;
+const GRID_PAY_PER_TASK = 0.025, SHOW_UP_FEE = 1.25;
 const LABOR_INCOME_WARN_THRESHOLD = 8000;
 
 const CFG = {
@@ -294,4 +295,8 @@ const CFG = {
 
 ## 14. Participant backup
 
-If the final save can't be confirmed after 8 attempts, the results screen shows an error reference code and Share (where supported) / Copy / Download buttons for a JSON backup (`wt_study_backup_<pid>.json`), with instructions to send it to the research team via Prolific (students: by email).
+If the final save can't be confirmed after 8 attempts, the results screen shows an error reference code, Try again, and Download / Copy buttons for an **encrypted** backup (`wt_backup_<pid>_<code>.enc.json`), with instructions to contact the research team immediately (Prolific message or michele.cantarella@imtlucca.it) and not to lose the file.
+
+**Encryption.** Hybrid: a fresh AES-256-GCM key per backup, encrypted with the team's RSA-3072 public key (RSA-OAEP), embedded in `index.html` as `BACKUP_PUBLIC_KEY_SPKI_B64`. The envelope keeps only `prolific_pid`, `study_id`, `error_code`, `created_at` in clear; everything else (the same `study_level` + `sections` the backend receives) can be read only with the private key, which lives outside this folder (`DATA/WastedTime/keys/WT_F_backup_private.pem`) and must never be published. A participant can't read or edit the content; since the public key is public, a determined participant could still forge a whole new file, so `tools/decrypt_backups.R` cross-checks the payoff fields (pays sum to `reward_pool`, earnings consistent with outcome and pay, `final_bonus` = rewards − penalties) — and the server's last progress save can be compared too.
+
+**Decrypting.** `Rscript tools/decrypt_backups.R [folder] [output.xlsx]` (default folder: Downloads): decrypts every backup found (downloaded files, or copied text saved as .txt/.json; older unencrypted `wt_study_backup_<pid>.json` files are read too and flagged), saves `<name>.decrypted.json` next to each, and writes an Excel file with **Meta** and **Responses** sheets in exactly the study sheet's column order (read from `backend.txt`) plus a **Backups** sheet with the checks.

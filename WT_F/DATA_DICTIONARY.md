@@ -69,10 +69,10 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | p_quintile | 1–5 | Band `p_inside` was drawn from: [10%, 90%] cut into 5 of equal width → 1 = 10–25, 2 = 30–40, 3 = 45–55, 4 = 60–70, 5 = 75–90 (each respondent gets each band once) |
 | ends | 0/1 | 1 if the winning card is in the sequence |
 | end_pos | number | Card number (1-indexed) of the winning card; blank if `ends = 0` |
-| n_req | number | Main cards that would be played with no switch/forfeit: `end_pos`, or `seq_len` if there is no winning card (then the participant is moved onto the alternative) |
-| pause | number | Cards completed when the offer appears (0 = before the first card); centred Beta(2,2) over the sequence, truncated before the winning card when the ending is drawn first |
-| offer_wasted | 0/1 | 1 if the winning card came at or before `pause`, so the offer never appeared (only possible when `sub_regime = 3`) |
-| alt_duration | number | Length of the alternative (cards). **What the participant sees and does** if they take it — at the offer, later via the button, or when moved onto it automatically |
+| n_req | number | Main cards that would be played with no switch/forfeit: `end_pos`, or `seq_len` if there is no winning card |
+| pause | number | Cards completed when the pause starts and the alternative is offered (0 = before the first card); centred Beta(2,2) over the sequence, truncated before the winning card when the ending is drawn first |
+| pause_never_shown | 0/1 | 1 if the winning card came at or before `pause`, so the pause never happened (only possible when `sub_regime = 3`) |
+| alt_duration | number | Length of the alternative (cards). **What the participant sees and does** if they take it — during the pause, later via the button, or after reaching the end without a winning card |
 | alt_global_end | number | Overall card count at which the alternative ends if taken the moment it's offered = `pause + alt_duration`. Drawn uniformly from the hidden "shadow window" right after the main one: `seq_len+1 … 2·seq_len` |
 | alt_window_lo, alt_window_hi | number | That shadow window's bounds (`seq_len+1`, `2·seq_len`) |
 | active_passed_at_pause, inactive_passed_at_pause | number | Orange / white cards already completed at the offer (sum = `pause`) |
@@ -81,7 +81,7 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | e_rem_at_start | number | **Expected length of the main sequence at its start**, in cards: what the participant can expect knowing `seq_len`, the pattern and `p_inside` |
 | e_rem_at_pause | number | **Expected main-sequence cards still to play** at the offer, if they keep going (up to the winning card, or to the end if there is none) |
 | p_ahead_at_pause | 0–1 | Probability the winning card is still ahead at the offer |
-| alt_minus_expected | number | `alt_duration` − expected cards to the reward if staying at the offer (`e_rem_at_pause` + (1 − `p_ahead_at_pause`) × `alt_duration`, since without a winning card they are moved onto the alternative). Negative = switching at the offer is the shorter option in expectation |
+| alt_minus_expected | number | `alt_duration` − expected cards to the reward if staying at the offer (`e_rem_at_pause` + (1 − `p_ahead_at_pause`) × `alt_duration`, since without a winning card they still have to do the alternative). Negative = switching at the offer is the shorter option in expectation |
 
 **How the expectations are computed.** All `e_rem_*` / `p_ahead_*` columns use the beliefs participants are given, and never depend on the regime (participants know nothing about regimes): the winning card is in the sequence with probability `p_inside` and, if it is, equally likely to be on any orange card; at a given point, the orange cards already passed without a win are ruled out (Bayes). With `W` orange cards, `k` cards done and `a` orange cards still ahead: P(no win so far) = 1 − (W − a)·p/W; `p_ahead` = (a·p/W) / P(no win so far); `e_rem` = [Σ over orange cards m > k of (p/W)(m − k) + (1 − p)(seq_len − k)] / P(no win so far).
 | seq_frame_treatment | 4/5 | As in `Meta` |
@@ -91,54 +91,76 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 
 | Column | Type | Description |
 |---|---|---|
-| start_at, seq_start_at_time | timestamp | Sequence started (same value) |
+| start_at | timestamp | Sequence started |
 | briefing_ended_at | timestamp | "Start sequence" pressed on the briefing screen |
 | end_at | timestamp | Sequence ended |
 | seq_reload_count | number | New-session returns while this sequence was current |
 | outcome_summary | text | **The outcome** — see the table below |
 | card_order | text | Main cards actually played, in order (`live_pattern` truncated to `n_main_tasks_done`) |
-| alt_revealed | 0/1 | The alternative's length was shown (offer fired, or a same-tab reload landed past the offer point) |
-| switch_offered_at_task, switch_offered_at_time | number, timestamp | When the offer banner appeared (blank if it never did) |
-| pause_secs | 10–45 | The offer banner's randomised countdown |
-| penalty_at_pause | £ | This sequence's mistake penalty accumulated when the offer fired (blank if it never fired). The full per-card record is in `tasks_json` |
-| deliberation_secs | seconds | Banner shown → offer resolved (accept or stay, confirmed or timed out) |
-| offer_choice | text | `accept` / `refuse` (includes letting the time run out) |
-| offer_undo_count | number | "Undo" presses on the offer's confirm popup |
-| auto_refused | 0/1 | Countdown ran out before any choice (default: stay) |
-| auto_confirmed | 0/1 | Countdown ran out on the confirm popup, auto-committing the pending choice |
-| switch_taken | 0/1 | **Voluntary** switch to the alternative |
-| switch_source | text | `offer` (the banner) or `button` (the blue Alternative button afterwards) |
-| switch_taken_at_task, switch_taken_at_time | number, timestamp | Main cards completed / time when the switch was confirmed |
-| switch_pressed_at_task, switch_pressed_at_time | number, timestamp | The press that led to it ("Accept and switch", or opening the button dialog) |
-| switch_decision_secs | seconds | Press → confirm |
-| alt_button_opens, alt_button_undos | number | Times the Alternative button dialog was opened / closed with "Keep going" |
-| switched_at | number | Main cards completed when the voluntary switch was confirmed (= `switch_taken_at_task`); blank if no voluntary switch |
-| switched_at_pause | 0/1 | 1 iff the switch was taken on the offer banner (i.e. at `pause`) |
-| auto_switched | 0/1 | Moved onto the alternative automatically because the sequence ran out without a winning card |
-| auto_switch_at_time | timestamp | When that happened |
-| alt_phase_started_at | timestamp | When the alternative started (voluntary or automatic); blank if never |
-| forfeit_taken | 0/1 | Gave up the sequence |
-| forfeit_phase | text | `main` or `alt` |
-| forfeit_taken_at_task, forfeit_taken_at_time | number, timestamp | Total cards done (main + alternative) / time |
-| forfeited_at | number | Cards completed **in the phase where they gave up** (main cards if `forfeit_phase = main`, alternative cards if `alt`); blank if no forfeit |
+| alt_revealed | 0/1 | The alternative's length was shown (the pause happened, or a same-tab reload landed past the pause point) |
+
+**The pause.** At card `pause` the task stops, the alternative's length is revealed, and its button turns blue and flashes. The pause ends when the participant switches (Alternative button → Confirm switch), presses **Resume now**, or its countdown runs out. All blank if the pause never happened.
+
+| Column | Type | Description |
+|---|---|---|
+| pause_started_at_time | timestamp | When the pause started |
+| pause_duration_secs | 10–45 | Its countdown (random) |
+| pause_elapsed_secs | seconds | How long it actually lasted (start → end) |
+| pause_outcome | text | How it ended: `switched` / `resume_now` / `timeout` |
+| penalty_at_pause | £ | This sequence's mistake penalty when the pause started. The full per-card record is in `tasks_json` |
+
+**Switching** is done only with the Alternative button (during the pause or at any later card of the main sequence), which opens a dialog: Confirm switch / Keep going.
+
+| Column | Type | Description |
+|---|---|---|
+| switched | 0/1 | **Switched to the alternative** before the main sequence ended |
+| switched_at_pause | 0/1 | 1 if that switch happened during the pause |
+| switched_at | number | Main cards completed when switching (blank if no switch) |
+| switched_at_time | timestamp | When the switch was confirmed |
+| switch_pressed_at, switch_pressed_at_time | number, timestamp | The click on the Alternative button that led to the switch (opening the dialog) |
+| switch_decision_secs | seconds | That click → Confirm switch |
+| switch_dialog_opens | number | Times the switch dialog was opened in this sequence (during the pause and later) |
+| switch_dialog_cancels | number | …and closed with "Keep going" |
+
+**End of the main sequence without a winning card.** A "No winning card" screen asks the participant to choose: switch to the alternative (Alternative button) or give up.
+
+| Column | Type | Description |
+|---|---|---|
+| no_winning_card | 0/1 | Reached the end of the main sequence without a winning card |
+| no_winning_card_at_time | timestamp | When |
+| alt_started | 0/1 | The alternative was started: after a switch, or chosen on the "No winning card" screen |
+| alt_started_at_time | timestamp | When |
+
+**Giving up / autokick.**
+
+| Column | Type | Description |
+|---|---|---|
+| forfeited | 0/1 | Gave up the sequence |
+| forfeited_in | text | `main` (main sequence) or `alt` (alternative, including the "No winning card" screen) |
+| forfeited_at | number | Cards completed in that part when giving up |
+| forfeited_at_time | timestamp | When |
 | auto_kicked | 0/1 | Ended because the sequence's own mistake penalty reached its reward |
+
+**Effort and earnings.**
+
+| Column | Type | Description |
+|---|---|---|
 | n_main_tasks_done, n_alt_tasks_done, n_tasks_done | number | Cards completed in the main sequence, in the alternative, total |
-| earnings | £ | Gross reward: `pay` if the winning card was found or the alternative completed (voluntary or automatic), else 0 |
+| earnings | £ | Gross reward: `pay` if the winning card was found or the alternative completed, else 0 |
 | grid_pay | £ | Per-card pay for this sequence |
 | penalty | £ | Mistake penalty (£0.01 per misclick) |
 | net_earnings | £ | This sequence's earnings − penalty, never negative. What is actually paid is `Meta.final_bonus` (penalties of unpaid sequences still count there) |
 | total_targets, total_found, total_false_pos, total_missed | number | Grid accuracy, summed over the whole sequence |
 | tasks_json | JSON | Every card played, main and alternative (see below) |
-
 ### Exit point and expected-duration benchmarks
 
 The **exit point** is where the participant left the main sequence; `sunk_cost_at_exit` is the number of main cards **completed** at that moment. Switching while on card 2 → 1; finding the winning card on card 2 → 2.
 
 | `exit_type` | How the main sequence was left | `sunk_cost_at_exit` |
 |---|---|---|
-| `switch` | Voluntary switch (offer banner or button) | Main cards completed at the switch (= `switched_at`) |
+| `switch` | Switched with the Alternative button (during the pause or later) | Main cards completed at the switch (= `switched_at`) |
 | `winning_card` | Found the winning card | `n_main_tasks_done` (= `end_pos`) |
-| `no_winning_card` | Reached the end, moved onto the alternative automatically | `seq_len` |
+| `no_winning_card` | Reached the end without a winning card (then switched to the alternative, or gave up) | `seq_len` |
 | `forfeit` | Gave up during the main sequence | Main cards completed |
 | `autokick` | Penalty reached the reward during the main sequence | Main cards completed |
 
@@ -150,7 +172,7 @@ At a natural end the main sequence is over: `e_rem_at_exit = 0`, `p_ahead_at_exi
 |---|---|---|
 | exit_type | text | See above |
 | sunk_cost_at_exit | number | Main cards completed at the exit point |
-| alt_available_at_exit | 0/1 | 1 if the alternative could be chosen at the exit point (offer not wasted and `sunk_cost_at_exit ≥ pause`). When 0, the `switch_*_at_exit` comparisons are counterfactual |
+| alt_available_at_exit | 0/1 | 1 if the alternative could be chosen at the exit point (`pause_never_shown = 0` and `sunk_cost_at_exit ≥ pause`). When 0, the `switch_*_at_exit` comparisons are counterfactual |
 | p_ahead_at_exit | 0–1 | As `p_ahead_at_pause`, at the exit point |
 | e_rem_at_exit | number | As `e_rem_at_pause`, at the exit point: expected main-sequence cards still to play |
 | penalty_at_exit | £ | Mistake penalty from the main cards completed up to the exit point (including the last one) |
@@ -159,22 +181,24 @@ At a natural end the main sequence is over: `e_rem_at_exit = 0`, `p_ahead_at_exi
 | switch_gain_at_exit | number | Same comparison at the exit point, with `e_rem_at_exit` and `p_ahead_at_exit` (switching at any point means doing `alt_duration` cards) |
 | switch_better_at_exit | 0/1 | 1 iff `switch_gain_at_exit > 0` |
 
-Reading them together: `switch_taken = 1` with `switch_better_at_exit = 0` is a switch that costs cards in expectation. For sequences that ran to a natural end, `switch_*_at_exit` reflect the realised outcome, not a decision; the benchmark at any earlier position (e.g. before the last card played, `n_main_tasks_done − 1`) can be rebuilt from `live_pattern`, `p_inside` and `alt_duration` with the same formula.
+Reading them together: `switched = 1` with `switch_better_at_exit = 0` is a switch that costs cards in expectation. For sequences that ran to a natural end, `switch_*_at_exit` reflect the realised outcome, not a decision; the benchmark at any earlier position (e.g. before the last card played, `n_main_tasks_done − 1`) can be rebuilt from `live_pattern`, `p_inside` and `alt_duration` with the same formula.
 
 ### `outcome_summary`
 
 | Label | Meaning |
 |---|---|
-| `continued and found the winning card` | Saw the offer, stayed, found the winning card |
-| `found the winning card before the offer` | Winning card came before the offer point (offer wasted) |
-| `switched at offer` | Accepted on the offer banner, completed the alternative |
-| `switched later via button` | Refused/let the offer lapse, later switched with the button, completed the alternative |
-| `auto-switched (no winning card)` | No winning card; moved onto the alternative and completed it |
-| `continued and forfeited` / `forfeited before offer` | Gave up during the main sequence |
-| `continued and auto-kicked` / `auto-kicked before offer` | Penalty reached the reward during the main sequence |
-| any of the three alternative labels + ` and forfeited` / ` and auto-kicked` | Reached the alternative, then gave up / was auto-kicked |
+| `found the winning card` | Stayed after the pause, found the winning card |
+| `found the winning card before the pause` | The winning card came before the pause point (no pause; regime 3 only) |
+| `switched at the pause` | Switched during the pause, completed the alternative |
+| `switched after the pause` | Switched later with the Alternative button, completed the alternative |
+| `no winning card, took the alternative` | No winning card; chose the alternative and completed it |
+| `no winning card, gave up` | No winning card; gave up on the "No winning card" screen |
+| `gave up before the pause` / `gave up after the pause` | Gave up during the main sequence |
+| `auto-kicked before the pause` / `auto-kicked after the pause` | Penalty reached the reward during the main sequence |
+| any of the three alternative labels + `, then gave up` / `, then auto-kicked` | Started the alternative, then gave up / was auto-kicked |
 | `abandoned before reload — superseded by a later attempt` | Attempt discarded by a new-session reload |
 
+**Data collected before 2026-10-07** used older column names (`switch_taken`, `offer_choice`, `auto_switched`, `forfeit_phase`, …) and labels. `tools/convert_to_current.R` converts them to the columns above (the mapping is at the top of that file); `tools/decrypt_backups.R` does it automatically for older backups. In that older data the pause had "Accept and switch" / "Refuse and stay" buttons: "Refuse and stay" is converted to `pause_outcome = resume_now`, and dialogs opened during the pause were not counted in `switch_dialog_opens`.
 ### `tasks_json` structure
 
 ```json

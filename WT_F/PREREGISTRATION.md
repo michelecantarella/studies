@@ -41,7 +41,7 @@ Fields marked **[PLACEHOLDER]** need a value; **[HIDDEN]** fields go into the re
 
 > Time already spent is sunk: someone deciding whether to abandon an uncertain task for a bounded alternative should compare only the expected time still required with the alternative's length, never the time already elapsed. This experiment tests that prediction and asks whether it matters *what kind* of time was spent.
 >
-> Participants recruited on Prolific complete five sequences of a short real-effort grid task. Each sequence is a visible stack of 10–15 cards. Every card is independently marked either **orange** (it may be the winning card) or **white** (it cannot be); the last card is always orange. The probability that the sequence contains the winning card (10–90%) is disclosed before it starts. Finding the winning card ends the sequence and pays its reward. At a random point during the sequence, an **alternative** sequence of known length is offered at the same reward; its length is revealed only then. The participant can accept on the spot or refuse, and after that the alternative stays available at every later card. If the participant reaches the last card without finding the winning card, they are moved onto the alternative automatically and still earn the reward by completing it; only giving up loses it. The alternative's end is drawn so that taking it the moment it is offered always finishes after the main sequence's last card: staying is a gamble between finishing earlier (the winning card is still ahead) and later (the rest of the sequence plus the alternative).
+> Participants recruited on Prolific complete five sequences of a short real-effort grid task. Each sequence is a visible stack of 10–15 cards. Every card is independently marked either **orange** (it may be the winning card) or **white** (it cannot be); the last card is always orange. The probability that the sequence contains the winning card (10–90%) is disclosed before it starts. Finding the winning card ends the sequence and pays its reward. At a random point during the sequence, an **alternative** sequence of known length is offered at the same reward; its length is revealed only then. The task pauses briefly; the participant can switch on the spot (with the Alternative button) or resume, and after that the alternative stays available at every later card. If the participant reaches the last card without finding the winning card, they can still switch to the alternative and earn the reward by completing it; only giving up loses it. The alternative's end is drawn so that taking it the moment it is offered always finishes after the main sequence's last card: staying is a gamble between finishing earlier (the winning card is still ahead) and later (the rest of the sequence plus the alternative).
 >
 > Because orange and white marks are independent coin flips, two participants who have completed the same number of cards, in sequences of the same length and probability, can differ in how much of that time was spent under genuine risk of finishing ("survived risk") versus on cards that could never have finished it ("dead time"). Both are equally sunk and normatively irrelevant. This orthogonal variation is the study's central identifying feature.
 >
@@ -63,7 +63,7 @@ Participants complete five sequences of a real-effort task in a single online se
 
 Each sequence is a stack of 10–15 cards, all visible from the start, each marked orange (it may be the winning card) or white (it cannot be), mixed at random; the last card is always orange. Before the sequence starts, the participant sees its reward and the probability (10–90%) that it contains the winning card; the probability stays on screen throughout. Finding the winning card ends the sequence and pays the reward.
 
-At a random card, the participant is offered an **alternative sequence** of a stated, fixed number of cards at the same reward — its length is revealed only at this moment. An in-place banner offers "Accept and switch" / "Refuse and stay", with a confirmation step, for a countdown of 10–45 s; no choice before the countdown ends means staying. Whether refused or not, from then on the alternative remains available: a button lets the participant switch at any later card, again with a confirmation. Switching restarts progress on the alternative's cards and cannot be undone. If the participant reaches the end of the sequence without finding the winning card, they are moved onto the alternative automatically and earn the reward by completing it. A participant may give up a sequence at any time, losing its reward but not other earnings.
+At a random card, the participant is offered an **alternative sequence** of a stated, fixed number of cards at the same reward — its length is revealed only at this moment. The task pauses for 10–45 s (an in-place banner with a countdown and a "Resume now" button) and the Alternative button, the only way to switch, turns blue and flashes; switching (with a confirmation) during the pause counts as accepting the offer, resuming means staying. From then on the alternative remains available: the same button lets the participant switch at any later card. Switching restarts progress on the alternative's cards and cannot be undone. If the participant reaches the end of the sequence without finding the winning card, they can still switch to the alternative and earn the reward by completing it. A participant may give up a sequence at any time, losing its reward but not other earnings.
 
 The interventions are two individual-level randomizations: a four-arm **placement regime** (how the offer's position is drawn jointly with the sequence's ending) and a two-arm **horizon framing** (told the study has four or five sequences).
 
@@ -98,7 +98,7 @@ REGIME 3  fully independent
 REGIME 0  per-sequence mixture: each sequence independently re-draws Regime 1 or 2 (never 3)
 ```
 
-**Alternative.** Its end is drawn from a hidden window immediately after the main sequence, of the same length: `alt_global_end ~ Uniform{L+1, …, 2L}` (overall card count). The participant is shown `alt_duration = alt_global_end − pause` cards. Switching when offered therefore always ends after card L, whatever `pInside` is. The same `alt_duration` applies if the participant switches later or is moved onto the alternative automatically.
+**Alternative.** Its end is drawn from a hidden window immediately after the main sequence, of the same length: `alt_global_end ~ Uniform{L+1, …, 2L}` (overall card count). The participant is shown `alt_duration = alt_global_end − pause` cards. Switching when offered therefore always ends after card L, whatever `pInside` is. The same `alt_duration` applies if the participant switches later or switches after reaching the end without a winning card.
 
 **Reward.** Each participant has a reward pool `reward_pool ~ Uniform{£1.00, £1.05, …, £1.50}`, drawn once at consent. It is split at random across the five sequences: each starts at £0.10 and the rest of the pool is handed out in £0.05 units, each to a uniformly random sequence, until the pool is used up. Sequence *i*'s reward `pay` is its share (≥ £0.10, mean £0.25). It is independent of the sequence's own draw and is shown before the sequence starts, next to `pInside`. The five rewards always sum to the pool, so the sequence rewards never exceed £1.50 per participant.
 
@@ -106,19 +106,19 @@ REGIME 0  per-sequence mixture: each sequence independently re-draws Regime 1 or
 
 1. **Offer accept** — binary, one per sequence whose offer appeared: accepted on the offer banner.
 2. **Post-offer switch hazard** — binary, one observation per card position after the offer at which the participant was still in the main sequence (the button was available): switched at that card.
-3. **`switch_taken`** — binary, one per sequence: switched voluntarily at any point (offer or button).
-4. **`forfeit_taken`** — binary, one per sequence.
+3. **`switched`** — binary, one per sequence: switched to the alternative at any point before the main sequence ended (during the pause or later).
+4. **`forfeited`** — binary, one per sequence.
 
 ### 31. Primary Outcomes (explanation)
 
-All four come from the `Responses` sheet (one row per participant × sequence × attempt). Outcome 1 is `offer_choice = 'accept'` among rows with `offer_wasted = 0`. Outcome 2 is built from each row's `pause`, `switch_source`, `switch_taken_at_task`, `n_main_tasks_done` and the card pattern: for every card position t from `pause` onward at which the participant was still in the main sequence and the offer banner had closed, y = 1 iff the button switch happened at t. The state at each decision point is fully reconstructable from the logged pattern (`live_pattern`), `pInside`, `L`, `pause` and `alt_duration`: orange and white cards already completed, orange and white cards left, the updated probability that the winning card is still ahead, the expected main-sequence cards still to play, and the expected cards to the reward if staying (that plus the alternative if there is no winning card). These use the instrument's own formulas — logged as `p_ahead_at_*` and `e_rem_at_*` at the start, at the offer and where the main sequence was left — computed with the beliefs participants are given (winning card present with probability `pInside`, uniform over orange cards, independent of the offer), never with the regime.
+All four come from the `Responses` sheet (one row per participant × sequence × attempt). Outcome 1 is `switched_at_pause = 1` among rows with `pause_never_shown = 0`. Outcome 2 is built from each row's `pause`, `switched_at_pause`, `switched_at`, `n_main_tasks_done` and the card pattern: for every card position t from `pause` onward at which the participant was still in the main sequence and the offer banner had closed, y = 1 iff the button switch happened at t. The state at each decision point is fully reconstructable from the logged pattern (`live_pattern`), `pInside`, `L`, `pause` and `alt_duration`: orange and white cards already completed, orange and white cards left, the updated probability that the winning card is still ahead, the expected main-sequence cards still to play, and the expected cards to the reward if staying (that plus the alternative if there is no winning card). These use the instrument's own formulas — logged as `p_ahead_at_*` and `e_rem_at_*` at the start, at the offer and where the main sequence was left — computed with the beliefs participants are given (winning card present with probability `pInside`, uniform over orange cards, independent of the offer), never with the regime.
 
 The sunk-time regressors are the orange cards and white cards already completed. Their sum is elapsed time; their difference is its composition. Neither enters a normatively correct decision rule.
 
 ### 32. Secondary Outcomes (end points)
 
-1. Timing: `switch_taken_at_task`, `switch_source`, and switching on the button vs on the banner.
-2. Deliberation: `deliberation_secs` (banner shown → resolved), `offer_undo_count`, `auto_refused` (countdown ran out with no choice), `auto_confirmed`, `alt_button_opens`/`alt_button_undos`, `switch_decision_secs`.
+1. Timing: `switched_at`, `switched_at_time`, and switching during the pause vs later (`switched_at_pause`).
+2. Deliberation: `pause_elapsed_secs` (pause shown → ended), `pause_outcome` (switched / resume_now / timeout), `switch_dialog_opens`/`switch_dialog_cancels`, `switch_decision_secs`.
 3. Real-effort performance and attention: `total_found`, `total_false_pos`, `total_missed`, `penalty`, per-card `no_activity`.
 4. Abandonment across the session: sequences given up and the position of the first.
 5. Reload behaviour: `seq_attempt > 1` rows.
@@ -218,7 +218,7 @@ A decision-maker who has spent time on an unfinished task and is offered a bound
 
 ## 2. Design summary
 
-Five sequences per participant; each is one visible stack of 10–15 orange/white cards, last card orange, with a disclosed probability that it contains the winning card. One offer per sequence at a Beta-centred random card; its length revealed only then; accept/refuse on a timed banner, and a persistent button afterwards. No winning card → moved onto the alternative automatically, reward kept. Two individual-level randomizations: placement regime (4 arms) and framing (2 arms). Details in Part I §28–29, §34–35.
+Five sequences per participant; each is one visible stack of 10–15 orange/white cards, last card orange, with a disclosed probability that it contains the winning card. One offer per sequence at a Beta-centred random card; its length revealed only then; a timed pause during which the Alternative button (the only way to switch) can be used, and the same button afterwards. No winning card → they can still switch to the alternative and keep the reward. Two individual-level randomizations: placement regime (4 arms) and framing (2 arms). Details in Part I §28–29, §34–35.
 
 ## 3. Identification
 
@@ -273,7 +273,7 @@ Participant *i*, sequence *s*; linear probability models, logit as robustness; s
 
 ### 5.1 Offer decision
 
-For sequences whose offer appeared (`offer_wasted = 0`):
+For sequences whose pause happened (`pause_never_shown = 0`):
 
 **Equation (1)**
 ```
@@ -306,7 +306,7 @@ with `Elapsed`, `Contrast` and `Forward` updated at card t (Forward uses the pro
 ```
 y_is = α + Σ_r θ_r · Regime_ir + η · Frame_i + γ' · Forward_is + δ' · X_is + ε_is
 ```
-for y = `switch_taken` and y = `forfeit_taken`, Forward evaluated at the offer, Regime 2 omitted.
+for y = `switched` and y = `forfeited`, Forward evaluated at the offer, Regime 2 omitted.
 
 **Equation (4)** — competing-risks discrete-time hazard of leaving the main sequence by switching or by giving up, card by card, censored at the winning card or the automatic switch; Cox model as robustness. The switch route is only open from the offer on; the give-up route throughout.
 
@@ -348,7 +348,7 @@ No exclusion on the `no_activity` flag or grid accuracy in the primary specifica
 4. Offers before the midpoint vs after.
 5. Clustering by sequence, and two-way by participant and sequence index.
 6. Equations (1)–(2) separately by sequence index.
-7. Excluding offers resolved by the countdown (`auto_refused = 1`), i.e. keeping only active answers.
+7. Excluding pauses that ended by the countdown (`pause_outcome = timeout`), i.e. keeping only active answers.
 
 ## 11. Known limitations, recorded before data collection
 
@@ -358,7 +358,7 @@ No exclusion on the `no_activity` flag or grid accuracy in the primary specifica
 4. **Switching at the offer is never faster than finding the winning card**, by construction; this is what makes staying a genuine gamble and is disclosed only through the observed alternative length.
 5. **The alternative's length is fixed once offered**; switching later restarts on the same number of cards, so later switches are mechanically less attractive than earlier ones at a given state — the forward-looking vector accounts for this.
 6. **The reward varies across sequences** (£0.10 upward in £0.05 steps, the five summing to a per-participant pool of £1.00–£1.50), independently of the draw; it enters as a control. Because the five sum to the pool, a sequence's reward is mildly negatively correlated with the others' — but participants never see the pool or the split in advance.
-7. **Single online session, modest stakes** (a bonus of at most £1.50 — the sum of the sequence rewards, net of penalties — plus a £1.50 show-up fee, for ≈20 minutes). Pilot evidence on the arms can't include Regime 3, which the pilots leave out.
+7. **Single online session, modest stakes** (a bonus of at most £1.50 — the sum of the sequence rewards, net of penalties — plus a £1.25 show-up fee, for ≈20 minutes). Pilot evidence on the arms can't include Regime 3, which the pilots leave out.
 
 ## 12. Power — derivation
 
@@ -374,7 +374,7 @@ The instrument is a single HTML file; the backend a Google Apps Script writing t
 
 | # | Decision | Why it matters | Recommendation |
 |---|---|---|---|
-| **1** | **Per-card pay is logged but not paid.** `grid_pay` (£0.025 per card) is written to every row, but the results screen pays only rewards − penalties, plus the fixed £1.50 show-up fee. | The registered payment structure must match what is paid. | Decide whether to pay it; if not, drop it from the payment description. |
+| **1** | **Per-card pay is logged but not paid.** `grid_pay` (£0.025 per card) is written to every row, but the results screen pays only rewards − penalties, plus the fixed £1.25 show-up fee. | The registered payment structure must match what is paid. | Decide whether to pay it; if not, drop it from the payment description. |
 | **2** | **Arms differ in the chance of a winning card** (0.38 vs ≈0.50). | Raw arm comparisons are not informational effects. | Keep; register §5.4 and lead with B3. |
 | **3** | **Offer position distribution** (Beta(2,2), truncated before the ending in Regime 1). | Sets how much variation in elapsed time exists at the offer, and Regime 1's leak. | Keep, or flatten (Beta(1,1)) if the pilot shows too few early/late offers for A2. |
 | **4** | Prolific screening: countries, approval rate, prior-participation exclusions. | Registry country field; external validity. | Exclude anyone who took part in an earlier version of this task. |

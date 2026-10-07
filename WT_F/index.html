@@ -66,16 +66,28 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 .panel-alt-open{background:var(--blue);border-color:#1e4f96;box-shadow:0 4px 0 #17406f;}
 .panel-alt-open .panel-val,.panel-alt-open .panel-cap,.panel-alt-open .panel-sub{color:#fff;}
 .panel-alt-open .panel-cap,.panel-alt-open .panel-sub{opacity:.88;}
+/* Reminder when the offer banner closes: the alternative is still there. */
+.panel-alt-open.alt-flash{animation:altFlash .8s ease-in-out 3;}
+@keyframes altFlash{
+  0%,100%{box-shadow:0 4px 0 #17406f; transform:none;}
+  50%{box-shadow:0 4px 0 #17406f, 0 0 0 6px rgba(47,111,200,.45); transform:scale(1.04);}
+}
+/* Same pulse for the Give up button (No-winning-card choice). */
+.panel-forfeit.attn-flash{animation:attnFlash .8s ease-in-out 3;}
+@keyframes attnFlash{
+  0%,100%{transform:none;}
+  50%{box-shadow:0 4px 0 rgba(26,26,24,.16), 0 0 0 6px rgba(200,75,47,.35); border-color:var(--red); transform:scale(1.04);}
+}
 
 /* Reward / penalty accents. */
 .panel-reward .panel-val{color:var(--grn);}
 .panel-penalty .panel-val{color:var(--red);}
 
 /* Forfeit tile. */
-.panel-forfeit{border-color:#c3bfb2;}
-.panel-forfeit .panel-val{font-size:.8rem;color:var(--ink2);}
-.panel-forfeit:hover{border-color:var(--red);}
-.panel-forfeit:hover .panel-val{color:var(--red);}
+.panel-forfeit{border-color:var(--red);background:#fbe9e5;}
+.panel-forfeit .panel-val{font-size:.8rem;color:var(--red);}
+.panel-forfeit:hover{background:var(--red);}
+.panel-forfeit:hover .panel-val{color:#fff;}
 
 /* ── TASK CARD (centre) ──────────────────────────────────────────
    White while the sequence cannot end yet; turns amber the moment the
@@ -369,6 +381,9 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
      (panel-lg)'s height — each panel is only as tall as its own content. */
   .st-col{flex-direction:row;gap:.5rem;align-items:flex-start;}
   .st-col > *{flex:1;}
+  /* Right row: counters + Alternative side by side, Give up on its own full-width row below. */
+  #st-col-right{flex-wrap:wrap;}
+  #st-col-right > #panel-forfeit{flex:1 1 100%;}
   .panel{padding:.5rem .55rem;}
   .panel-sm{padding:.4rem .5rem;}
   .panel-cap{font-size:.5rem;margin-bottom:.15rem;}
@@ -642,9 +657,6 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
           <div class="panel-cap">Penalties</div>
           <div class="panel-val" id="s-penalty">£0.00</div>
         </div>
-        <div class="panel panel-sm panel-forfeit is-button" id="panel-forfeit" onclick="openForfeitConfirm()" role="button" tabindex="0">
-          <div class="panel-val">Give up sequence</div>
-        </div>
       </div>
 
       <!-- CENTRE: the task itself -->
@@ -677,20 +689,14 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
                  (.is-expanded), which necessarily grows taller. -->
             <div class="taskcard-offer" id="st-instr-offer">
               <div id="st-offer-banner-text">The alternative sequence is now available</div>
-              <!-- Step 1: the accept/refuse choice, while the offer's own
-                   countdown (below) is running. -->
+              <!-- The pause: its countdown and a way to cut it short. Switching
+                   is done only with the Alternative button (right column). -->
               <div id="st-offer-ask" style="display:none;">
-                <p class="offer-ask-line">Do you accept the offer? <span id="st-offer-altlen"></span> cards</p>
+                <p class="offer-ask-line">The task will resume in <strong id="st-offer-cd">—</strong> seconds</p>
                 <div class="offer-btn-row">
-                  <button class="btn btn-blue" onclick="tentativeChoice_('switch')">Accept and switch</button>
-                  <button class="btn btn-outline" onclick="tentativeChoice_('continue')">Refuse and stay</button>
+                  <button class="btn btn-outline" onclick="resumeNow_()">Resume now</button>
                 </div>
               </div>
-              <!-- Step 2 (confirm/undo) is a full-screen popup, not shown
-                   inline here — see #offer-confirm-overlay below, so it
-                   reads unmistakably as a confirmation dialog rather than
-                   more text in the same box (tentativeChoice_()/
-                   confirmTentative_()/undoTentative_()). -->
             </div>
             <div class="taskcard-target" id="st-instr-normal">
               <span>Find and click every</span>
@@ -717,10 +723,10 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
                card and the participant is moved onto the alternative
                automatically — see doAutoSwitch_(). -->
           <div id="autoswitch-overlay" class="noact-overlay" style="display:none;padding:1.2rem;">
-            <div class="noact-cap">No winning card</div>
-            <div class="noact-title">You are now on the alternative</div>
+            <div class="noact-title">No winning card</div>
+            <!-- No buttons here: the choice is made with the (flashing)
+                 Alternative and Give up buttons — see doAutoSwitch_(). -->
             <p id="autoswitch-msg" style="font-size:.85rem;color:var(--ink2);max-width:320px;margin:0;"></p>
-            <button class="btn btn-blue" onclick="continueAfterAutoSwitch_()">Continue</button>
           </div>
         </div>
       </div>
@@ -738,12 +744,15 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
           <div class="panel-sub" id="s-tasksleft-sub">in this sequence</div>
         </div>
         <!-- Grey and locked until the alternative is offered; then blue, with
-             its length, and a button (after the offer banner closes) that
-             switches after a confirm — see paintPanels_()/openAltSwitch_(). -->
+             its length — and the ONLY way to switch: a button that switches
+             after a confirm — see paintPanels_()/openAltSwitch_(). -->
         <div class="panel panel-md panel-alt-locked is-locked" id="panel-alt" onclick="openAltSwitch_()" role="button" tabindex="0">
           <div class="panel-cap" id="s-alt-cap">Alternative</div>
           <div class="panel-val" id="s-alt-val">?</div>
           <div class="panel-sub" id="s-alt-sub">Locked</div>
+        </div>
+        <div class="panel panel-sm panel-forfeit is-button" id="panel-forfeit" onclick="openForfeitConfirm()" role="button" tabindex="0">
+          <div class="panel-val">Give up sequence</div>
         </div>
       </div>
 
@@ -771,28 +780,6 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
           <div style="display:flex;gap:.75rem;justify-content:center;">
             <button class="btn btn-red" onclick="confirmForfeit()">Give up</button>
             <button class="btn btn-outline" onclick="closeForfeitConfirm()">Keep going</button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Offer confirm/undo overlay — step 2 of the accept/refuse flow (step
-           1, the ask, stays inline in the offer box; see tentativeChoice_()).
-           A genuine popup, like the forfeit dialog above, so it is
-           unmistakably a confirmation step rather than more inline text; same
-           board-scoped complete white overlay as the forfeit dialog, for the
-           same reason, including its fixed-height-set-by-JS sizing — see
-           the forfeit overlay's own comment above. The SAME offer countdown
-           keeps running underneath and is mirrored here (see
-           showOfferScreen()'s tick) so it stays visible while deciding. -->
-      <div id="offer-confirm-overlay" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;background:#fff;border:2.5px solid var(--ink);border-radius:14px;box-shadow:0 5px 0 rgba(26,26,24,.16);z-index:600;align-items:center;justify-content:center;">
-        <div style="background:#fff;border:1.5px solid var(--bdr);border-radius:4px;padding:2rem;max-width:380px;width:90%;font-family:var(--mono);text-align:center;">
-          <div style="font-size:.75rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;">Alternative sequence</div>
-          <div style="font-size:1rem;font-weight:700;color:var(--ink);margin-bottom:.75rem;">Do you confirm your choice?</div>
-          <p style="font-size:.85rem;color:var(--ink2);margin-bottom:1rem;" id="offer-confirm-text"></p>
-          <p style="font-size:.78rem;color:var(--ink2);margin-bottom:1.2rem;font-family:var(--mono);">The offer ends in <strong id="offer-confirm-cd-n">—</strong>s</p>
-          <div style="display:flex;gap:.75rem;justify-content:center;">
-            <button class="btn btn-blue" onclick="confirmTentative_()">Confirm</button>
-            <button class="btn btn-outline" onclick="undoTentative_()">Undo</button>
           </div>
         </div>
       </div>
@@ -887,18 +874,15 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
       <p style="font-size:.75rem;color:var(--ink2);margin-bottom:.8rem;">Reference code: <strong id="results-error-code" style="font-family:var(--mono);"></strong></p>
       <div style="display:flex;gap:.6rem;flex-wrap:wrap;">
         <button class="btn btn-outline" onclick="retryComplete_()">Try again</button>
-        <!-- Share (Web Share API, file support) — shown only when the
-             browser actually supports it (mostly mobile): hands the backup
-             straight to whatever app the participant already has (Mail,
-             WhatsApp, Drive, Files...), no hunting through a phone's
-             downloads folder for it afterward. See shareSupported_(). -->
-        <button class="btn btn-outline" id="btn-share-backup" style="display:none;" onclick="shareDataBackup()">Share my responses</button>
-        <button class="btn btn-outline" onclick="copyDataBackup()">Copy my responses</button>
+        <!-- The backup file is encrypted with the research team's public key
+             (see encryptBackup_()) — participants can save it but not read
+             or edit it. -->
         <button class="btn btn-outline" onclick="downloadDataBackup()">Download my responses</button>
+        <button class="btn btn-outline" onclick="copyDataBackup()">Copy my responses</button>
       </div>
       <p id="results-copy-status" style="display:none;font-size:.78rem;margin-top:.5rem;"></p>
-      <p id="results-error-note-prolific" style="font-size:.78rem;color:var(--ink);margin-top:.9rem;"><strong>Download your responses using the button above, then message the research team on Prolific</strong>, attaching the downloaded file and the reference code shown above. You will be paid.</p>
-      <p id="results-error-note-student" style="display:none;font-size:.78rem;color:var(--ink);margin-top:.9rem;">If it fails: tap <strong>Share</strong> above (if you see it) and send it straight from there, or tap <strong>Copy</strong> and paste it into an email or message to <strong>micant@dtu.dk</strong>. Download only if neither works.</p>
+      <p id="results-error-note-prolific" style="font-size:.78rem;color:var(--ink);margin-top:.9rem;"><strong>Download your responses file (or copy it) and contact the research team immediately</strong> — via a Prolific message or at <strong>michele.cantarella@imtlucca.it</strong> — attaching the file and the reference code shown above. <strong>Do not lose this file</strong>: it may be the only copy of your responses. You will be paid.</p>
+      <p id="results-error-note-student" style="display:none;font-size:.78rem;color:var(--ink);margin-top:.9rem;"><strong>Download your responses file (or copy it) and contact the research team immediately</strong> at <strong>michele.cantarella@imtlucca.it</strong>, attaching the file and the reference code shown above. <strong>Do not lose this file</strong>: it may be the only copy of your responses.</p>
     </div>
   </div>
 
@@ -960,6 +944,9 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
     <button onclick="debugSkipTask()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip card</button>
     <button onclick="debugSkipSection()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Skip section</button>
     <button onclick="debugStop()" id="debug-stop-btn" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Stop</button>
+    <!-- Demo modes only (the whole bar is): the same encrypted backup file a
+         participant gets when the final save fails, at any point. -->
+    <button onclick="debugDownloadBackup_()" style="font-family:IBM Plex Mono,monospace;font-size:.65rem;padding:.1rem .4rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;">Download backup</button>
   </span>
 </div>
 
@@ -1042,7 +1029,7 @@ if(!_prolificID && _isPilotStudy){
 // backend.txt rewrites a header row that doesn't match RESP_HEADER). While
 // it's the PASTE_ placeholder, backendConfigured_() is false and nothing is
 // sent.
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbz-MczcYM48Uoy-1_gxIj-khANgC37wKWlYBj_61FWHJDDqom_ao0smTl3hwN23J8ms3Q/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwbhP14XVwGGURRlOKfOR9_i20fr2qTPVsj7_HzNd5Mv4SlRWR_tBg2clXygc3xX-Qung/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 // No payment for the walkthrough: the whole bonus is the reward pool
@@ -1267,10 +1254,11 @@ let S = {
   // Alternative button (task.altRevealed) — this flag is only about the
   // banner itself.
   switchAvailable: false, altStartPos: 0,
-  // The tentative choice made on the offer banner, awaiting Confirm/Undo
-  // (null | 'switch' | 'continue') — see tentativeChoice_/confirmTentative_/
-  // undoTentative_. Cleared whenever no offer is open.
-  offerPendingChoice: null,
+  // The pause's countdown ran out while the switch dialog was open: the task
+  // resumes when the dialog closes with "Keep going" (see closeAltSwitch_()).
+  offerLapsedInDialog: false,
+  // UI flags: Alternative button flashing; No-winning-card note showing.
+  altFlashing: false, autoSwitchNoteOpen: false,
   // Whether a board overlay that keeps the grid running underneath is open
   // ("Give up" dialog, or the Alternative button's switch dialog), and —
   // while it is — a natural outcome ('completed'/'switched'/'autokicked'/
@@ -1555,10 +1543,10 @@ function generateTasks(){
              altRevealed:false, autoSwitched:false, autoSwitchAtTime:null,
              completed:null, switched:null, forfeited:null, earnings:0,
              offerAtTask:null, offerAtTime:null, offerFiredAt:null, pauseSecs:null,
-             deliberationSecs:null, offerUndoCount:0, autoRefused:false, autoConfirmed:false, offerChoice:null,
+             deliberationSecs:null, autoRefused:false, offerChoice:null,
              switchTaken:false, switchSource:null, switchTakenAtTask:null, switchTakenAtTime:null,
              switchPressedAtTask:null, switchPressedAtTime:null,
-             altButtonOpens:0, altButtonUndos:0,
+             dialogOpens:0, dialogCancels:0, altStartedAt:null,
              forfeitTaken:false, forfeitTakenAtTask:null, forfeitTakenAtTime:null, forfeitPhase:null,
              startAt:null, grids:[] };
   });
@@ -1707,20 +1695,23 @@ function paintPanels_(){
   const panel = el('panel-alt'), cap = el('s-alt-cap'), val = el('s-alt-val'), sub = el('s-alt-sub');
   if(!panel) return;
   if(cap) cap.textContent = 'Alternative';
+  const flash = S.altFlashing ? ' alt-flash' : '';
   if(S.phase === 'alt'){
-    panel.className = 'panel panel-md panel-alt-open';
+    // Clickable only on the "No winning card" note, where it starts the
+    // alternative (same as Continue).
+    panel.className = 'panel panel-md panel-alt-open' + (S.autoSwitchNoteOpen ? ' is-button'+flash : '');
     if(val) val.textContent = Math.max(0, task.altDuration - S.subtaskDone);
-    if(sub) sub.textContent = 'cards left';
+    if(sub) sub.textContent = S.autoSwitchNoteOpen ? 'cards · click to start' : 'cards left';
   } else if(!task.altRevealed){
     panel.className = 'panel panel-md panel-alt-locked is-locked';
     if(val) val.textContent = '?';
     if(sub) sub.textContent = 'Locked';
   } else {
-    // Clickable only while the offer banner itself is closed — while it's
-    // open, its own Accept/Refuse buttons are the way to answer it.
-    panel.className = 'panel panel-md panel-alt-open' + (S.switchAvailable ? '' : ' is-button');
+    // Clickable whenever it is available (during the pause too): opens the
+    // switch dialog — the only way to switch.
+    panel.className = 'panel panel-md panel-alt-open is-button' + flash;
     if(val) val.textContent = task.altDuration;
-    if(sub) sub.textContent = S.switchAvailable ? 'cards · available' : 'cards · click to switch';
+    if(sub) sub.textContent = 'cards · click to switch';
   }
 }
 
@@ -2106,7 +2097,7 @@ function staticSeqFields_(task){
     end_pos:        task.ends ? task.endPos : null, // 1-indexed card number of the winning card
     n_req:          task.nReq,               // main cards that would be played with no switch/forfeit (end_pos, or seq_len if no winning card)
     pause:          task.pause,              // cards completed when the offer fires
-    offer_wasted:   task.offerWasted ? 1 : 0,
+    pause_never_shown: task.offerWasted ? 1 : 0, // winning card came before the pause point (regime 3), so no pause
     alt_duration:   task.altDuration,
     alt_global_end: task.altGlobalEnd,
     alt_window_lo:  task.altWindowLo,
@@ -2535,11 +2526,9 @@ function trainKill(){
   // animation from scratch, so the leftover class would replay right there,
   // with no further JS call involved at all — exactly the bug already
   // called out above for #st-grid/card-flash.
-  ['st-offer-banner-text','st-countdown'].forEach(id=>{
+  ['st-offer-banner-text','st-countdown','st-offer-ask'].forEach(id=>{
     const n=el(id); if(n) n.classList.remove('switch-flash');
   });
-  const offerBtnRow = document.querySelector('#st-offer-ask .offer-btn-row');
-  if(offerBtnRow) offerBtnRow.classList.remove('switch-flash');
 }
 
 // Dim everything, then light exactly the listed parts. A part only ever
@@ -2648,14 +2637,9 @@ function trainFlashOfferBanner_(){
   const t=el('st-offer-banner-text'); if(!t) return;
   t.classList.remove('switch-flash'); void t.offsetWidth; t.classList.add('switch-flash');
 }
-// Flash the Accept/Refuse button row — screen 13.
-function trainFlashOfferButtons_(){
-  const row=document.querySelector('#st-offer-ask .offer-btn-row'); if(!row) return;
-  row.classList.remove('switch-flash'); void row.offsetWidth; row.classList.add('switch-flash');
-}
-// Flash the offer's own countdown — screen 14.
+// Flash the pause's countdown + Resume now — screen 13.
 function trainFlashOfferCountdown_(){
-  const cd=el('st-countdown'); if(!cd) return;
+  const cd=el('st-offer-ask'); if(!cd) return;
   cd.classList.remove('switch-flash'); void cd.offsetWidth; cd.classList.add('switch-flash');
 }
 
@@ -2712,11 +2696,7 @@ function trainPaint_(o){
       cls='panel panel-md panel-alt-open';
       if(val) val.textContent = Math.max(0, TRAIN.altDuration - (o.done||0));
       if(sub) sub.textContent='cards left';
-    } else if(o.offered){
-      cls='panel panel-md panel-alt-open';
-      if(val) val.textContent=TRAIN.altDuration;
-      if(sub) sub.textContent='cards · available';
-    } else if(o.altUnlocked){
+    } else if(o.offered || o.altUnlocked){
       cls='panel panel-md panel-alt-open is-button';
       if(val) val.textContent=TRAIN.altDuration;
       if(sub) sub.textContent='cards · click to switch';
@@ -2736,13 +2716,13 @@ function trainPaint_(o){
     if(bannerText) bannerText.textContent = 'The alternative sequence is now available';
     const askBlock=el('st-offer-ask');
     if(askBlock) askBlock.style.display = o.offerAsk ? 'block' : 'none';
-    const altLen=el('st-offer-altlen'); if(altLen) altLen.textContent = TRAIN.altDuration;
+    const ocd=el('st-offer-cd'); if(ocd) ocd.textContent = '30';
   }
+  const cdSlot=el('st-cd-slot'); if(cdSlot) cdSlot.style.display = o.offerAsk ? 'none' : '';
   // The confirm popups are never part of the training walkthrough — make
   // sure a stray real-session state can never leave them stuck open here.
-  const confirmOverlay=el('offer-confirm-overlay'); if(confirmOverlay) confirmOverlay.style.display='none';
   const altSwitchOverlay=el('alt-switch-overlay'); if(altSwitchOverlay) altSwitchOverlay.style.display='none';
-  const autoSwitchOverlay=el('autoswitch-overlay'); if(autoSwitchOverlay) autoSwitchOverlay.style.display='none';
+  hideAutoSwitchNote_();
   const normal=el('st-instr-normal');
   if(normal) normal.style.display = o.offerBanner ? 'none' : 'flex';
 }
@@ -2800,7 +2780,7 @@ const TRAIN_COMP_QUESTIONS_ = [
     ] },
   { text: "What happens if I reach the end of the sequence without finding a winning card?", options: [
       { text: 'The sequence ends and I lose my reward', correct: false },
-      { text: 'I am moved to the alternative automatically, and I still earn my reward by completing it', correct: true },
+      { text: 'I can still switch to the alternative, and earn my reward by completing it', correct: true },
       { text: 'A new sequence of cards begins', correct: false },
     ] },
   { text: 'What happens if I switch to the alternative?', options: [
@@ -3029,7 +3009,7 @@ function trainScreen10_(){
   trainLightUpTo_(['taskcard-banner','taskcard-body']);
   trainFlashBanner_(); // flash "This card can be the winning card."
   renderTip_(
-    'Only orange cards can be the winning card: if the sequence has one, it is one of the orange cards.',
+    'Only orange cards can be the winning card: if the sequence has one, it will be one of the orange cards.',
     tipContinue_()
   );
 }
@@ -3043,37 +3023,32 @@ function trainScreen11_(){
   flashSwitchAvailable();   // and the panel explained right here — the ONLY place this ever flashes
   renderTip_(
     'At some point during the sequence, we will offer you an alternative sequence: a fixed number of cards that also grants you the reward. '+
-    'Its length is revealed only when it is offered; until then, this panel stays locked.',
+    'Its length is revealed only when it is offered; until then, this button stays locked.',
     tipContinue_()
   );
 }
 
-// 12. Accepting it.
+// 12. Switching = clicking the Alternative button (the only way).
 function trainScreen12_(){
   trainPaint_({done:2, live:true, offered:true, offerBanner:true, offerAsk:true});
   trainLightUpTo_(['panel-alt','taskcard-banner','taskcard-body']);
-  trainFlashOfferButtons_(); // flash the Accept/Refuse buttons
+  flashSwitchAvailable(); // flash the Alternative button again
   renderTip_(
-    'When the offer appears, you can accept and switch, or refuse and stay in the main sequence. Taking the alternative restarts your progress. '+
-    'The reward is the same either way.',
+    'To switch, click the blue <b>Alternative</b> button and confirm. '+
+    'Once you switch, your progress resets and the choice cannot be undone.',
     tipContinue_()
   );
 }
 
-// 13. The offer screen is short, but the alternative stays available
-// afterwards, from the blue Alternative button.
+// 13. The pause is short; the alternative stays available afterwards.
 function trainScreen13_(){
   trainPaint_({done:2, live:true, offered:true, offerBanner:true, offerAsk:true});
   trainLightUpTo_(['panel-alt','taskcard-banner','taskcard-body']);
-  const cd=el('st-countdown'), lbl=el('st-cd-label'), n=el('st-cd-n');
-  if(cd) cd.style.display='block';
-  if(lbl) lbl.textContent='The offer ends';
-  if(n) n.textContent='45';
-  trainFlashOfferCountdown_(); // flash the countdown
+  const cd=el('st-countdown'); if(cd) cd.style.display='none';
+  trainFlashOfferCountdown_(); // flash "The task will resume in … seconds / Resume now"
   renderTip_(
-    'The offer screen stays open only for a short time. If you refuse, or the time runs out, you stay in the main sequence, '+
-    'but the alternative remains available: from then on you can switch at any moment by clicking the blue Alternative button.<br><br>'+
-    'Once you switch, the choice cannot be undone.',
+    'When the alternative is offered, the task pauses for a short time, then resumes by itself (or press <b>Resume now</b>). '+
+    'The alternative remains available after that: you can switch at any moment by clicking the blue Alternative button.',
     tipContinue_()
   );
 }
@@ -3085,8 +3060,7 @@ function trainScreen14_(){
   trainLightUpTo_(['panel-alt','taskcard-banner','taskcard-body']);
   trainFlashCards_();
   renderTip_(
-    'If you reach the end of the sequence without finding the winning card, you are moved to the alternative sequence automatically. '+
-    'You do not lose your reward: you earn it by completing the alternative.',
+    'If you reach the end of the sequence without finding the winning card, you can still switch to the alternative sequence and earn your reward by completing it.',
     tipContinue_()
   );
 }
@@ -3311,7 +3285,7 @@ function graceRevealRest_(){
     el('grace-remember').innerHTML =
       'Remember:<br>'+
       '• Only <b>orange</b> cards can be the winning card.<br>'+
-      '• If you reach the end without finding the winning card, you are moved to the alternative automatically: you still earn your reward by completing it.<br>'+
+      '• If you reach the end without finding the winning card, you can still switch to the alternative: you still earn your reward by completing it.<br>'+
       '• Once offered, the alternative remains available until the end of the sequence.';
   },3800));
 
@@ -3340,6 +3314,7 @@ function startTask(resumeSubtaskDone){
   const startAt = resumeSubtaskDone || 0;
   const resuming = startAt>0 || S.phase==='alt';
   S.subtaskDone=startAt; S.switchAvailable=false;
+  S.autoSwitchNoteOpen=false; S.altFlashing=false;
   S._lastDeck=null; // first card of this (re)start just appears, no slide
   if(!resuming){ S.phase='main'; S.altStartPos=0; S.penalty=0; }
   const task=S.tasks[S.taskIdx];
@@ -3590,18 +3565,17 @@ function finishMainPhase_(){
 }
 
 // ── OFFER ─────────────────────────────────────────────────────────
-// In-place offer: no separate screen — the instruction line is replaced by
-// a banner right where "Find and click all X" was, the grid is cleared to
-// placeholders (no card is running during the offer), and the below-grid
-// countdown is relabeled to count down the accept/refuse window. This is
-// where the alternative's length is revealed for the first time. Refusing
-// (or letting the countdown run out) does NOT close the alternative: from
-// then on it stays available through the blue Alternative button for the
-// rest of the sequence (see openAltSwitch_()).
+// In-place offer ("the pause"): no separate screen — the instruction line is
+// replaced by a banner right where "Find and click all X" was, the grid is
+// cleared to placeholders (no card is running), and the banner counts down
+// to the task resuming, with a "Resume now" button. This is where the
+// alternative's length is revealed for the first time, and its button
+// flashes: switching is done ONLY with that button (openAltSwitch_()), now
+// or at any later point in the sequence.
 function showOfferScreen(task){
   kill();
   S.switchAvailable = true;
-  S.offerPendingChoice = null;
+  S.offerLapsedInDialog = false;
   const now = new Date().toISOString();
   task.altRevealed  = true;
   task.offerAtTask  = S.subtaskDone;
@@ -3618,107 +3592,70 @@ function showOfferScreen(task){
   bannerText.classList.remove('switch-flash');
   void bannerText.offsetWidth; // restart the animation even if it's still mid-run
   bannerText.classList.add('switch-flash');
-
-  // Step 1 (ask) visible, step 2 (confirm popup) not — see tentativeChoice_/
-  // confirmTentative_/undoTentative_ for how the two swap.
   const askBlock=el('st-offer-ask');
   if(askBlock) askBlock.style.display='block';
-  const confirmOverlay=el('offer-confirm-overlay'); if(confirmOverlay) confirmOverlay.style.display='none';
-  const altLen=el('st-offer-altlen'); if(altLen) altLen.textContent=task.altDuration;
 
   const gridEl=el('st-grid');
   if(gridEl){
     [...gridEl.querySelectorAll('.ecell')].forEach(c=>{ c.onclick=null; c.className='ecell ph'; c.textContent='·'; });
   }
-  const cd=el('st-countdown'), lbl=el('st-cd-label');
-  if(lbl) lbl.textContent='The offer ends';
-  if(cd) cd.style.display='block';
+  const cd=el('st-countdown'); if(cd) cd.style.display='none';
+  // No card countdown during the pause: drop its reserved slot so there is
+  // no empty band under the banner (restored in hideOfferBanner_()).
+  const cdSlot=el('st-cd-slot'); if(cdSlot) cdSlot.style.display='none';
 
-  redrawProg(); // the Alternative panel turns blue, with its length
+  flashAlt_(); // the Alternative button turns blue, with its length, and flashes
 
   const secs = 10 + Math.floor(Math.random()*36); // Uniform[10,45] seconds
   task.pauseSecs = secs;
   let remaining = secs;
-  el('st-cd-n').textContent = remaining;
-  // ONE timer for the whole offer, from the ask step straight through the
-  // confirm step. What a timeout DOES depends on the step: no tentative
-  // choice yet → the offer banner lapses (defaults to staying, logged as
-  // auto_refused); a tentative choice pending confirm → that choice is
-  // auto-committed (logged as auto_confirmed).
+  const cdn=el('st-offer-cd'); if(cdn) cdn.textContent = remaining;
+  // When it runs out the task resumes (pause_outcome = timeout). If the
+  // switch dialog is open at that moment, the resume waits for the dialog:
+  // Confirm switches, Keep going resumes (see closeAltSwitch_()).
   const tick = setInterval(()=>{
     remaining--;
-    const n = el('st-cd-n');
+    const n = el('st-offer-cd');
     if(n) n.textContent = Math.max(0, remaining);
-    const n2 = el('offer-confirm-cd-n');
-    if(n2) n2.textContent = Math.max(0, remaining);
     if(remaining <= 0){
       clearInterval(tick);
       if(S.offerTimer!==tick) return;
-      if(S.offerPendingChoice == null){
-        task.autoRefused = true;
-        resolveOffer_('continue');
-      } else {
-        task.autoConfirmed = true;
-        resolveOffer_(S.offerPendingChoice);
-      }
+      if(S.switchOverlayOpen){ S.offerLapsedInDialog = true; return; }
+      task.autoRefused = true;
+      resolveOffer_('continue');
     }
   }, 1000);
   S.offerTimer = tick;
 }
 
-// Step 1 → step 2: "Accept and switch" or "Refuse and stay" pressed. Nothing
-// is committed yet — just open the confirm popup and record the tentative
-// choice. The countdown keeps running throughout, mirrored into the popup.
-function tentativeChoice_(choice){
-  if(trainingActive) return; // demo buttons during training are decorative
-  if(!S.switchAvailable) return; // stale click after the offer already resolved
-  S.offerPendingChoice = choice;
-  // Recorded every time "Accept and switch" is pressed — if the participant
-  // Undoes and presses it again later, this reflects whichever press
-  // actually led to confirming. switch_decision_secs (endTask()) is the gap
-  // between this and switchTakenAtTime.
-  if(choice==='switch'){
-    const task=S.tasks[S.taskIdx];
-    task.switchPressedAtTask = S.subtaskDone;
-    task.switchPressedAtTime = new Date().toISOString();
-  }
-  const askBlock=el('st-offer-ask'); if(askBlock) askBlock.style.display='none';
-  const offerBox=el('st-instr-offer'); if(offerBox) offerBox.classList.remove('is-expanded');
-  const txt=el('offer-confirm-text');
-  if(txt) txt.textContent = choice==='switch'
-    ? 'You have decided to switch to the alternative.'
-    : 'You have decided to stay in the main sequence. The alternative will stay available.';
-  const overlay=el('offer-confirm-overlay');
-  if(overlay){ sizeBoardOverlay_(overlay); overlay.style.display='flex'; }
+// Flash the Alternative button 3 times (plain setTimeout so kill() between
+// cards doesn't cut it short).
+function flashAlt_(){
+  S.altFlashing = false; updateStats();       // drop the class…
+  const p=el('panel-alt'); if(p) void p.offsetWidth; // …force a reflow so the animation restarts…
+  S.altFlashing = true; updateStats();        // …and put it back
+  clearTimeout(S._altFlashT);
+  S._altFlashT = setTimeout(()=>{ S.altFlashing = false; updateStats(); }, 2600);
+}
+// Same for the Give up button.
+function flashForfeit_(){
+  const p=el('panel-forfeit'); if(!p) return;
+  p.classList.remove('attn-flash'); void p.offsetWidth; p.classList.add('attn-flash');
+  setTimeout(()=>p.classList.remove('attn-flash'), 2600);
 }
 
-// Step 2, Confirm: commits the tentative choice.
-function confirmTentative_(){
+// "Resume now" on the pause banner: the task resumes straight away (logged as
+// pause_outcome = resume_now; a countdown running out is 'timeout'). The
+// alternative stays available.
+function resumeNow_(){
   if(trainingActive) return;
-  if(!S.switchAvailable || S.offerPendingChoice == null) return;
-  const overlay=el('offer-confirm-overlay');
-  if(overlay){ resetBoardOverlay_(overlay); overlay.style.display='none'; }
-  resolveOffer_(S.offerPendingChoice);
+  if(!S.switchAvailable || S.switchOverlayOpen) return;
+  resolveOffer_('continue');
 }
-
-// Step 2, Undo: back to step 1, same open offer, same running countdown.
-// Counted (offer_undo_count) as a measure of indecision.
-function undoTentative_(){
-  if(trainingActive) return;
-  if(!S.switchAvailable) return;
-  const task = S.tasks[S.taskIdx];
-  if(task) task.offerUndoCount = (task.offerUndoCount||0) + 1;
-  S.offerPendingChoice = null;
-  const overlay=el('offer-confirm-overlay');
-  if(overlay){ resetBoardOverlay_(overlay); overlay.style.display='none'; }
-  const offerBox=el('st-instr-offer'); if(offerBox) offerBox.classList.add('is-expanded');
-  const askBlock=el('st-offer-ask'); if(askBlock) askBlock.style.display='block';
-}
-
 // Restores the subtask screen to its normal (non-offer) appearance.
 function hideOfferBanner_(){
   S.switchAvailable = false;
-  S.offerPendingChoice = null;
+  S.offerLapsedInDialog = false;
   const offerBox=el('st-instr-offer');
   offerBox.style.display='none';
   offerBox.classList.remove('is-expanded');
@@ -3727,12 +3664,13 @@ function hideOfferBanner_(){
   if(lbl) lbl.textContent='Submitting';
   if(cd) cd.style.display='none';
   const askBlock=el('st-offer-ask'); if(askBlock) askBlock.style.display='none';
-  const overlay=el('offer-confirm-overlay'); if(overlay) overlay.style.display='none';
+  const cdSlot=el('st-cd-slot'); if(cdSlot) cdSlot.style.display='';
 }
 
-// Final resolution of the offer banner — accept or stay, confirmed or
-// auto-resolved by the countdown. deliberation_secs is the real elapsed
-// time from the banner appearing to this moment.
+// Final resolution of the pause — switched with the Alternative button
+// ('switch'), or resumed ('continue': Resume now, or the countdown ran
+// out). pause_elapsed_secs is the real elapsed time from the banner
+// appearing to this moment.
 function resolveOffer_(choice){
   const task=S.tasks[S.taskIdx];
   if(S.offerTimer){ clearInterval(S.offerTimer); S.offerTimer=null; }
@@ -3742,6 +3680,9 @@ function resolveOffer_(choice){
   kill();
   hideOfferBanner_();
   showScreen('subtask');
+  // Pause over without a switch: flash the Alternative button again, as a
+  // reminder that it stays available.
+  flashAlt_();
   if(S.subtaskDone >= task.nReq){ finishMainPhase_(); return; }
   startSubtask();
 }
@@ -3799,6 +3740,8 @@ function closeForfeitConfirm(){ // "Keep going"
   // highlights the real button).
   S.forfeitOverlayOpen = false;
   if(trainingActive) return;
+  // Opened from the No-winning-card note: back to it.
+  if(S.autoSwitchNoteOpen){ const ov=el('autoswitch-overlay'); if(ov) ov.style.display='flex'; return; }
   resolvePendingOutcome_();
 }
 function confirmForfeit(){
@@ -3810,16 +3753,20 @@ function confirmForfeit(){
   doForfeit_();
 }
 
-// ── ALTERNATIVE BUTTON (after the offer) ──────────────────────────
-// Once the offer has fired, the blue Alternative panel is a button for the
-// rest of the main sequence: it opens a confirm dialog, and Confirm switches.
+// ── ALTERNATIVE BUTTON ────────────────────────────────────────────
+// The ONLY way to switch. Once the offer has fired (during the pause and for
+// the rest of the main sequence) the blue Alternative panel opens a confirm
+// dialog, and Confirm switches. A switch confirmed during the pause counts
+// as switching at the pause (switched_at_pause = 1).
 function openAltSwitch_(){
   if(trainingActive) return;
   const task=S.tasks[S.taskIdx];
-  if(!task || S.phase!=='main' || !task.altRevealed || S.switchAvailable) return;
   if(S.forfeitOverlayOpen || S.switchOverlayOpen) return;
+  // "No winning card" note: the panel starts the alternative.
+  if(S.autoSwitchNoteOpen){ continueAfterAutoSwitch_(); return; }
+  if(!task || S.phase!=='main' || !task.altRevealed) return;
   S.switchOverlayOpen = true;
-  task.altButtonOpens = (task.altButtonOpens||0) + 1;
+  task.dialogOpens = (task.dialogOpens||0) + 1; // switch_dialog_opens (pause + later)
   // Re-recorded on every open, so it always reflects the press that
   // actually led to confirming — see switch_pressed_at_* in endTask().
   task.switchPressedAtTask = S.subtaskDone;
@@ -3835,7 +3782,13 @@ function closeAltSwitch_(){ // "Keep going"
   S.switchOverlayOpen = false;
   if(trainingActive) return;
   const task=S.tasks[S.taskIdx];
-  if(task) task.altButtonUndos = (task.altButtonUndos||0) + 1;
+  if(task) task.dialogCancels = (task.dialogCancels||0) + 1; // switch_dialog_cancels
+  if(S.switchAvailable){
+    // Still in the pause: back to it; if its countdown ran out meanwhile,
+    // the task resumes now.
+    if(S.offerLapsedInDialog){ task.autoRefused = true; resolveOffer_('continue'); }
+    return;
+  }
   resolvePendingOutcome_();
 }
 function confirmAltSwitch_(){
@@ -3844,6 +3797,7 @@ function confirmAltSwitch_(){
   S.switchOverlayOpen = false;
   S.pendingOutcome = null; // the voluntary switch wins outright
   if(trainingActive) return;
+  if(S.switchAvailable){ resolveOffer_('switch'); return; } // during the pause = accepting the offer
   doSwitch_('button');
 }
 
@@ -3863,7 +3817,7 @@ function enterAlt_(task, now){
 
 // Voluntary switch — from the offer banner ('offer') or the Alternative
 // button afterwards ('button'). switchPressedAt* were already captured
-// (tentativeChoice_()/openAltSwitch_()) and deliberately not overwritten
+// (openAltSwitch_()) and deliberately not overwritten
 // here, so switch_decision_secs measures the real gap to this moment.
 function doSwitch_(source){
   kill();
@@ -3874,6 +3828,7 @@ function doSwitch_(source){
   task.switchSource=source;
   task.switchTakenAtTask=S.subtaskDone; // main-phase cards completed
   task.switchTakenAtTime=now;
+  task.altStartedAt=now;
   enterAlt_(task, now);
   startSubtask();
 }
@@ -3888,16 +3843,26 @@ function doAutoSwitch_(){
   const now=new Date().toISOString();
   task.autoSwitched=true;
   task.autoSwitchAtTime=now;
+  S.autoSwitchNoteOpen = true;
   enterAlt_(task, now);
   const msg=el('autoswitch-msg');
-  if(msg) msg.innerHTML = 'There was no winning card in this sequence. Complete the <b>'+task.altDuration+'</b> cards of the alternative to earn your reward.';
+  if(msg) msg.innerHTML = 'There was no winning card in this sequence. Choose whether to switch to the alternative (<b>'+task.altDuration+'</b> cards) to earn your reward, or to give up.';
   const ov=el('autoswitch-overlay'); if(ov) ov.style.display='flex';
+  // The choice is made with the two buttons on the right: flash both.
+  flashAlt_(); flashForfeit_();
 }
+// Alternative button on the No-winning-card note: start the alternative.
+// (Give up goes through the normal give-up confirmation; "Keep going" there
+// comes back to the note — see closeForfeitConfirm().)
 function continueAfterAutoSwitch_(){
+  if(!S.autoSwitchNoteOpen) return;
   hideAutoSwitchNote_();
+  const task=S.tasks[S.taskIdx]; if(task) task.altStartedAt = new Date().toISOString();
+  updateStats();
   startSubtask();
 }
 function hideAutoSwitchNote_(){
+  S.autoSwitchNoteOpen = false;
   const ov=el('autoswitch-overlay'); if(ov) ov.style.display='none';
 }
 
@@ -3915,18 +3880,21 @@ function doForfeit_(){
 // fixed label for a combination of them (see README for the full table).
 function computeOutcomeSummary_(task, outcome){
   let base;
-  if(task.switchTaken) base = task.switchSource==='button' ? 'switched later via button' : 'switched at offer';
-  else if(task.autoSwitched) base = 'auto-switched (no winning card)';
-  else {
+  if(task.switchTaken) base = task.switchSource==='offer' ? 'switched at the pause' : 'switched after the pause';
+  else if(task.autoSwitched){
+    // Gave up on the No-winning-card screen, before starting the alternative.
+    if(!task.altStartedAt && outcome==='forfeited') return 'no winning card, gave up';
+    base = 'no winning card, took the alternative';
+  } else {
     // Never left the main sequence.
-    const offered = !!task.altRevealed;
-    if(outcome==='forfeited')  return offered ? 'continued and forfeited'   : 'forfeited before offer';
-    if(outcome==='autokicked') return offered ? 'continued and auto-kicked' : 'auto-kicked before offer';
-    if(outcome==='completed')  return offered ? 'continued and found the winning card' : 'found the winning card before the offer';
+    const paused = !!task.altRevealed;
+    if(outcome==='forfeited')  return paused ? 'gave up after the pause'      : 'gave up before the pause';
+    if(outcome==='autokicked') return paused ? 'auto-kicked after the pause'  : 'auto-kicked before the pause';
+    if(outcome==='completed')  return paused ? 'found the winning card'       : 'found the winning card before the pause';
     return null;
   }
-  if(outcome==='forfeited')  return base+' and forfeited';
-  if(outcome==='autokicked') return base+' and auto-kicked';
+  if(outcome==='forfeited')  return base+', then gave up';
+  if(outcome==='autokicked') return base+', then auto-kicked';
   return base;
 }
 
@@ -4096,31 +4064,25 @@ function endTask(outcome){
     // L=orange) — live_pattern truncated to n_main_tasks_done.
     card_order:    task.live.slice(0, nMain).map(v=>v?'L':'S').join(''),
     outcome_summary: computeOutcomeSummary_(task, outcome),
-    // 1 once the alternative's length was shown (the offer fired, or a
-    // same-tab reload landed past the offer point — see startTask()).
+    // 1 once the alternative's length was shown (the pause happened, or a
+    // same-tab reload landed past the pause point — see startTask()).
     alt_revealed:  task.altRevealed ? 1 : 0,
-    // ── The offer banner ──
-    switch_offered_at_task: fired ? task.offerAtTask : null,
-    switch_offered_at_time: fired ? task.offerFiredAt : null,
-    pause_secs:        fired ? task.pauseSecs : null,        // its randomised countdown, Uniform[10,45]s
-    penalty_at_pause:  fired ? task.penaltyAtPause : null,   // this sequence's mistake penalty when the offer fired
-    deliberation_secs: task.deliberationSecs,                // banner shown → offer resolved
-    offer_choice:      task.offerChoice,                     // 'accept' | 'refuse' (incl. timeout) | null
-    offer_undo_count:  fired ? (task.offerUndoCount||0) : null,
-    auto_refused:      fired ? (task.autoRefused?1:0) : null,
-    auto_confirmed:    fired ? (task.autoConfirmed?1:0) : null,
-    // ── Voluntary switch (offer banner or Alternative button) ──
-    switch_taken:          task.switchTaken ? 1 : 0,
-    switch_source:         task.switchTaken ? task.switchSource : null, // 'offer' | 'button'
-    switch_taken_at_task:  task.switchTaken ? task.switchTakenAtTask : null,
-    switch_taken_at_time:  task.switchTaken ? task.switchTakenAtTime : null,
-    switch_pressed_at_task: task.switchTaken ? task.switchPressedAtTask : null,
+    // ── The pause (when the alternative is offered) ──
+    pause_started_at_time: fired ? task.offerFiredAt : null,
+    pause_duration_secs:   fired ? task.pauseSecs : null,       // its randomised countdown, Uniform[10,45]s
+    pause_elapsed_secs:    task.deliberationSecs,               // pause shown → ended (switch, Resume now or timeout)
+    pause_outcome:         fired ? (task.switchSource==='offer' ? 'switched' : task.autoRefused ? 'timeout' : 'resume_now') : null,
+    penalty_at_pause:      fired ? task.penaltyAtPause : null,  // this sequence's mistake penalty when the pause started
+    // ── Switching (only with the Alternative button, during the pause or later) ──
+    switched:              task.switchTaken ? 1 : 0,
+    switched_at_pause:     (task.switchTaken && task.switchSource==='offer') ? 1 : 0,
+    switched_at:           task.switchTaken ? task.switchTakenAtTask : null,  // main cards completed when switching
+    switched_at_time:      task.switchTaken ? task.switchTakenAtTime : null,
+    switch_pressed_at:     task.switchTaken ? task.switchPressedAtTask : null, // the click that led to it (opening the dialog)
     switch_pressed_at_time: task.switchTaken ? task.switchPressedAtTime : null,
-    switch_decision_secs:  switchDecisionSecs,
-    alt_button_opens:      task.altButtonOpens || 0,
-    alt_button_undos:      task.altButtonUndos || 0,
-    switched_at:           task.switchTaken ? task.switchTakenAtTask : null,          // main cards completed when switching
-    switched_at_pause:     (task.switchTaken && task.switchSource==='offer') ? 1 : 0, // accepted on the offer banner
+    switch_decision_secs:  switchDecisionSecs,                  // that click → Confirm switch
+    switch_dialog_opens:   task.dialogOpens || 0,               // switch dialog opened (pause + later)
+    switch_dialog_cancels: task.dialogCancels || 0,             // …and closed with "Keep going"
     // ── Exit point (see above) and expected-duration benchmarks ──
     exit_type:             exitType,
     sunk_cost_at_exit:     exitPos,
@@ -4132,16 +4094,18 @@ function endTask(outcome){
     switch_better_at_pause: gainAtPause > 0 ? 1 : 0,
     switch_gain_at_exit:   r3x(gainAtExit),
     switch_better_at_exit: gainAtExit > 0 ? 1 : 0,
-    // ── Automatic switch (window ran out without a winning card) ──
-    auto_switched:         task.autoSwitched ? 1 : 0,
-    auto_switch_at_time:   task.autoSwitchAtTime || null,
-    alt_phase_started_at:  task.altPhaseStartedAt || null,
-    // ── Forfeit / autokick ──
-    forfeit_taken:         task.forfeitTaken ? 1 : 0,
-    forfeit_phase:         task.forfeitTaken ? task.forfeitPhase : null, // 'main' | 'alt'
-    forfeit_taken_at_task: task.forfeitTaken ? task.forfeitTakenAtTask : null,
-    forfeit_taken_at_time: task.forfeitTaken ? task.forfeitTakenAtTime : null,
-    forfeited_at:          task.forfeitTaken ? (task.forfeitPhase==='alt' ? nAlt : nMain) : null, // cards completed in the phase where they gave up (see forfeit_phase)
+    // ── Main sequence ran out without a winning card ──
+    no_winning_card:         task.autoSwitched ? 1 : 0,
+    no_winning_card_at_time: task.autoSwitchAtTime || null,
+    // ── The alternative actually started (after a switch, or chosen on the
+    // No-winning-card screen) ──
+    alt_started:           task.altStartedAt ? 1 : 0,
+    alt_started_at_time:   task.altStartedAt || null,
+    // ── Give up / autokick ──
+    forfeited:             task.forfeitTaken ? 1 : 0,
+    forfeited_in:          task.forfeitTaken ? task.forfeitPhase : null, // 'main' | 'alt'
+    forfeited_at:          task.forfeitTaken ? (task.forfeitPhase==='alt' ? nAlt : nMain) : null, // cards completed in that phase
+    forfeited_at_time:     task.forfeitTaken ? task.forfeitTakenAtTime : null,
     auto_kicked:           task.autoKicked ? 1 : 0,
     // ── Effort and earnings ──
     n_main_tasks_done: nMain,
@@ -4157,21 +4121,26 @@ function endTask(outcome){
     total_missed:  totalMissed,
     seq_reload_count: seqReloads,
     start_at:      task.startAt || null,
-    seq_start_at_time: task.startAt || null, // explicit alias of start_at
     briefing_ended_at: task.briefingEndedAt || null,
     end_at:        new Date().toISOString(),
     grids:         grids,
   }));
 
-  const penaltyNote = S.penalty>0 ? ` (after ${money_(S.penalty)} in penalties: <strong>${money_(netEarnings)}</strong> net)` : '';
+  // What was earned, net of this sequence's penalties — only the net amount
+  // in bold; the breakdown in plain text, only when there were penalties.
+  const earnedLine = S.penalty>0
+    ? `You earned <strong>${money_(netEarnings)}</strong> (${money_(task.pay)} reward − ${money_(S.penalty)} in penalties).`
+    : `You earned <strong>${money_(task.pay)}</strong>.`;
+  // Penalties count against the final total even when the reward is lost.
+  const lostPenaltyNote = S.penalty>0 ? ` The ${money_(S.penalty)} in penalties from this sequence is subtracted from your total.` : '';
   const H={ completed:'Sequence complete', switched:'Sequence complete', forfeited:'Sequence given up', autokicked:'Sequence ended' };
   const M={
-    completed: `You found the winning card on card ${task.nReq}. You earned <strong>${money_(task.pay)}</strong>${penaltyNote}.`,
+    completed: `You found the winning card on card ${task.nReq}. ${earnedLine}`,
     switched:  task.autoSwitched
-      ? `There was no winning card in the main sequence, so you completed the alternative. You earned <strong>${money_(task.pay)}</strong>${penaltyNote}.`
-      : `You finished the alternative sequence. You earned <strong>${money_(task.pay)}</strong>${penaltyNote}.`,
-    forfeited: `You gave up this sequence, so its reward was not earned. Your other earnings are unaffected.`,
-    autokicked: `Your mistakes in this sequence used up its entire reward, so it ended here. Your other earnings are unaffected.`,
+      ? `There was no winning card in the main sequence, so you completed the alternative. ${earnedLine}`
+      : `You finished the alternative sequence. ${earnedLine}`,
+    forfeited: `You gave up this sequence, so its reward was not earned. The rewards of your other sequences are unaffected.${lostPenaltyNote}`,
+    autokicked: `Your mistakes in this sequence used up its entire reward, so it ended here. The rewards of your other sequences are unaffected.${lostPenaltyNote}`,
   };
   el('tc-h').textContent  = H[outcome];
   el('tc-msg').innerHTML  = M[outcome];
@@ -4190,7 +4159,7 @@ function nextTask(){
 }
 
 // ── RESULTS ───────────────────────────────────────────────────────
-const SHOW_UP_FEE = 1.50; // fixed Prolific base payment — never varies with performance
+const SHOW_UP_FEE = 1.25; // fixed Prolific base payment — never varies with performance
 
 function showResults(){
   // The moment the last section actually finished — distinct from
@@ -4272,51 +4241,79 @@ async function completeStudy_(){
     try{ localStorage.removeItem('wtstudy_resume_' + (_prolificID||'anon')); } catch(e){}
     if(!_isAnyPilot) prolificRedirect_(); // neither unpaid version came from Prolific — nowhere to redirect them back to
   } else {
-    el('results-error-code').textContent = 'ERR-' + Date.now().toString(36).toUpperCase();
+    _lastErrorCode = 'ERR-' + Date.now().toString(36).toUpperCase();
+    el('results-error-code').textContent = _lastErrorCode;
     el('results-error').style.display='block';
     const copyStatus=el('results-copy-status'); if(copyStatus) copyStatus.style.display='none';
-    const shareBtn=el('btn-share-backup'); if(shareBtn) shareBtn.style.display = shareSupported_() ? 'inline-block' : 'none';
   }
 }
 
-// Whether this browser can actually share a FILE (not just text/links) via
-// the native share sheet — Web Share API Level 2. Mostly mobile Safari/
-// Chrome; desktop browsers typically lack this, so the button stays
-// hidden there and Download/Copy remain the way in.
-function shareSupported_(){
-  try{
-    return !!(navigator.canShare && navigator.share &&
-      navigator.canShare({files:[new File(['x'], 'x.json', {type:'application/json'})]}));
-  } catch(e){ return false; }
+// ── ENCRYPTED BACKUP (when the final save can't be confirmed) ────────────
+// The participant can save their responses as a file (or copy them), but
+// the content is encrypted for the research team only: hybrid encryption,
+// a fresh AES-256-GCM key per backup, itself encrypted with the team's RSA
+// public key below (RSA-OAEP, SHA-1 — OpenSSL's default OAEP, so the
+// decryption tool in tools/ can use it directly). The private key never
+// leaves the researcher's machine. Decrypt with tools/decrypt_backups.R.
+// Only identification fields stay in clear on the envelope, so a file can be
+// recognised without decrypting it.
+const BACKUP_PUBLIC_KEY_SPKI_B64 = 'MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAlwHIKB9u2jF0rYuKEo9vcoaSfkBW4CzxHLVb5BxhU1sQnaaRXqczvU4x3AIwd8XzoYgOuTTsN9D5mhzOSaAGvIHc8IGQrR5vG9V+0tO7gsNyT4DMwkqmOZ48O/1eNQehikuRzv0fA9JWyGj0BGq17d9h1f8WmafvxekCB9CFO7vZAJzEy7Sv3cGn9A/XrcUslf9RhWDY5lvpu7PEEgrFEdrsGcFagqqSQV5gV7ffIaZ086c/3EQS9bMboOYm3YLFbWKES2aw4XyOxsjE61b60TE/wXQIRShROIMTj8Kk6j+oJVp46/SaBibAoAANKB/863cg7jb2lZHP33E/B/egFmoIcGTBZsKpLUbsHaEbuExCR6NOewTFNOAqLIFR1bbp+AByPgbSl4kyAAwzskf/9hvsglbxv0OIzKwTYDAPoM4VEzFw99R4B1hUxW/ZSZ5sDMn47avRT+Xood8ez8Qmu6qLVquoLvbxtGymejR+hxZ92TiuMmglBhKJVvx8XdcHAgMBAAE=';
+let _lastErrorCode = '';
+
+const b64FromBytes_ = bytes => { let s=''; const b=new Uint8Array(bytes); for(let i=0;i<b.length;i+=0x8000) s+=String.fromCharCode.apply(null, b.subarray(i,i+0x8000)); return btoa(s); };
+const bytesFromB64_ = b64 => Uint8Array.from(atob(b64), c=>c.charCodeAt(0));
+
+// Everything the backend would have received, plus who/when.
+function buildBackupPayload_(){
+  const {study_level, sections} = buildFullData_();
+  return {
+    prolific_pid: _prolificID, study_id: _studyID, session_id: _sessionID,
+    error_code: _lastErrorCode, created_at: new Date().toISOString(),
+    study_level, sections,
+  };
 }
 
-// Hands the backup file straight to whatever app the participant already
-// has installed (Mail, WhatsApp, Drive, Files...) via the OS share sheet —
-// unlike Download, this never requires them to go find the file themselves
-// afterward, which on a phone can mean hunting through a downloads folder
-// they may not know how to get to.
-async function shareDataBackup(){
-  const data = buildFullData_();
-  const file = new File([JSON.stringify(data, null, 2)], 'wt_study_backup_' + (_prolificID||'unknown') + '.json', {type:'application/json'});
-  try{
-    await navigator.share({files:[file], title:'Study responses backup'});
-  } catch(e){ /* participant cancelled the share sheet, or it failed — Copy/Download remain available */ }
+async function encryptBackup_(payload){
+  const subtle = window.crypto && window.crypto.subtle;
+  if(!subtle) throw new Error('Web Crypto unavailable');
+  const pub = await subtle.importKey('spki', bytesFromB64_(BACKUP_PUBLIC_KEY_SPKI_B64),
+                                     {name:'RSA-OAEP', hash:'SHA-1'}, false, ['encrypt']);
+  const aes = await subtle.generateKey({name:'AES-GCM', length:256}, true, ['encrypt']);
+  const iv  = window.crypto.getRandomValues(new Uint8Array(12));
+  const ct  = await subtle.encrypt({name:'AES-GCM', iv}, aes, new TextEncoder().encode(JSON.stringify(payload)));
+  const rawKey = await subtle.exportKey('raw', aes);
+  const encKey = await subtle.encrypt({name:'RSA-OAEP'}, pub, rawKey);
+  return JSON.stringify({
+    format: 'WT_F-encrypted-backup-v1',
+    prolific_pid: payload.prolific_pid, study_id: payload.study_id,
+    error_code: payload.error_code, created_at: payload.created_at,
+    enc_key: b64FromBytes_(encKey), iv: b64FromBytes_(iv), data: b64FromBytes_(ct), // data = ciphertext ‖ 16-byte GCM tag
+  });
 }
 
-// Universal fallback that needs no file handling at all: copy the backup
-// as text, then paste it directly into an email/message body.
-function copyDataBackup(){
-  const status = el('results-copy-status');
-  const showStatus = (msg, ok)=>{ if(!status) return; status.textContent=msg; status.style.color = ok ? 'var(--grn)' : 'var(--red)'; status.style.display='block'; };
+function backupFileName_(){
+  const safe = String(_prolificID||'unknown').replace(/[^A-Za-z0-9_.-]/g,'_');
+  return 'wt_backup_' + safe + (_lastErrorCode ? '_'+_lastErrorCode : '') + '.enc.json';
+}
+
+function showBackupStatus_(msg, ok){
+  const status = el('results-copy-status'); if(!status) return;
+  status.textContent=msg; status.style.color = ok ? 'var(--grn)' : 'var(--red)'; status.style.display='block';
+}
+
+// Copies the encrypted backup as text, to paste into a message.
+async function copyDataBackup(){
   if(!navigator.clipboard || !navigator.clipboard.writeText){
-    showStatus('Copy is not supported on this browser — please use Download instead.', false);
+    showBackupStatus_('Copy is not supported on this browser — please use Download instead.', false);
     return;
   }
-  const data = buildFullData_();
-  navigator.clipboard.writeText(JSON.stringify(data, null, 2)).then(
-    ()=>showStatus('Copied — you can now paste it into an email or message.', true),
-    ()=>showStatus('Could not copy — please use Download instead.', false)
-  );
+  try{
+    const txt = await encryptBackup_(buildBackupPayload_());
+    await navigator.clipboard.writeText(txt);
+    showBackupStatus_('Copied — paste it into your message to the research team.', true);
+  } catch(e){
+    showBackupStatus_('Could not copy — please use Download instead.', false);
+  }
 }
 
 function retryComplete_(){
@@ -4331,14 +4328,19 @@ function prolificRedirect_(){
   window.open('https://app.prolific.com/submissions/complete?cc=' + COMPLETION_CODE, '_blank');
 }
 
-function downloadDataBackup(){
-  const data = buildFullData_();
-  const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href=url; a.download='wt_study_backup_' + (_prolificID||'unknown') + '.json';
-  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+async function downloadDataBackup(){
+  try{
+    const txt = await encryptBackup_(buildBackupPayload_());
+    const blob = new Blob([txt], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download=backupFileName_();
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    showBackupStatus_('File saved ('+backupFileName_()+'). Send it to the research team now.', true);
+  } catch(e){
+    showBackupStatus_('Could not create the file — please contact the research team with the reference code above.', false);
+  }
 }
 
 // ── DEBUG ─────────────────────────────────────────────────────────
@@ -4390,6 +4392,14 @@ function debugStop(){
   _debugStopped=!_debugStopped;
   if(_debugStopped){ kill(); el('debug-stop-btn').textContent='Resume'; el('debug-stop-btn').style.background='#ffd'; }
   else{ el('debug-stop-btn').textContent='Stop'; el('debug-stop-btn').style.background='#fff7cc'; startSubtask(); }
+}
+
+// Debug bar: download the encrypted backup of everything logged so far
+// (reference code DEMO-… unless a real save error already set one).
+function debugDownloadBackup_(){
+  if(!S.debugMode) return;
+  if(!_lastErrorCode) _lastErrorCode = 'DEMO-' + Date.now().toString(36).toUpperCase();
+  downloadDataBackup();
 }
 
 // ── INIT ─────────────────────────────────────────────────────────
