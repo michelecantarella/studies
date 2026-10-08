@@ -1,3 +1,8 @@
+
+https://michelecantarella.github.io/studies/WT_F/?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}
+
+
+
 https://michelecantarella.github.io/studies/WT_F/?PROLIFIC_PID=dummyid&demomode=1
 
 https://michelecantarella.github.io/studies/WT_F/?STUDY_ID=studentpilot

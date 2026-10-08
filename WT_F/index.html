@@ -1029,7 +1029,7 @@ if(!_prolificID && _isPilotStudy){
 // backend.txt rewrites a header row that doesn't match RESP_HEADER). While
 // it's the PASTE_ placeholder, backendConfigured_() is false and nothing is
 // sent.
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbwbhP14XVwGGURRlOKfOR9_i20fr2qTPVsj7_HzNd5Mv4SlRWR_tBg2clXygc3xX-Qung/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbznYfmiYW4vL09OR_GUK6YHEQ6_rv_v7ith7NuEd_2KAZwVQfn56bBGJyt7roOnFgOcAw/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 // No payment for the walkthrough: the whole bonus is the reward pool
@@ -2113,6 +2113,11 @@ function staticSeqFields_(task){
     // snapshot saved by an earlier build still logs the current definitions.
     e_rem_at_pause:     r3(eRemaining_(task, task.pause)),
     e_rem_at_start:     r3(eRemaining_(task, 0)),
+    // Expected cards still to do if never switching: remaining main cards +
+    // the alternative if there is no winning card (= stayCost_). At the start
+    // it uses the realised alt_duration, which the participant only sees at the pause.
+    e_tot_at_pause:     r3(stayCost_(task, task.pause, task.altDuration)),
+    e_tot_at_start:     r3(stayCost_(task, 0, task.altDuration)),
     alt_minus_expected: r3(task.altDuration - stayCost_(task, task.pause, task.altDuration)), // < 0 ⇒ switching at the offer is shorter in expectation
     seq_frame_treatment: SESSION.nSeqFrame || 5,
     seq_is_bonus:   isBonusIdx_(task.index) ? 1 : 0,
@@ -4089,6 +4094,7 @@ function endTask(outcome){
     alt_available_at_exit: (!task.offerWasted && exitPos>=task.pause) ? 1 : 0,
     p_ahead_at_exit:       r3x(pAheadAtExit),
     e_rem_at_exit:         r3x(eRemAtExit),
+    e_tot_at_exit:         r3x(stayCostAtExit),           // as e_tot_at_pause, at the exit point
     penalty_at_exit:       penaltyAtExit,
     switch_gain_at_pause:  r3x(gainAtPause),
     switch_better_at_pause: gainAtPause > 0 ? 1 : 0,
