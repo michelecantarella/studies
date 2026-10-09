@@ -203,6 +203,22 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 /* Card flash used by the training walkthrough. */
 @keyframes cardFlash{0%,100%{box-shadow:0 4px 0 rgba(26,26,24,.14);}45%{box-shadow:0 0 0 4px #2f6fc8;}}
 .card-flash{animation:cardFlash .6s ease;}
+/* End-of-sequence reveal, drawn like the game's deck: the cards completed
+   in full colour, the cards not played greyed, the winning card in gold with a label, and a
+   brace under each run of completed cards. One CSS grid: row 1 labels above,
+   row 2 cards, row 3 braces, row 4 brace labels — so braces line up exactly. */
+.rv{display:grid;column-gap:3px;row-gap:3px;margin:1.3rem auto .5rem;align-items:end;}
+.rv-c{grid-row:2;aspect-ratio:1/1.12;border-radius:18%;border:1.5px solid #b8b3a5;background:var(--sur);box-shadow:0 2px 0 rgba(26,26,24,.12);}
+.rv-c.live{background:#f3a53a;border-color:#c98416;}
+.rv-c.alt{background:#5a8fd6;border-color:#1e4f96;}
+.rv-c.faded{background:#ece9e1;border-color:#d4d0c4;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.faded-live{background:#ecd9bd;border-color:#cdb488;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.faded-alt{background:#cfdcef;border-color:#9fb6da;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.win{background:#f2c230;border-color:#b8860b;}
+.rv-top{grid-row:1;justify-self:center;text-align:center;font-family:var(--mono);font-size:.7rem;font-weight:600;color:#9a7300;white-space:nowrap;line-height:1.25;}
+.rv-brace{grid-row:3;height:8px;margin-top:2px;border:2px solid var(--ink2);border-top:none;border-radius:0 0 8px 8px;position:relative;}
+.rv-brace::after{content:'';position:absolute;left:50%;bottom:-7px;width:2px;height:6px;background:var(--ink2);transform:translateX(-50%);}
+.rv-brace-lbl{grid-row:4;justify-self:center;margin-top:6px;font-size:.75rem;color:var(--ink2);white-space:nowrap;}
 
 /* Confetti burst on finishing a sequence (endTask()'s 'completed'/'switched'
    outcomes) — a canvas-drawn physics burst (see spawnConfetti_) launched
@@ -838,6 +854,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
   <div class="lbl">Sequence result</div>
   <h1 id="tc-h">Sequence complete</h1>
   <p id="tc-msg"></p>
+  <div id="tc-reveal"></div>
   <div class="btn-row"><button class="btn" onclick="tcNextClicked_()">Continue</button></div>
 </div></div>
 </div>
@@ -1029,7 +1046,7 @@ if(!_prolificID && _isPilotStudy){
 // backend.txt rewrites a header row that doesn't match RESP_HEADER). While
 // it's the PASTE_ placeholder, backendConfigured_() is false and nothing is
 // sent.
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbznYfmiYW4vL09OR_GUK6YHEQ6_rv_v7ith7NuEd_2KAZwVQfn56bBGJyt7roOnFgOcAw/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyl90ICegOGlAsMsXwsLwRpfdCDTeEV9Z-8dx0iFkwKzyO-88yDYiap9UoLzyyD_pXQgg/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 // No payment for the walkthrough: the whole bonus is the reward pool
@@ -1151,7 +1168,7 @@ const CFG = {
   // winning card, the participant is moved onto the alternative
   // automatically (reward kept) — see autoSwitchOrDefer_().
   // Window length ~ Uniform[winLo, winHi].
-  winLo:      10,
+  winLo:      7,
   winHi:      15,
   // Each non-final card's live/safe mark is an independent draw, orange with
   // this probability — NOT tied to pInside, which governs only whether the
@@ -1165,7 +1182,9 @@ const CFG = {
   // Offer position: Beta(a,a) over the window (a>1 → centred, offers at the
   // very start or end rarer), discretised into one slice per card — see
   // drawPause_(). Truncated at the ending when the ending is drawn first.
-  pauseBetaA: 2,
+  pauseBetaA: 1,   // Beta(1,1) = uniform over the positions where the offer can be placed (validPause_)
+  // Offers only up to this share of the sequence (validPause_), same as WT_G.
+  pauseMaxShare: 2/3,
   // Rewards: each respondent gets a total pool ~ Uniform{1.00, 1.05, …, 1.50},
   // split at random across the 5 sequences, each getting at least rewardMin,
   // in steps of rewardStep — see drawRewardSplit_(). Independent of the
@@ -1339,8 +1358,10 @@ function pauseWeights_(L){
   }
   return (_pauseW[L] = w);
 }
-function drawPause_(L, maxPause){
-  return pickWeighted_(pauseWeights_(L).slice(0, Math.max(0, maxPause)+1));
+// `ok(k)` (optional) restricts the support further (see validPause_).
+function drawPause_(L, maxPause, ok){
+  const w = pauseWeights_(L).slice(0, Math.max(0, maxPause)+1).map((x,k)=> (!ok || ok(k)) ? x : 0);
+  return w.some(x=>x>0) ? pickWeighted_(w) : 0;
 }
 
 // ── QUINTILE-STRATIFIED PROBABILITY ─────────────────────────────────
@@ -1414,6 +1435,33 @@ function eRemaining_(win, lp){
 function stayCost_(win, lp, altDur){
   return eRemaining_(win, lp) + (1 - pAhead_(win, lp))*altDur;
 }
+// Geometric-mean cost of staying from lp, exp(E[log cards]), same beliefs and
+// outcomes as stayCost_: the winning card on an orange card m ahead (m - lp
+// cards), or none (rest of the sequence + the alternative). Weighs the long
+// no-winning-card outcome less than the arithmetic mean.
+function stayCostGeo_(win, lp, altDur){
+  const p=win.pInside, W=win.liveTaskNumbers.length, L=win.length;
+  const ahead = win.liveTaskNumbers.filter(m=>m>lp);
+  const survive = 1 - (W-ahead.length)*(p/W);
+  if(survive <= 0) return (L-lp) + altDur;
+  let el = 0;
+  for(const m of ahead) el += (p/W)/survive * Math.log(m-lp);
+  el += (1-p)/survive * Math.log((L-lp) + altDur);
+  return Math.exp(el);
+}
+// The alternative's TRUE length (its global end, counted from the start of the
+// sequence, cards already done included), drawn at the offer uniformly from
+// max(L - pause, pause + 1) … round(1.5·L): never shorter than the rest of the
+// sequence, never longer than one and a half sequences, and always leaving at
+// least one card to show. Same rule as WT_G.
+function drawAltTrue_(win, pause){
+  const lo = Math.max(win.length - pause, pause + 1), hi = Math.round(1.5 * win.length);
+  return { globalEnd: rnd(lo, Math.max(lo, hi)), lo, hi };
+}
+// Offers only in the first CFG.pauseMaxShare of the sequence.
+function validPause_(win, k){
+  return k <= Math.floor(CFG.pauseMaxShare * win.length);
+}
 // Same conditioning: probability the winning card is still ahead at lp.
 function pAhead_(win, lp){
   const p=win.pInside, W=win.liveTaskNumbers.length;
@@ -1438,18 +1486,21 @@ function pAhead_(win, lp){
 // Regime 3 — pause and ending drawn FULLY INDEPENDENTLY. Flat like regime
 //   2, but the offer is WASTED (never fires) if the winning card is at or
 //   before the pause position — the sequence is already over by then.
+// In every regime the pause is also restricted to validPause_ (the first 2/3
+// of the sequence; pause 0 always qualifies).
 function drawOffer_(win, regime){
   const subRegime = regime===0 ? pick([1,2]) : regime;
   const pauseMax = Math.max(0, win.length - 1);
+  const ok = k => validPause_(win, k);
   const W = win.liveTaskNumbers.length;
   let ends, endPos, pause, wasted=false;
   if(subRegime === 1){
     ends   = Math.random() < win.pInside;
     endPos = ends ? pick(win.liveTaskNumbers) : null;
     const ceil = ends ? Math.min(pauseMax, endPos-1) : pauseMax;
-    pause = drawPause_(win.length, ceil);
+    pause = drawPause_(win.length, ceil, ok);
   } else if(subRegime === 2){
-    pause = drawPause_(win.length, pauseMax);
+    pause = drawPause_(win.length, pauseMax, ok);
     const aheadLive = win.liveTaskNumbers.filter(m=>m>pause);
     const im = win.pInside*(aheadLive.length/W), sm = im + (1-win.pInside);
     const pg = sm>0 ? im/sm : 0;
@@ -1458,7 +1509,7 @@ function drawOffer_(win, regime){
   } else {
     ends   = Math.random() < win.pInside;
     endPos = ends ? pick(win.liveTaskNumbers) : null;
-    pause  = drawPause_(win.length, pauseMax);
+    pause  = drawPause_(win.length, pauseMax, ok);
     if(ends && endPos <= pause) wasted = true; // winning card already played before the offer point
   }
   return { ends, endPos, pause, wasted, subRegime };
@@ -1497,17 +1548,15 @@ function generateTasks(){
     const nReq = off.ends ? off.endPos : length;
 
     // ── The alternative ──────────────────────────────────────────────
-    // Its END is drawn from a hidden "shadow" window immediately after the
-    // main one, of the same length: overall card numbers length+1..2*length.
-    // This is the GLOBAL end — where the participant finishes if they switch
-    // the moment it's offered — so switching then ALWAYS ends after the
-    // main window's last card, whatever pInside is. What the participant
-    // sees (and what's logged as alt_duration) is the number of alternative
-    // cards: global end minus cards already done at the offer. It stays that
-    // length for the rest of the sequence (taking it later, or being moved
-    // onto it when the window runs out, restarts progress on a run of
-    // exactly alt_duration cards). Never shown before it is offered.
-    const altGlobalEnd = rnd(length+1, 2*length);
+    // Its GLOBAL end (true length, counted from the start of the sequence) is
+    // drawn at the offer by drawAltTrue_. What the participant sees (and
+    // what's logged as alt_duration) is the number of alternative cards:
+    // global end minus cards already done at the offer. It stays that length
+    // for the rest of the sequence (taking it later, or being moved onto it
+    // when the window runs out, restarts progress on a run of exactly
+    // alt_duration cards). Never shown before it is offered.
+    const alt          = drawAltTrue_(win, pause);
+    const altGlobalEnd = alt.globalEnd;
     const altDuration  = altGlobalEnd - pause;
 
     const livePattern     = live.map(v=>v?'L':'S').join('');
@@ -1525,7 +1574,7 @@ function generateTasks(){
              pQuintileIdx: qIdx, pQuintileLo: P_QUINTILES_[qIdx].lo, pQuintileHi: P_QUINTILES_[qIdx].hi,
              ends: off.ends, endPos: off.ends ? off.endPos : null, nReq,
              pause, offerWasted: off.wasted,
-             altGlobalEnd, altDuration, altWindowLo: length+1, altWindowHi: 2*length,
+             altGlobalEnd, altDuration, altWindowLo: alt.lo, altWindowHi: alt.hi,
              // Pause-context bookkeeping (analysis only, never read by the
              // game logic): orange/white cards already gone by at the offer,
              // and how many remain in the window.
@@ -2119,6 +2168,9 @@ function staticSeqFields_(task){
     e_tot_at_pause:     r3(stayCost_(task, task.pause, task.altDuration)),
     e_tot_at_start:     r3(stayCost_(task, 0, task.altDuration)),
     alt_minus_expected: r3(task.altDuration - stayCost_(task, task.pause, task.altDuration)), // < 0 ⇒ switching at the offer is shorter in expectation
+    // Same comparison with the geometric-mean cost of staying.
+    e_geo_at_pause:          r3(stayCostGeo_(task, task.pause, task.altDuration)),
+    switch_gain_geo_at_pause: r3(stayCostGeo_(task, task.pause, task.altDuration) - task.altDuration),
     seq_frame_treatment: SESSION.nSeqFrame || 5,
     seq_is_bonus:   isBonusIdx_(task.index) ? 1 : 0,
   };
@@ -2457,7 +2509,7 @@ const TRAIN = {
   // the last card is orange, as in every real sequence.
   live: [false, false, true, false, false, true, false, false, false, true],
   pInside: 0.40,   // demo: 40% chance the sequence contains the winning card — a readable round number, not a real draw
-  altDuration: 11,  // offered after 2 cards: a global end of 13, within the real range 11-20 for a 10-card sequence
+  altDuration: 11,  // offered after 2 cards: a global end of 13, within the real range [8, 15] for a 10-card sequence
   pay: 0.10,
 };
 
@@ -3075,7 +3127,7 @@ function trainScreen15_(){
   trainPaint_({done:0});
   trainLightAll_();
   renderTip_(
-    'You are ready to go. Earn each sequence\'s reward by finding the winning card, or by completing the alternative.',
+    'You are ready to go. Earn each sequence\'s reward by finding the winning card, or by completing the alternative. After each sequence, you will see where the winning card was, or that there was none.',
     tipNav_([{label:'Continue', cls:'btn btn-blue', onClick:()=>{ trainStep++; renderTrainStep(); }}])
   );
 }
@@ -3290,8 +3342,9 @@ function graceRevealRest_(){
     el('grace-remember').innerHTML =
       'Remember:<br>'+
       '• Only <b>orange</b> cards can be the winning card.<br>'+
-      '• If you reach the end without finding the winning card, you can still switch to the alternative: you still earn your reward by completing it.<br>'+
-      '• Once offered, the alternative remains available until the end of the sequence.';
+      '• You win your reward by finding the winning card or switching to the alternative.<br>'+
+      '• Once offered, the alternative remains available until the end of the sequence.<br>'+
+      '• After the sequence, you will see where the winning card was (or that there was none).';
   },3800));
 
   addTimer(setTimeout(()=>{
@@ -4150,12 +4203,52 @@ function endTask(outcome){
   };
   el('tc-h').textContent  = H[outcome];
   el('tc-msg').innerHTML  = M[outcome];
+  el('tc-reveal').innerHTML = revealHtml_(task, nMain, nAlt);
   showScreen('task-complete');
   if(outcome==='completed' || outcome==='switched') spawnConfetti_();
 
   saveProgress(false);
 }
 
+// End-of-sequence reveal (shown to everyone, announced in the training and
+// the briefing), drawn like the game's deck: the main sequence with the cards
+// completed in full colour and braced (the rest greyed) ("the cards you completed"), the winning card in
+// gold with a label — or "no winning card" — and, if the alternative was
+// taken, its cards, adjacent to the main sequence (WT_F: after it).
+function revealHtml_(task, nMain, altDone){
+  const cards = task.live.map((lv,k)=>{
+    const win = task.ends && k === task.endPos-1;
+    const done = k < nMain;
+    return { cls: win ? 'win' : (done ? (lv ? 'live' : '') : (lv ? 'faded-live' : 'faded')), done, win, main: true };
+  });
+  const tookAlt = task.switchTaken || !!task.altStartedAt;
+  if(tookAlt){
+    const A = task.altDuration || 0;
+    const alt = Array.from({length:A}, (_,k)=>{
+      const done = k < altDone;
+      return { cls: done ? 'alt' : 'faded-alt', done, win:false, main:false };
+    });
+    cards.push(...alt);
+  }
+  const N = cards.length, items = [];
+  cards.forEach((c,i)=>{
+    items.push('<div class="rv-c '+c.cls+'" style="grid-column:'+(i+1)+'"></div>');
+    if(c.win) items.push('<div class="rv-top" style="grid-column:'+(i+1)+'">winning card<br>&#9660;</div>');
+  });
+  if(!task.ends){
+    const m0 = cards.findIndex(c=>c.main), m1 = m0 + task.live.length;
+    items.push('<div class="rv-top" style="grid-column:'+(m0+1)+' / '+(m1+1)+'">no winning card</div>');
+  }
+  // One brace per run of completed cards.
+  for(let i=0; i<N; ){
+    if(!cards[i].done){ i++; continue; }
+    let j=i; while(j<N && cards[j].done) j++;
+    items.push('<div class="rv-brace" style="grid-column:'+(i+1)+' / '+(j+1)+'"></div>');
+    items.push('<div class="rv-brace-lbl" style="grid-column:'+(i+1)+' / '+(j+1)+'">the cards you completed</div>');
+    i=j;
+  }
+  return '<div class="rv" style="grid-template-columns:repeat('+N+',minmax(0,1fr));max-width:'+(N*30)+'px">'+items.join('')+'</div>';
+}
 function nextTask(){
   S.taskIdx++;
   S.subtaskDone=0; S.phase='main'; S.switchAvailable=false;
@@ -4163,7 +4256,6 @@ function nextTask(){
   if(S.taskIdx>=CFG.numTasks){ showResults(); }
   else { gracePeriod(()=>startTask()); }
 }
-
 // ── RESULTS ───────────────────────────────────────────────────────
 const SHOW_UP_FEE = 1.25; // fixed Prolific base payment — never varies with performance
 

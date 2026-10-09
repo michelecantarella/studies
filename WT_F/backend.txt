@@ -184,7 +184,9 @@ var RESP_HEADER = [
   // ── Expected cards still to do if never switching (main + alternative if
   // no winning card). Appended at the end so rows already in the sheet keep
   // their column positions. ──
-  'e_tot_at_start', 'e_tot_at_pause', 'e_tot_at_exit'
+  'e_tot_at_start', 'e_tot_at_pause', 'e_tot_at_exit',
+  // Geometric-mean benchmark (appended for the same reason).
+  'e_geo_at_pause', 'switch_gain_geo_at_pause'
 ];
 
 // ── Sheet helpers ────────────────────────────────────────────────

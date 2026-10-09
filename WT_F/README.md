@@ -1,7 +1,7 @@
 # WT Study — Design & Implementation Reference
 
 **Study title:** Value of Wasted Time
-**Build:** WT_F
+**Build:** WT_F (updated: 7–15 cards; offer uniform within the first 2/3; alternative's true length ~ U{max(L−pause, pause+1) … 1.5L}, as WT_G; end-of-sequence reveal)
 **Platform:** Prolific + GitHub Pages
 **Files:** `index.html` (frontend) · `backend.txt` (Google Apps Script) · `DATA_DICTIONARY.md` (column-by-column reference for the spreadsheet output)
 **Contact:** Michele Cantarella — michele.cantarella@imtlucca.it
@@ -65,7 +65,7 @@ A 3×3 grid of emoji revealed left to right, one cell every 500 ms (4.5 s), then
 
 ### The sequence
 
-- Length `L ~ Uniform{10..15}` cards. **All cards are visible from the start** as a fanned stack around the grid: upcoming cards to the right, completed ones greyed to the left. However many cards there are, all of them are drawn (the fan compresses to fit the card, on phones too).
+- Length `L ~ Uniform{7..15}` cards. **All cards are visible from the start** as a fanned stack around the grid: upcoming cards to the right, completed ones greyed to the left. However many cards there are, all of them are drawn (the fan compresses to fit the card, on phones too).
 - Every card but the last is orange with probability 0.4, independently; **the last card is always orange**.
 - `pInside` — the chance the sequence contains the winning card — is shown on the briefing screen next to the reward, and on top of the card throughout. If it does, the winning card is one of the orange cards, uniformly.
 - The strip at the bottom of the card says whether the current card can be the winning one; a panel shows cards left.
@@ -120,14 +120,14 @@ A sequence ends immediately when its own mistake penalty reaches its own reward:
 ### Per sequence
 
 ```
-L        ~ Uniform{10..15}
+L        ~ Uniform{7..15}
 live[k]  ~ Bernoulli(0.4) for k = 1..L-1;  live[L] = true
 pInside  ~ uniform within this section's band, rounded to 5%
            bands = [0.10, 0.90] cut into 5 of equal width (16 points):
            10–25 | 30–40 | 45–55 | 60–70 | 75–90  (each 5% value in exactly one band, all values in a band equally likely)
 ```
 
-**Offer position.** `pause` = cards completed when the offer appears (0 … L−1), drawn from a **Beta(2, 2)** over the sequence, discretised into one slice per card: `P(pause = k) ∝ Beta(2,2) mass on [k/L, (k+1)/L]`. Offers are centred; at the very start or end they are rarer (for L = 12: 0 or 11 about 1.6% each, 5 or 6 about 12% each). When the regime draws the ending first, this distribution is **truncated** to the cards before the winning one and renormalised.
+**Offer position.** `pause` = cards completed when the offer appears, drawn **uniformly** over the first 2/3 of the sequence (`pause ≤ floor(2L/3)`, `pauseMaxShare`; pause 0 always qualifies), and truncated to the cards before the winning one when the regime draws the ending first. E[pause] ≈ 3.2 (≈ 29% of the sequence, max 67%). Same rule as WT_G.
 
 **Offer and ending, by regime:**
 
@@ -147,14 +147,14 @@ REGIME 0  each SEQUENCE re-rolls regime 1 or 2 (logged as sub_regime); never 3
 
 Regime 1 leaks information (a later offer implies a later or no ending); regime 2 is flat and never wastes the offer; regime 3 is flat but can waste it.
 
-**Alternative.** Its end is drawn uniformly from a hidden "shadow window" right after the main one, of the same length:
+**Alternative.** Its *true* length (global end, counted from the start of the sequence, cards already done included) is drawn at the offer; the participant sees it minus the cards already done, and that length stays fixed for the rest of the sequence:
 
 ```
-alt_global_end ~ Uniform{L+1 … 2L}        (overall card number where it ends if taken at the offer)
-alt_duration   = alt_global_end - pause   (the cards the participant actually sees and does)
+alt_global_end ~ Uniform{ max(L - pause, pause + 1) … round(1.5·L) }   = [alt_window_lo, alt_window_hi]
+alt_duration   = alt_global_end - pause                                (the cards the participant actually sees and does; ≥ 1)
 ```
 
-So switching the moment it is offered always finishes after the main sequence's last card, whatever `pInside` is. Staying is a gamble: finish earlier if the winning card is still ahead, or later (rest of the sequence plus the alternative) if it isn't. Example: L = 10, offer after 7 cards → global end ∈ [11, 20] → alternative ∈ [4, 13] cards.
+Never shorter than the rest of the sequence, never longer than one and a half sequences. Same rule as WT_G. Example: L = 10, offer after 2 cards → global end ∈ [8, 15] → alternative ∈ [6, 13] cards. Both the arithmetic (`e_tot_at_pause`) and the geometric-mean (`e_geo_at_pause`) cost of staying are logged.
 
 **Pay.** `pay` = this sequence's share of the respondent's reward pool (above). Drawn independently of the sequence's own draw, so it can't leak anything about it.
 
@@ -165,16 +165,9 @@ So switching the moment it is offered always finishes after the main sequence's 
 - `penalty_at_pause`, `penalty_at_exit`: the sequence's penalty at those points.
 - Rationality: staying costs `e_rem + (1 − p_ahead) × alt_duration` cards in expectation (without a winning card they are moved onto the alternative); switching costs `alt_duration`. `switch_gain_at_pause/exit` = staying − switching (> 0 ⇒ switching is better in expectation), with dummies `switch_better_at_*`; `alt_minus_expected = −switch_gain_at_pause`. Definitions in `DATA_DICTIONARY.md`.
 
-**Simulated design moments** (15,000 sequences per regime, generated by the study's own code):
+**Simulated design moments** (200,000 offers, all regimes pooled, generated by the study's own code): switching at the offer is the shorter option in expectation in **77%** of offers (regimes 0–3: 76 / 75 / 78 / 78%) and beats the geometric-mean cost of staying in **57%** (56 / 54 / 59 / 58%). True alternative: median 12 (5–95%: 7–20); shown alternative: median 9 (2–17), max 23. By `pInside` (EV / geometric): 30% 100/94, 40% 100/72, 50% 96/50, 60% 72/35, 70% 48/26, 80% 29/18.
 
-| | P(winning card) | offer wasted | E[L] | E[alt_duration] | alt_minus_expected mean / SD | P(alternative shorter in expectation) | E[cards to reward, never switching] |
-|---|---|---|---|---|---|---|---|
-| Regime 0 | 0.45 | 0 | 12.5 | 14.0 | −0.23 / 4.4 | 0.58 | 18.2 |
-| Regime 1 | 0.50 | 0 | 12.5 | 14.6 | −0.09 / 4.6 | 0.57 | 16.8 |
-| Regime 2 | 0.38 | 0 | 12.5 | 13.5 | −0.38 / 4.2 | 0.60 | 19.7 |
-| Regime 3 | 0.50 | 0.20 | 12.5 | 13.5 | −0.45 / 4.1 | 0.60 | 20.0 |
-
-Composition of elapsed time at the offer (orange − white cards already done): total SD ≈ 2.2–2.4 cards, of which 86–91% of the variance is within cells of (L, pause, pInside) — i.e. random given everything the participant sees that matters for the forward-looking choice.
+Composition of elapsed time at the offer (orange − white cards already done): the earlier figures (10–15 cards, centred offer) are not yet recomputed for the current rules.
 
 ---
 
@@ -182,7 +175,7 @@ Composition of elapsed time at the offer (orange − white cards already done): 
 
 Staged on the real task screen: everything is dimmed except what the current step explains, with a demo sequence (10 cards, orange at 3, 6 and 10, 40%, alternative of 11 cards, £0.10) and a tip box with Back/Continue.
 
-1. The grid task · 2. one practice round · 3. the sequence as a stack of cards (10–15, all visible) · 4. sequence counter (says 4 or 5 per the framing treatment) · 5. reward (earned by the winning card or by completing the alternative) · 6. penalties · 7. give up · 8. the probability of a winning card · 9. white cards · 10. orange cards, the last one always orange · 11. the offer — the alternative's length is revealed only then · 12. switching = clicking the Alternative button (the only way), can't be undone · 13. the pause is short (Resume now), the alternative stays available afterwards · 14. no winning card → they can still switch to the alternative and earn the reward · 15. ready (no payment for the walkthrough) · 16. comprehension check.
+1. The grid task · 2. one practice round · 3. the sequence as a stack of cards (7–15, all visible) · 4. sequence counter (says 4 or 5 per the framing treatment) · 5. reward (earned by the winning card or by completing the alternative) · 6. penalties · 7. give up · 8. the probability of a winning card · 9. white cards · 10. orange cards, the last one always orange · 11. the offer — the alternative's length is revealed only then · 12. switching = clicking the Alternative button (the only way), can't be undone · 13. the pause is short (Resume now), the alternative stays available afterwards · 14. no winning card → they can still switch to the alternative and earn the reward · 15. ready (no payment for the walkthrough) · 16. comprehension check.
 
 **Comprehension check** (must be answered correctly in order; wrong answers are counted per question and the options reshuffled, never putting the right answer back where the participant just clicked):
 1. How do I win my reward? → *By finding a winning card or by completing the alternative.*
@@ -207,7 +200,7 @@ Half the respondents are told the study has 5 sequences, half that it has 4. Eve
 | Training bonus | none | `TRAINING_BONUS = 0` (Meta `training_bonus` kept, always 0), so the bonus never exceeds the £1.50 pool cap |
 | Show-up fee | £1.25 | Fixed, paid by Prolific |
 
-Results screen: "Your bonus reward" = rewards − penalties, never negative, so at most £1.50 (`Meta.final_bonus`), approved manually; "Your show up fee" = £1.25. Section result screen shows the net amount when there were penalties, and confetti for a paid sequence.
+Results screen: "Your bonus reward" = rewards − penalties, never negative, so at most £1.50 (`Meta.final_bonus`), approved manually; "Your show up fee" = £1.25. Section result screen shows the net amount when there were penalties, and confetti for a paid sequence. **End-of-sequence reveal (everyone):** the result screen also shows the main sequence in miniature with the cards completed outlined (the path taken), the winning card in gold with an arrow, or a gold "No winning card" label, and, if the alternative was taken, its blue cards after it. Announced in the training (last screen) and in the briefing reminders, so participants know the foregone outcome will be revealed.
 
 ---
 
@@ -281,14 +274,14 @@ const CFG = {
   numTasks: 5,              // sections (always 5, whatever the framing)
   gridR: 3, gridC: 3,       // 3×3 grid
   revealMs: 500, submitSecs: 2.5,
-  winLo: 10, winHi: 15,     // sequence length
+  winLo: 7, winHi: 15,      // sequence length
   liveMarkP: 0.4,           // orange-card probability (last card always orange)
   pInsideMin: 0.10, pInsideMax: 0.90,     // cut into 5 equal-width bands (§5)
-  pauseBetaA: 2,            // offer position ~ Beta(2,2) slices (§5)
+  pauseBetaA: 1, pauseMaxShare: 2/3,   // offer position uniform within the first 2/3 (§5)
   rewardPoolLo: 1.00, rewardPoolHi: 1.50,  // per-respondent reward pool (§5)
   rewardMin: 0.10, rewardStep: 0.05,       // split: each sequence ≥ £0.10, in £0.05 units
 };
-// offer countdown Uniform[10,45] s; alternative end Uniform{L+1..2L}
+// offer countdown Uniform[10,45] s; alternative true length ~ U{max(L−pause, pause+1) … round(1.5L)}
 ```
 
 ---

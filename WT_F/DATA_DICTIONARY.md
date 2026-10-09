@@ -62,7 +62,7 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | pay | £ | The sequence's reward: its share of the respondent's `reward_pool` (≥ £0.10, multiple of £0.05; the five add up to the pool), independent of the sequence's own draw |
 | regime | 0/1/2/3 | Respondent's offer-placement rule, fixed for all 5 sequences (never 3 in `pilot` / `studentpilot`) |
 | sub_regime | 1/2/3 | Rule that actually governed THIS sequence (differs from `regime` only when regime = 0, which re-rolls 1 or 2 per sequence) |
-| seq_len | 10–15 | Number of cards in the main sequence (all visible from the start) |
+| seq_len | 7–15 | Number of cards in the main sequence (all visible from the start) |
 | live_pattern | text, e.g. `SLSSLL` | Card-by-card pattern: L = orange (can be the winning card), S = white. Last card always L |
 | n_live | number | Orange cards in the pattern |
 | p_inside | 0.10–0.90 | Disclosed chance the sequence contains the winning card |
@@ -70,11 +70,11 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | ends | 0/1 | 1 if the winning card is in the sequence |
 | end_pos | number | Card number (1-indexed) of the winning card; blank if `ends = 0` |
 | n_req | number | Main cards that would be played with no switch/forfeit: `end_pos`, or `seq_len` if there is no winning card |
-| pause | number | Cards completed when the pause starts and the alternative is offered (0 = before the first card); centred Beta(2,2) over the sequence, truncated before the winning card when the ending is drawn first |
+| pause | number | Cards completed when the pause starts and the alternative is offered (0 = before the first card); uniform over the first 2/3 of the sequence (`pause ≤ floor(2·seq_len/3)`), truncated before the winning card when the ending is drawn first |
 | pause_never_shown | 0/1 | 1 if the winning card came at or before `pause`, so the pause never happened (only possible when `sub_regime = 3`) |
 | alt_duration | number | Length of the alternative (cards). **What the participant sees and does** if they take it — during the pause, later via the button, or after reaching the end without a winning card |
-| alt_global_end | number | Overall card count at which the alternative ends if taken the moment it's offered = `pause + alt_duration`. Drawn uniformly from the hidden "shadow window" right after the main one: `seq_len+1 … 2·seq_len` |
-| alt_window_lo, alt_window_hi | number | That shadow window's bounds (`seq_len+1`, `2·seq_len`) |
+| alt_global_end | number | The alternative's true length = overall card count at which it ends if taken the moment it's offered = `pause + alt_duration`. Drawn at the offer uniformly from `max(seq_len − pause, pause + 1)` … `round(1.5·seq_len)`. Same rule as WT_G |
+| alt_window_lo, alt_window_hi | number | Bounds of that draw: `max(seq_len − pause, pause + 1)`, `round(1.5·seq_len)` |
 | active_passed_at_pause, inactive_passed_at_pause | number | Orange / white cards already completed at the offer (sum = `pause`) |
 | active_left_at_pause, inactive_left_at_pause | number | Orange / white cards still ahead in the sequence at the offer |
 | left_pattern, right_pattern | text | `live_pattern` split at `pause` (left = already done; right = from the next card on) |
@@ -82,6 +82,8 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | e_rem_at_pause | number | **Expected main-sequence cards still to play** at the offer, if they keep going (up to the winning card, or to the end if there is none) |
 | p_ahead_at_pause | 0–1 | Probability the winning card is still ahead at the offer |
 | alt_minus_expected | number | `alt_duration` − expected cards to the reward if staying at the offer (`e_rem_at_pause` + (1 − `p_ahead_at_pause`) × `alt_duration`, since without a winning card they still have to do the alternative). Negative = switching at the offer is the shorter option in expectation |
+| e_geo_at_pause | number | **Geometric-mean** cards to the reward if staying at the offer, `exp(E[log cards])` over the same outcomes as `e_tot_at_pause` (winning card on an orange card ahead, or the rest of the sequence + the alternative). Weighs the long no-winning-card outcome less than the arithmetic mean |
+| switch_gain_geo_at_pause | number | `e_geo_at_pause` − `alt_duration`. > 0 ⇒ switching beats the geometric-mean cost of staying |
 
 **How the expectations are computed.** All `e_rem_*` / `p_ahead_*` columns use the beliefs participants are given, and never depend on the regime (participants know nothing about regimes): the winning card is in the sequence with probability `p_inside` and, if it is, equally likely to be on any orange card; at a given point, the orange cards already passed without a win are ruled out (Bayes). With `W` orange cards, `k` cards done and `a` orange cards still ahead: P(no win so far) = 1 − (W − a)·p/W; `p_ahead` = (a·p/W) / P(no win so far); `e_rem` = [Σ over orange cards m > k of (p/W)(m − k) + (1 − p)(seq_len − k)] / P(no win so far).
 | seq_frame_treatment | 4/5 | As in `Meta` |
