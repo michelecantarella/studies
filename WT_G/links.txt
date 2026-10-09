@@ -1,0 +1,21 @@
+
+https://michelecantarella.github.io/studies/WT_G/?PROLIFIC_PID={{%PROLIFIC_PID%}}&STUDY_ID={{%STUDY_ID%}}&SESSION_ID={{%SESSION_ID%}}
+
+
+
+https://michelecantarella.github.io/studies/WT_G/?PROLIFIC_PID=dummyid&demomode=1
+
+https://michelecantarella.github.io/studies/WT_G/?STUDY_ID=studentpilot
+
+https://michelecantarella.github.io/studies/WT_G/?STUDY_ID=pilot
+
+
+Per generare una nuova risposta cambiate il campo PROLIFIC_PID=[dummyid]
+
+per togliere la demomode basta rimuovere il blocco &demomode=1
+
+per forzare un regime (solo test): &regime=0|1|2|3
+
+
+STUDY_ID=pilot
+STUDY_ID=studentpilot

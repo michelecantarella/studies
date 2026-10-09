@@ -1,0 +1,511 @@
+/**
+ * Google Apps Script backend — WT Study, build WT_G
+ *
+ * Deploy this as its OWN Apps Script project, bound to its own spreadsheet —
+ * never on top of another study's sheet (ensureSheet_ rewrites a sheet's
+ * header row when it doesn't match).
+ *
+ * Two sheets:
+ *   Meta      — one row per respondent (study-level + resume snapshot)
+ *   Responses — one row per respondent × sequence × attempt. Everything
+ *               about a sequence — its draw, the offer, the switch, the
+ *               outcome — lives on this one row.
+ *
+ * Deploy: Extensions → Apps Script → Deploy → New deployment
+ *   Execute as: Me  |  Who has access: Anyone
+ *
+ * GET  ?action=lookup&pid=XXX
+ *   → { found, study_complete, resume_snapshot }
+ *
+ * POST { action:'progress', pid, study_id, session_id, study_level, sections, snapshot }
+ *   → { ok: true }   (non-blocking: tryLock 1 s, skipped if busy)
+ *
+ * POST { action:'complete', pid, study_id, session_id, study_level, sections }
+ *   → { ok: true }   (blocking: waitLock 10 s, idempotent)
+ */
+
+// ── Sheet names ──────────────────────────────────────────────────
+
+var META_SHEET  = 'Meta';
+var RESP_SHEET  = 'Responses';
+
+// ── Headers ──────────────────────────────────────────────────────
+
+// RESPONDENT-LEVEL data only — anything that varies per SEQUENCE belongs on
+// RESP_HEADER instead. Once real data exists, DO NOT remove or reorder
+// existing columns — only ever append.
+var META_HEADER = [
+  'prolific_pid', 'study_id', 'session_id', 'demo_mode',
+  // ── Milestones (each set once, never overwritten after first set) ──
+  'consent_at', // ISO; blank for the student version (STUDY_ID=studentpilot), which collects consent in class instead — see index.html's firstScreen_()
+  // training_started_at/training_ended_at bracket the tutorial walkthrough;
+  // experiment_started_at/experiment_ended_at bracket the 5 real sections
+  // (index.html's submitSurvey()/finishTraining()/showResults()).
+  // training_ended_at and experiment_started_at are set together and will
+  // almost always be the same instant — kept as two separate columns anyway
+  // since they answer two different questions. experiment_ended_at is when
+  // the LAST section actually finished playing, distinct from
+  // study_complete_at below (when the final SAVE is confirmed — those two
+  // can be seconds, or with a flaky connection much longer, apart).
+  'training_started_at', 'training_ended_at',
+  'experiment_started_at', 'experiment_ended_at',
+  'study_complete_at', // set when action=complete POST succeeds
+  'last_updated_iso',  // updated on every write
+  // ── Running totals ──
+  'sections_done', 'total_earnings', 'total_grid_pay', 'total_grids_completed',
+  'training_bonus', // walkthrough bonus (index.html's TRAINING_BONUS) — currently 0, the walkthrough is unpaid; included in total_earnings
+  'total_penalty',  // sum of per-section mistake penalties
+  // The actual amount owed at the end of the whole study — what "Your bonus
+  // reward" shows on the results screen: total_earnings net of
+  // total_penalty, clamped at 0 — see index.html's showResults()/
+  // buildFullData_(). Mistake penalties can never make the study cost the
+  // participant money; autokicked sequences (see RESP_HEADER's auto_kicked)
+  // mean this should essentially never actually need the clamp in practice.
+  'final_bonus',
+  // ── Reload/access tracking (respondent-level — see RESP_HEADER's
+  // seq_reload_count/seq_attempt for the per-sequence breakdown) ──
+  'reload_count', 'reload_log_json',
+  'resume_snapshot_json', // full resume snapshot; cleared on completion
+  // ── Hidden treatment ──
+  'seq_frame_treatment', // 4 or 5 — hidden sequence-count framing treatment
+  // ── Background survey ──
+  // employment_status/labor_income: labor_income is blank unless
+  // employment_status is one of the employed/self-employed categories.
+  'employment_status', 'labor_income', 'marstat',
+  // hh_others: headcount of people besides the respondent living in their
+  // household (0 if living alone). family_contributors is blank whenever
+  // hh_others is 0 — that question only makes sense once someone else is
+  // actually in the household.
+  'hh_others',
+  'family_contributors', 'education',
+  // ends_meet_*: SOEP-style 7-point scale, asked for three time frames.
+  'ends_meet_now', 'ends_meet_past', 'ends_meet_future',
+  // risk (Dohmen et al. 2011, SOEP single item) / patience (Falk et al.
+  // 2016, GPS single item) — both 0-10.
+  'risk', 'patience',
+  // ── Geolocation — fetched client-side right after consent (Apps
+  // Script's doGet/doPost never see the caller's IP, so this can't be done
+  // here on the backend). Best-effort — blank if the lookup failed, was
+  // rate-limited, or demo_mode>=2 skipped it entirely. geo_json is the full
+  // raw API response (lat/long, timezone, ISP/org, currency, languages,
+  // asn, ...); the four flat fields plus geo_provider are just convenience
+  // copies of its most-used values for quick filtering in the sheet. ──
+  'geo_country', 'geo_region', 'geo_city', 'geo_ip', 'geo_provider', 'geo_json',
+  // ── Device/browser — best-effort classification, captured once
+  // client-side at consent (index.html's detectDeviceBrowser_()/
+  // doConsent()). device_type is 'Desktop'/'Mobile'/'Tablet' from a handful
+  // of user-agent substring checks (not exact); browser is a similarly
+  // best-effort name (Chrome/Safari/Firefox/Edge/Opera/Other); user_agent
+  // is the full raw string, for anything the two convenience fields don't
+  // capture. ──
+  'device_type', 'browser', 'user_agent',
+  // 1 iff PROLIFIC_PID was absent from the study link — either auto-
+  // generated (STUDY_ID=pilot only, prefixed 'pilot_'), manually typed in
+  // by the participant on a dedicated screen shown right after consent (see
+  // index.html's doConsent()/submitManualPid_()), or entered as a student
+  // ID/name on the student version's own screen ahead of consent (STUDY_ID=
+  // studentpilot, which has no PROLIFIC_PID at all — see submitStudentId_()).
+  // 0 for the normal case (PROLIFIC_PID arrived in the URL, as Prolific's
+  // own link template does).
+  'pid_missing_from_link',
+  // ── Post-training finish-hub scenarios (optional, self-directed replays
+  // of the switch/forced-outside mechanics before the real study begins).
+  // training_scenario_order: the randomised order the two scenario buttons
+  // were shown in, e.g. 'inside,outside' — fixed once per respondent so
+  // Back/reload can't change it. training_scenarios_viewed: which
+  // scenario(s) ('inside'/'outside') the participant actually clicked into,
+  // in the order first engaged — blank if they skipped straight to the
+  // real study without trying either. ──
+  'training_scenario_order', 'training_scenarios_viewed',
+  // ── End-of-training comprehension check (index.html's trainScreen16_ /
+  // trainCompAnswer_) — three questions, answered correctly in order
+  // before the real study can start. Each column is the number of
+  // INCORRECT attempts on that question before answering it correctly; 0
+  // means right on the first try. The correct option's position is
+  // reshuffled after every wrong attempt (never back to the position just
+  // picked — see shuffleAvoidingIndex_), so a participant can't just
+  // spam-click the same slot until it happens to be right. ──
+  'training_comp_check_q1_wrong', 'training_comp_check_q2_wrong', 'training_comp_check_q3_wrong',
+  // ── Per-respondent draws made at consent ──
+  // reward_pool: total of the 5 sequences' rewards (£1.00–£1.50 in £0.05
+  // steps), split at random across them (each ≥ £0.10) — each sequence's own
+  // share is Responses.pay. regime: offer-placement rule (0–3; never 3 for
+  // STUDY_ID=pilot/studentpilot), also repeated on every Responses row.
+  'reward_pool', 'regime'
+];
+
+// SEQUENCE-LEVEL data — one row per respondent x sequence x attempt, carrying
+// everything about the sequence. Column meanings are documented in DATA_DICTIONARY.md;
+// the client (index.html's staticSeqFields_()/endTask()/
+// buildAbandonedRecord_()) sends fields under exactly these names and
+// upsertRespRows_ maps them by name.
+var RESP_HEADER = [
+  'prolific_pid', 'study_id', 'session_id', 'demo_mode',
+  'seq_n', 'seq_attempt', 'is_latest_attempt', // see "Reload/attempt tracking" in DATA_DICTIONARY.md
+  // ── The sequence's own draw (fixed at generation time) ──
+  'pay', 'regime', 'sub_regime',
+  'seq_len', 'live_pattern', 'n_live', 'p_inside', 'p_quintile',
+  'ends', 'end_pos', 'n_req',
+  'pause', 'pause_never_shown',
+  'alt_duration', 'alt_global_end', 'alt_window_lo', 'alt_window_hi',
+  'active_passed_at_pause', 'inactive_passed_at_pause',
+  'active_left_at_pause', 'inactive_left_at_pause',
+  'left_pattern', 'right_pattern',
+  'p_ahead_at_pause', 'e_rem_at_pause', 'e_rem_at_start', 'alt_minus_expected',
+  'e_geo_at_pause', 'switch_gain_geo_at_pause',
+  'seq_frame_treatment', 'seq_is_bonus',
+  // ── Timestamps / reloads ──
+  'start_at', 'end_at', 'briefing_ended_at',
+  'seq_reload_count',
+  // ── Outcome ──
+  'outcome_summary', 'card_order', 'alt_revealed',
+  // ── The pause (when the alternative is offered) ──
+  'pause_started_at_time', 'pause_duration_secs', 'pause_elapsed_secs', 'pause_outcome',
+  'penalty_at_pause',
+  // ── Switching (only with the Alternative button, during the pause or later) ──
+  'switched', 'switched_at_pause', 'switched_at', 'switched_at_time',
+  'switch_pressed_at', 'switch_pressed_at_time', 'switch_decision_secs',
+  'switch_dialog_opens', 'switch_dialog_cancels',
+  // ── Main sequence ran out without a winning card ──
+  'no_winning_card', 'no_winning_card_at_time',
+  // ── The alternative actually started ──
+  'alt_started', 'alt_started_at_time', 'alt_back',
+  // ── Give up / autokick ──
+  'forfeited', 'forfeited_in', 'forfeited_at', 'forfeited_at_time', 'auto_kicked',
+  // ── Exit point (where the main sequence was left) and benchmarks ──
+  'exit_type', 'sunk_cost_at_exit', 'alt_available_at_exit',
+  'p_ahead_at_exit', 'e_rem_at_exit', 'penalty_at_exit',
+  'switch_gain_at_pause', 'switch_better_at_pause',
+  'switch_gain_at_exit', 'switch_better_at_exit',
+  // ── Effort and earnings ──
+  'n_main_tasks_done', 'n_alt_tasks_done', 'n_tasks_done',
+  'earnings', 'grid_pay', 'penalty', 'net_earnings',
+  'total_targets', 'total_found', 'total_false_pos', 'total_missed',
+  'tasks_json',
+  // ── Expected cards still to do if never switching (main + alternative if
+  // no winning card). Appended at the end so rows already in the sheet keep
+  // their column positions. ──
+  'e_tot_at_start', 'e_tot_at_pause', 'e_tot_at_exit'
+];
+
+// ── Sheet helpers ────────────────────────────────────────────────
+
+function ensureSheet_(name, header) {
+  var ss    = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  var current = sheet.getLastColumn() > 0
+    ? sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), header.length)).getValues()[0]
+    : [];
+  var matches = current.length >= header.length &&
+    header.every(function(h, i) { return current[i] === h; });
+  if (!matches) {
+    sheet.getRange(1, 1, 1, header.length).setValues([header]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function getMetaSheet_()  { return ensureSheet_(META_SHEET, META_HEADER); }
+function getRespSheet_()  { return ensureSheet_(RESP_SHEET, RESP_HEADER); }
+
+function cellValue_(v) {
+  if (v === null || v === undefined) return '';
+  if (typeof v === 'object') return JSON.stringify(v);
+  return v;
+}
+
+// Write (or update) a single row using a header array to map field names → column indices.
+function writeRowBatched_(sheet, rowIndex, isNew, updates, header) {
+  var row = isNew
+    ? new Array(header.length).fill('')
+    : (function() {
+        var r = sheet.getRange(rowIndex, 1, 1, header.length).getValues()[0];
+        while (r.length < header.length) r.push('');
+        return r;
+      })();
+  updates.forEach(function(pair) {
+    var col = header.indexOf(pair[0]);
+    if (col !== -1) row[col] = cellValue_(pair[1]);
+  });
+  sheet.getRange(rowIndex, 1, 1, header.length).setValues([row]);
+}
+
+// ── Meta row lookup ──────────────────────────────────────────────
+
+function findMetaRow_(sheet, pid) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return null;
+  var pidCol = META_HEADER.indexOf('prolific_pid');
+  var data   = sheet.getRange(2, 1, lastRow - 1, pidCol + 1).getValues();
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][pidCol]) === String(pid)) return i + 2;
+  }
+  return null;
+}
+
+function readMetaRow_(sheet, rowIndex) {
+  return sheet.getRange(rowIndex, 1, 1, META_HEADER.length).getValues()[0];
+}
+
+// ── Response row lookup ──────────────────────────────────────────
+// Returns a map of seq_n (as string) → { attemptNumber → rowIndex } for the
+// given pid. Rows written before seq_attempt existed have no value there —
+// treated as attempt 1, same as a fresh single-attempt section.
+
+function findResponseRows_(sheet, pid) {
+  var lastRow = sheet.getLastRow();
+  if (lastRow < 2) return {};
+  var pidCol = RESP_HEADER.indexOf('prolific_pid');
+  var seqCol = RESP_HEADER.indexOf('seq_n');
+  var attCol = RESP_HEADER.indexOf('seq_attempt');
+  var nCols  = Math.max(pidCol, seqCol, attCol) + 1;
+  var data   = sheet.getRange(2, 1, lastRow - 1, nCols).getValues();
+  var map    = {};
+  for (var i = 0; i < data.length; i++) {
+    if (String(data[i][pidCol]) !== String(pid)) continue;
+    var seqKey = String(data[i][seqCol]);
+    var att    = Number(data[i][attCol]) || 1;
+    if (!map[seqKey]) map[seqKey] = {};
+    map[seqKey][att] = i + 2;
+  }
+  return map;
+}
+
+// ── Upsert Meta row ───────────────────────────────────────────────
+
+function upsertMeta_(sheet, pid, study_id, session_id, sl, snapshot, now, setComplete) {
+  var rowIndex = findMetaRow_(sheet, pid);
+  var isNew    = !rowIndex;
+  if (isNew) rowIndex = sheet.getLastRow() + 1;
+
+  var updates = [
+    ['prolific_pid',     pid],
+    ['study_id',         study_id   || ''],
+    ['session_id',       session_id || ''],
+    ['demo_mode',        sl.demo_mode   != null ? sl.demo_mode   : ''],
+    ['last_updated_iso', now],
+    ['training_started_at',    sl.training_started_at   || ''],
+    ['training_ended_at',      sl.training_ended_at     || ''],
+    ['experiment_started_at',  sl.experiment_started_at || ''],
+    ['experiment_ended_at',    sl.experiment_ended_at   || ''],
+    ['sections_done',          sl.sections_done          != null ? sl.sections_done          : ''],
+    ['training_bonus',         sl.training_bonus         != null ? sl.training_bonus         : ''],
+    ['seq_frame_treatment',    sl.seq_frame_treatment    != null ? sl.seq_frame_treatment    : ''],
+    ['total_earnings',         sl.total_earnings         != null ? sl.total_earnings         : ''],
+    ['total_grid_pay',         sl.total_grid_pay         != null ? sl.total_grid_pay         : ''],
+    ['total_grids_completed',  sl.total_grids_completed  != null ? sl.total_grids_completed  : ''],
+    ['total_penalty',          sl.total_penalty          != null ? sl.total_penalty          : ''],
+    ['final_bonus',            sl.final_bonus            != null ? sl.final_bonus            : ''],
+    ['reload_count',           sl.reload_count           != null ? sl.reload_count           : ''],
+    ['reload_log_json',        JSON.stringify(sl.reload_log || [])],
+    ['resume_snapshot_json',   setComplete ? '' : JSON.stringify(snapshot || {})],
+    ['geo_country',            sl.geo_country || ''],
+    ['geo_region',             sl.geo_region  || ''],
+    ['geo_city',               sl.geo_city    || ''],
+    ['geo_ip',                 sl.geo_ip      || ''],
+    ['geo_provider',           sl.geo_provider        || ''],
+    ['geo_json',               sl.geo_json    || ''],
+    ['device_type',            sl.device_type || ''],
+    ['browser',                sl.browser     || ''],
+    ['user_agent',             sl.user_agent  || ''],
+    ['employment_status',      sl.employment_status  || ''],
+    ['labor_income',           sl.labor_income        || ''],
+    ['marstat',                sl.marstat             || ''],
+    // hh_others can legitimately be 0 (living alone) — must check != null,
+    // not `|| ''`, or a genuine 0 would be written as blank.
+    ['hh_others',              sl.hh_others           != null ? sl.hh_others           : ''],
+    ['family_contributors',    sl.family_contributors || ''],
+    ['education',              sl.education           || ''],
+    ['ends_meet_now',          sl.ends_meet_now       || ''],
+    ['ends_meet_past',         sl.ends_meet_past      || ''],
+    ['ends_meet_future',       sl.ends_meet_future    || ''],
+    ['risk',                   sl.risk                != null ? sl.risk                : ''],
+    ['patience',               sl.patience            != null ? sl.patience            : ''],
+    ['pid_missing_from_link',  sl.pid_missing_from_link != null ? sl.pid_missing_from_link : ''],
+    ['training_scenario_order',   sl.training_scenario_order   || ''],
+    ['training_scenarios_viewed', sl.training_scenarios_viewed || ''],
+    ['training_comp_check_q1_wrong', sl.training_comp_check_q1_wrong != null ? sl.training_comp_check_q1_wrong : ''],
+    ['training_comp_check_q2_wrong', sl.training_comp_check_q2_wrong != null ? sl.training_comp_check_q2_wrong : ''],
+    ['training_comp_check_q3_wrong', sl.training_comp_check_q3_wrong != null ? sl.training_comp_check_q3_wrong : ''],
+    ['reward_pool',            sl.reward_pool != null ? sl.reward_pool : ''],
+    ['regime',                 sl.regime      != null ? sl.regime      : ''],
+  ];
+
+  if (setComplete) updates.push(['study_complete_at', now]);
+
+  // Preserve initial consent_at — only write if not already set
+  if (sl.consent_at) {
+    var existingConsent = isNew ? '' : readMetaRow_(sheet, rowIndex)[META_HEADER.indexOf('consent_at')];
+    if (!existingConsent) updates.push(['consent_at', sl.consent_at]);
+  }
+
+  writeRowBatched_(sheet, rowIndex, isNew, updates, META_HEADER);
+}
+
+// ── Upsert Responses rows ─────────────────────────────────────────
+// Writes one row per section in the sections array. Each (seq_n, seq_attempt)
+// pair gets its own row — a new-session reload that discarded an in-progress
+// attempt (see index.html's applyResume_/buildAbandonedRecord_) no longer
+// overwrites it, it just adds attempt 2 (3, ...) alongside it. After writing,
+// is_latest_attempt is recomputed for every seq_n touched so it always
+// reflects the true max attempt on the sheet, not just what's in this batch.
+
+function upsertRespRows_(sheet, pid, study_id, session_id, demo_mode, sections) {
+  if (!sections || !sections.length) return;
+  var rowMap     = findResponseRows_(sheet, pid); // seq_n -> {attempt: rowIndex}
+  var touchedSeq = {};
+  // Filled here from the request itself, never from a section's own fields;
+  // is_latest_attempt is recomputed below.
+  var SERVER_COLS = { prolific_pid:1, study_id:1, session_id:1, demo_mode:1, seq_attempt:1, is_latest_attempt:1 };
+
+  for (var i = 0; i < sections.length; i++) {
+    var s        = sections[i];
+    var seqKey   = String(s.seq_n);
+    var attempt  = s.seq_attempt != null ? Number(s.seq_attempt) : 1;
+    if (!rowMap[seqKey]) rowMap[seqKey] = {};
+    var rowIndex = rowMap[seqKey][attempt];
+    var isNew    = !rowIndex;
+    if (isNew) rowIndex = sheet.getLastRow() + 1;
+
+    var updates = [
+      ['prolific_pid', pid],
+      ['study_id',     study_id   || ''],
+      ['session_id',   session_id || ''],
+      ['demo_mode',    demo_mode  != null ? demo_mode : ''],
+      ['seq_attempt',  attempt],
+    ];
+    // Every other column is copied by name from the section object the
+    // client sent (null/undefined → blank, objects/arrays → JSON string —
+    // see cellValue_). A column the client didn't send is left untouched.
+    RESP_HEADER.forEach(function(col) {
+      if (SERVER_COLS[col]) return;
+      if (Object.prototype.hasOwnProperty.call(s, col)) updates.push([col, s[col]]);
+    });
+
+    writeRowBatched_(sheet, rowIndex, isNew, updates, RESP_HEADER);
+    rowMap[seqKey][attempt] = rowIndex;
+    touchedSeq[seqKey] = true;
+  }
+
+  // is_latest_attempt must reflect the true max attempt on the sheet for
+  // each seq_n touched — not just what arrived in this call, since an
+  // abandoned attempt and its successor can be sent in separate
+  // progress/complete calls.
+  var isLatestCol = RESP_HEADER.indexOf('is_latest_attempt') + 1;
+  Object.keys(touchedSeq).forEach(function(seqKey) {
+    var attempts = rowMap[seqKey]; // {attemptNumber: rowIndex}
+    var attemptNums = Object.keys(attempts).map(Number);
+    var maxAttempt  = Math.max.apply(null, attemptNums);
+    attemptNums.forEach(function(att) {
+      var cell = sheet.getRange(attempts[att], isLatestCol);
+      var want = (att === maxAttempt) ? 1 : 0;
+      if (cell.getValue() !== want) cell.setValue(want);
+    });
+  });
+}
+
+// ── HTTP handlers ────────────────────────────────────────────────
+
+function doGet(e) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    var action = e.parameter.action;
+    if (action !== 'lookup') return jsonOut_({ error: 'unknown action' });
+
+    var pid = e.parameter.pid;
+    if (!pid) return jsonOut_({ error: 'missing pid' });
+
+    var sheet    = getMetaSheet_();
+    var rowIndex = findMetaRow_(sheet, pid);
+
+    if (!rowIndex) {
+      return jsonOut_({ found: false, study_complete: false, resume_snapshot: null });
+    }
+
+    var row           = readMetaRow_(sheet, rowIndex);
+    var get           = function(f) { return row[META_HEADER.indexOf(f)]; };
+    var studyComplete = !!get('study_complete_at');
+    var resumeSnap    = null;
+
+    if (!studyComplete) {
+      try {
+        var raw = get('resume_snapshot_json');
+        if (raw) resumeSnap = JSON.parse(raw);
+      } catch (err) {}
+    }
+
+    return jsonOut_({
+      found:           true,
+      study_complete:  studyComplete,
+      resume_snapshot: resumeSnap
+    });
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function doPost(e) {
+  var body       = JSON.parse(e.postData.contents);
+  var pid        = body.pid;
+  if (!pid) return jsonOut_({ ok: false, error: 'missing pid' });
+
+  var now        = new Date().toISOString();
+  var sl         = body.study_level || {};
+  var sections   = body.sections    || [];
+  var study_id   = body.study_id    || '';
+  var session_id = body.session_id  || '';
+
+  // ── progress (non-blocking) ──────────────────────────────────
+  if (body.action === 'progress') {
+    var lock    = LockService.getScriptLock();
+    var gotLock = lock.tryLock(1000);
+    if (!gotLock) return jsonOut_({ ok: true, skipped: true });
+    try {
+      var metaSheet  = getMetaSheet_();
+      var respSheet  = getRespSheet_();
+      upsertMeta_(metaSheet, pid, study_id, session_id, sl, body.snapshot, now, false);
+      upsertRespRows_(respSheet, pid, study_id, session_id, sl.demo_mode, sections);
+      return jsonOut_({ ok: true });
+    } catch (err) {
+      return jsonOut_({ ok: false, error: String(err) });
+    } finally {
+      lock.releaseLock();
+    }
+  }
+
+  // ── complete (blocking, idempotent) ─────────────────────────
+  if (body.action === 'complete') {
+    var lock2 = LockService.getScriptLock();
+    lock2.waitLock(10000);
+    try {
+      var metaSheet2  = getMetaSheet_();
+      var respSheet2  = getRespSheet_();
+
+      // Idempotent: already complete → return ok without re-writing
+      var existingRow = findMetaRow_(metaSheet2, pid);
+      if (existingRow) {
+        var existingMeta = readMetaRow_(metaSheet2, existingRow);
+        if (existingMeta[META_HEADER.indexOf('study_complete_at')]) {
+          return jsonOut_({ ok: true, already_complete: true });
+        }
+      }
+
+      upsertMeta_(metaSheet2, pid, study_id, session_id, sl, null, now, true);
+      upsertRespRows_(respSheet2, pid, study_id, session_id, sl.demo_mode, sections);
+      return jsonOut_({ ok: true });
+    } catch (err) {
+      return jsonOut_({ ok: false, error: String(err) });
+    } finally {
+      lock2.releaseLock();
+    }
+  }
+
+  return jsonOut_({ ok: false, error: 'unknown action' });
+}
+
+function jsonOut_(obj) {
+  return ContentService.createTextOutput(JSON.stringify(obj))
+    .setMimeType(ContentService.MimeType.JSON);
+}
