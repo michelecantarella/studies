@@ -1183,8 +1183,6 @@ const CFG = {
   // very start or end rarer), discretised into one slice per card — see
   // drawPause_(). Truncated at the ending when the ending is drawn first.
   pauseBetaA: 1,   // Beta(1,1) = uniform over the positions where the offer can be placed (validPause_)
-  // Offers only up to this share of the sequence (validPause_), same as WT_G.
-  pauseMaxShare: 2/3,
   // Rewards: each respondent gets a total pool ~ Uniform{1.00, 1.05, …, 1.50},
   // split at random across the 5 sequences, each getting at least rewardMin,
   // in steps of rewardStep — see drawRewardSplit_(). Independent of the
@@ -1449,18 +1447,21 @@ function stayCostGeo_(win, lp, altDur){
   el += (1-p)/survive * Math.log((L-lp) + altDur);
   return Math.exp(el);
 }
-// The alternative's TRUE length (its global end, counted from the start of the
-// sequence, cards already done included), drawn at the offer uniformly from
-// max(L - pause, pause + 1) … round(1.5·L): never shorter than the rest of the
-// sequence, never longer than one and a half sequences, and always leaving at
-// least one card to show. Same rule as WT_G.
+// The alternative shown at the offer (the cards to do if switching): the
+// distance from the pause to the last card, h = L - pause, is the hypotenuse
+// of a right triangle with a random angle theta ~ U(0, 90°); the alternative
+// is the sum of the two legs, round(h·(cos θ + sin θ)) — between h and
+// round(h·√2), never shorter than the rest of the sequence. Same rule as WT_G.
+// globalEnd = pause + shown (logged as alt_global_end).
 function drawAltTrue_(win, pause){
-  const lo = Math.max(win.length - pause, pause + 1), hi = Math.round(1.5 * win.length);
-  return { globalEnd: rnd(lo, Math.max(lo, hi)), lo, hi };
+  const h = win.length - pause, theta = Math.random() * Math.PI / 2;
+  const shown = Math.max(1, Math.round(h * (Math.cos(theta) + Math.sin(theta))));
+  return { globalEnd: pause + shown, lo: h, hi: Math.round(h * Math.SQRT2) };
 }
-// Offers only in the first CFG.pauseMaxShare of the sequence.
+// Offers only while the cards left are at least the cards already done
+// (L - k >= k, i.e. up to half the sequence). Same rule as WT_G.
 function validPause_(win, k){
-  return k <= Math.floor(CFG.pauseMaxShare * win.length);
+  return win.length - k >= k;
 }
 // Same conditioning: probability the winning card is still ahead at lp.
 function pAhead_(win, lp){
@@ -1486,8 +1487,8 @@ function pAhead_(win, lp){
 // Regime 3 — pause and ending drawn FULLY INDEPENDENTLY. Flat like regime
 //   2, but the offer is WASTED (never fires) if the winning card is at or
 //   before the pause position — the sequence is already over by then.
-// In every regime the pause is also restricted to validPause_ (the first 2/3
-// of the sequence; pause 0 always qualifies).
+// In every regime the pause is also restricted to validPause_ (up to half the
+// sequence; pause 0 always qualifies).
 function drawOffer_(win, regime){
   const subRegime = regime===0 ? pick([1,2]) : regime;
   const pauseMax = Math.max(0, win.length - 1);
@@ -2509,7 +2510,7 @@ const TRAIN = {
   // the last card is orange, as in every real sequence.
   live: [false, false, true, false, false, true, false, false, false, true],
   pInside: 0.40,   // demo: 40% chance the sequence contains the winning card — a readable round number, not a real draw
-  altDuration: 11,  // offered after 2 cards: a global end of 13, within the real range [8, 15] for a 10-card sequence
+  altDuration: 11,  // offered after 2 cards: within the real range [8, 11] for a 10-card sequence
   pay: 0.10,
 };
 
@@ -3039,7 +3040,7 @@ function trainScreen8_(){
   trainLightUpTo_(['taskcard-banner','taskcard-body']);
   trainFlashPill_(); // draw the eye to the probability
   renderTip_(
-    'The main sequence ends when you find the winning card. Each sequence has a random chance of containing a winning card, shown on top of the card.',
+    'The main sequence <b>only ends if you find the winning card</b>. Each sequence has a random chance of containing a winning card, shown on top of the card. This sequence has a '+Math.round(TRAIN.pInside*100)+'% chance of containing a winning card.',
     tipContinue_()
   );
 }
@@ -3079,7 +3080,7 @@ function trainScreen11_(){
   trainFlashOfferBanner_(); // flash "The alternative sequence is now available"
   flashSwitchAvailable();   // and the panel explained right here — the ONLY place this ever flashes
   renderTip_(
-    'At some point during the sequence, we will offer you an alternative sequence: a fixed number of cards that also grants you the reward. '+
+    'At some point during the sequence, we will offer you an alternative sequence, which allows you to complete a <b>fixed number of cards</b> to earn the reward. '+
     'Its length is revealed only when it is offered; until then, this button stays locked.',
     tipContinue_()
   );
@@ -3104,8 +3105,7 @@ function trainScreen13_(){
   const cd=el('st-countdown'); if(cd) cd.style.display='none';
   trainFlashOfferCountdown_(); // flash "The task will resume in … seconds / Resume now"
   renderTip_(
-    'When the alternative is offered, the task pauses for a short time, then resumes by itself (or press <b>Resume now</b>). '+
-    'The alternative remains available after that: you can switch at any moment by clicking the blue Alternative button.',
+    'Once offered, the alternative <b>remains available</b> until the end of the sequence: you can switch at any moment by clicking the blue Alternative button.',
     tipContinue_()
   );
 }
@@ -3117,7 +3117,7 @@ function trainScreen14_(){
   trainLightUpTo_(['panel-alt','taskcard-banner','taskcard-body']);
   trainFlashCards_();
   renderTip_(
-    'If you reach the end of the sequence without finding the winning card, you can still switch to the alternative sequence and earn your reward by completing it.',
+    'If you reach the end of the sequence without finding the winning card, the main sequence ends. You can still switch to the alternative sequence to earn your reward.',
     tipContinue_()
   );
 }

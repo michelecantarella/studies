@@ -70,11 +70,11 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | ends | 0/1 | 1 if the winning card is in the sequence |
 | end_pos | number | Card number (1-indexed) of the winning card; blank if `ends = 0` |
 | n_req | number | Main cards that would be played with no switch/forfeit: `end_pos`, or `seq_len` if there is no winning card |
-| pause | number | Cards completed when the pause starts and the alternative is offered (0 = before the first card); uniform over the first 2/3 of the sequence (`pause ≤ floor(2·seq_len/3)`), truncated before the winning card when the ending is drawn first |
+| pause | number | Cards completed when the pause starts and the alternative is offered (0 = before the first card); uniform over the positions where the cards left are at least the cards done (`seq_len − pause ≥ pause`, up to half the sequence), truncated before the winning card when the ending is drawn first |
 | pause_never_shown | 0/1 | 1 if the winning card came at or before `pause`, so the pause never happened (only possible when `sub_regime = 3`) |
 | alt_duration | number | The alternative's own (blue) cards = `alt_global_end − pause`, shown at the offer and fixed afterwards; added at the start of the deck. Taking it after `k` main cards means going back over those `k` cards first (`alt_back`), then these cards |
-| alt_global_end | number | The alternative's true length = the switching route at the offer = `pause + alt_duration` (going back + blue cards). Drawn at the offer uniformly from `max(seq_len − pause, pause + 1)` … `round(1.5·seq_len)`. Same rule as WT_F |
-| alt_window_lo, alt_window_hi | number | Bounds of that draw: `max(seq_len − pause, pause + 1)`, `round(1.5·seq_len)` |
+| alt_global_end | number | `pause + alt_duration` = the switching route at the offer (going back + blue cards), between `seq_len` and `1.5·seq_len` |
+| alt_window_lo, alt_window_hi | number | Bounds of `alt_duration`: `h = seq_len − pause` and `round(h·√2)`. `alt_duration = round(h·(cos θ + sin θ))`, θ ~ U(0°, 90°): the sum of the legs of a right triangle with hypotenuse `h`. Same rule in WT_F and WT_G |
 | active_passed_at_pause, inactive_passed_at_pause | number | Orange / white cards already completed at the offer (sum = `pause`) |
 | active_left_at_pause, inactive_left_at_pause | number | Orange / white cards still ahead in the sequence at the offer |
 | left_pattern, right_pattern | text | `live_pattern` split at `pause` (left = already done; right = from the next card on) |
