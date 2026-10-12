@@ -1046,7 +1046,7 @@ if(!_prolificID && _isPilotStudy){
 // backend.txt rewrites a header row that doesn't match RESP_HEADER). While
 // it's the PASTE_ placeholder, backendConfigured_() is false and nothing is
 // sent.
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbyl90ICegOGlAsMsXwsLwRpfdCDTeEV9Z-8dx0iFkwKzyO-88yDYiap9UoLzyyD_pXQgg/exec';
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzmMUT5gU0GErsYsVTaxseb00Zak-5NLjYeHXnakc83J9in8uM7FZcEDeMN695PXuSnfg/exec';
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 // No payment for the walkthrough: the whole bonus is the reward pool
@@ -1168,7 +1168,7 @@ const CFG = {
   // winning card, the participant is moved onto the alternative
   // automatically (reward kept) — see autoSwitchOrDefer_().
   // Window length ~ Uniform[winLo, winHi].
-  winLo:      7,
+  winLo:      10,
   winHi:      15,
   // Each non-final card's live/safe mark is an independent draw, orange with
   // this probability — NOT tied to pInside, which governs only whether the
@@ -1305,7 +1305,7 @@ const shuf = a => { const r=[...a]; for(let i=r.length-1;i>0;i--){const j=rnd(0,
 function kill(){
   S.handles.forEach(h=>{ clearTimeout(h); clearInterval(h); });
   S.handles=[];
-  // The offer-pause countdown (S.offerTimer, up to 45s) is tracked
+  // The offer-pause countdown (S.offerTimer, up to 30s) is tracked
   // separately from S.handles — without clearing it here too, a stray
   // offer-pause interval could keep ticking into a later submit countdown
   // and write conflicting values to the same #st-cd-n element (visible as
@@ -3664,7 +3664,7 @@ function showOfferScreen(task){
 
   flashAlt_(); // the Alternative button turns blue, with its length, and flashes
 
-  const secs = 10 + Math.floor(Math.random()*36); // Uniform[10,45] seconds
+  const secs = 10 + Math.floor(Math.random()*21); // Uniform[10,30] seconds
   task.pauseSecs = secs;
   let remaining = secs;
   const cdn=el('st-offer-cd'); if(cdn) cdn.textContent = remaining;
@@ -4127,7 +4127,7 @@ function endTask(outcome){
     alt_revealed:  task.altRevealed ? 1 : 0,
     // ── The pause (when the alternative is offered) ──
     pause_started_at_time: fired ? task.offerFiredAt : null,
-    pause_duration_secs:   fired ? task.pauseSecs : null,       // its randomised countdown, Uniform[10,45]s
+    pause_duration_secs:   fired ? task.pauseSecs : null,       // its randomised countdown, Uniform[10,30]s
     pause_elapsed_secs:    task.deliberationSecs,               // pause shown → ended (switch, Resume now or timeout)
     pause_outcome:         fired ? (task.switchSource==='offer' ? 'switched' : task.autoRefused ? 'timeout' : 'resume_now') : null,
     penalty_at_pause:      fired ? task.penaltyAtPause : null,  // this sequence's mistake penalty when the pause started

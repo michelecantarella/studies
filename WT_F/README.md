@@ -1,7 +1,7 @@
 # WT Study — Design & Implementation Reference
 
 **Study title:** Value of Wasted Time
-**Build:** WT_F (updated: 7–15 cards; offer uniform up to half the sequence; alternative = sum of the legs of a right triangle with hypotenuse L − pause, as WT_G; end-of-sequence reveal)
+**Build:** WT_F (updated: 10–15 cards; offer uniform up to half the sequence; alternative = sum of the legs of a right triangle with hypotenuse L − pause, as WT_G; end-of-sequence reveal)
 **Platform:** Prolific + GitHub Pages
 **Files:** `index.html` (frontend) · `backend.txt` (Google Apps Script) · `DATA_DICTIONARY.md` (column-by-column reference for the spreadsheet output)
 **Contact:** Michele Cantarella — michele.cantarella@imtlucca.it
@@ -65,7 +65,7 @@ A 3×3 grid of emoji revealed left to right, one cell every 500 ms (4.5 s), then
 
 ### The sequence
 
-- Length `L ~ Uniform{7..15}` cards. **All cards are visible from the start** as a fanned stack around the grid: upcoming cards to the right, completed ones greyed to the left. However many cards there are, all of them are drawn (the fan compresses to fit the card, on phones too).
+- Length `L ~ Uniform{10..15}` cards. **All cards are visible from the start** as a fanned stack around the grid: upcoming cards to the right, completed ones greyed to the left. However many cards there are, all of them are drawn (the fan compresses to fit the card, on phones too).
 - Every card but the last is orange with probability 0.4, independently; **the last card is always orange**.
 - `pInside` — the chance the sequence contains the winning card — is shown on the briefing screen next to the reward, and on top of the card throughout. If it does, the winning card is one of the orange cards, uniformly.
 - The strip at the bottom of the card says whether the current card can be the winning one; a panel shows cards left.
@@ -74,7 +74,7 @@ A 3×3 grid of emoji revealed left to right, one cell every 500 ms (4.5 s), then
 
 ### The offer
 
-When the offer point is reached (§5) the task **pauses**: the instruction line is replaced by a banner "The alternative sequence is now available", with "The task will resume in *N* seconds" (Uniform[10, 45] s) and a **Resume now** button, and the Alternative button turns blue, shows its length and flashes. **Switching is done only with the Alternative button** (now or later), which opens a dialog (**Confirm switch** / **Keep going**). A switch confirmed during the pause is logged as `switched_at_pause = 1`, `pause_outcome = switched`; Resume now = `pause_outcome = resume_now`; the countdown running out = `timeout`. If it runs out while the dialog is open, the task resumes only when the dialog is closed with Keep going. Every opening of the switch dialog is counted in `switch_dialog_opens` (and "Keep going" in `switch_dialog_cancels`). No card runs while the banner is open; when it closes without a switch the Alternative button flashes again.
+When the offer point is reached (§5) the task **pauses**: the instruction line is replaced by a banner "The alternative sequence is now available", with "The task will resume in *N* seconds" (Uniform[10, 30] s) and a **Resume now** button, and the Alternative button turns blue, shows its length and flashes. **Switching is done only with the Alternative button** (now or later), which opens a dialog (**Confirm switch** / **Keep going**). A switch confirmed during the pause is logged as `switched_at_pause = 1`, `pause_outcome = switched`; Resume now = `pause_outcome = resume_now`; the countdown running out = `timeout`. If it runs out while the dialog is open, the task resumes only when the dialog is closed with Keep going. Every opening of the switch dialog is counted in `switch_dialog_opens` (and "Keep going" in `switch_dialog_cancels`). No card runs while the banner is open; when it closes without a switch the Alternative button flashes again.
 
 ### The alternative
 
@@ -120,7 +120,7 @@ A sequence ends immediately when its own mistake penalty reaches its own reward:
 ### Per sequence
 
 ```
-L        ~ Uniform{7..15}
+L        ~ Uniform{10..15}
 live[k]  ~ Bernoulli(0.4) for k = 1..L-1;  live[L] = true
 pInside  ~ uniform within this section's band, rounded to 5%
            bands = [0.10, 0.90] cut into 5 of equal width (16 points):
@@ -177,7 +177,7 @@ Composition of elapsed time at the offer (orange − white cards already done): 
 
 Staged on the real task screen: everything is dimmed except what the current step explains, with a demo sequence (10 cards, orange at 3, 6 and 10, 40%, alternative of 11 cards, £0.10) and a tip box with Back/Continue.
 
-1. The grid task · 2. one practice round · 3. the sequence as a stack of cards (7–15, all visible) · 4. sequence counter (says 4 or 5 per the framing treatment) · 5. reward (earned by the winning card or by completing the alternative) · 6. penalties · 7. give up · 8. the probability of a winning card · 9. white cards · 10. orange cards, the last one always orange · 11. the offer — the alternative's length is revealed only then · 12. switching = clicking the Alternative button (the only way), can't be undone · 13. the pause is short (Resume now), the alternative stays available afterwards · 14. no winning card → they can still switch to the alternative and earn the reward · 15. ready (no payment for the walkthrough) · 16. comprehension check.
+1. The grid task · 2. one practice round · 3. the sequence as a stack of cards (10–15, all visible) · 4. sequence counter (says 4 or 5 per the framing treatment) · 5. reward (earned by the winning card or by completing the alternative) · 6. penalties · 7. give up · 8. the probability of a winning card · 9. white cards · 10. orange cards, the last one always orange · 11. the offer — the alternative's length is revealed only then · 12. switching = clicking the Alternative button (the only way), can't be undone · 13. the pause is short (Resume now), the alternative stays available afterwards · 14. no winning card → they can still switch to the alternative and earn the reward · 15. ready (no payment for the walkthrough) · 16. comprehension check.
 
 **Comprehension check** (must be answered correctly in order; wrong answers are counted per question and the options reshuffled, never putting the right answer back where the participant just clicked):
 1. How do I win my reward? → *By finding a winning card or by completing the alternative.*
@@ -276,14 +276,14 @@ const CFG = {
   numTasks: 5,              // sections (always 5, whatever the framing)
   gridR: 3, gridC: 3,       // 3×3 grid
   revealMs: 500, submitSecs: 2.5,
-  winLo: 7, winHi: 15,      // sequence length
+  winLo: 10, winHi: 15,      // sequence length
   liveMarkP: 0.4,           // orange-card probability (last card always orange)
   pInsideMin: 0.10, pInsideMax: 0.90,     // cut into 5 equal-width bands (§5)
   pauseBetaA: 1,            // offer position uniform up to half the sequence (§5)
   rewardPoolLo: 1.00, rewardPoolHi: 1.50,  // per-respondent reward pool (§5)
   rewardMin: 0.10, rewardStep: 0.05,       // split: each sequence ≥ £0.10, in £0.05 units
 };
-// offer countdown Uniform[10,45] s; alternative round((L−pause)·(cos θ + sin θ))
+// offer countdown Uniform[10,30] s; alternative round((L−pause)·(cos θ + sin θ))
 ```
 
 ---

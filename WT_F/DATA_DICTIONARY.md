@@ -62,7 +62,7 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | pay | £ | The sequence's reward: its share of the respondent's `reward_pool` (≥ £0.10, multiple of £0.05; the five add up to the pool), independent of the sequence's own draw |
 | regime | 0/1/2/3 | Respondent's offer-placement rule, fixed for all 5 sequences (never 3 in `pilot` / `studentpilot`) |
 | sub_regime | 1/2/3 | Rule that actually governed THIS sequence (differs from `regime` only when regime = 0, which re-rolls 1 or 2 per sequence) |
-| seq_len | 7–15 | Number of cards in the main sequence (all visible from the start) |
+| seq_len | 10–15 | Number of cards in the main sequence (all visible from the start) |
 | live_pattern | text, e.g. `SLSSLL` | Card-by-card pattern: L = orange (can be the winning card), S = white. Last card always L |
 | n_live | number | Orange cards in the pattern |
 | p_inside | 0.10–0.90 | Disclosed chance the sequence contains the winning card |
@@ -106,7 +106,7 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | Column | Type | Description |
 |---|---|---|
 | pause_started_at_time | timestamp | When the pause started |
-| pause_duration_secs | 10–45 | Its countdown (random) |
+| pause_duration_secs | 10–30 | Its countdown (random) |
 | pause_elapsed_secs | seconds | How long it actually lasted (start → end) |
 | pause_outcome | text | How it ended: `switched` / `resume_now` / `timeout` |
 | penalty_at_pause | £ | This sequence's mistake penalty when the pause started. The full per-card record is in `tasks_json` |
