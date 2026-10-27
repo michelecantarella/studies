@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WT_N button mockups</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* Same tokens and panel styles as WT_N/index.html */
+:root{
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b;
+  --warn:#d4860a; --bdr:#d8d4c8;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);padding:1.5rem 1rem 4rem;}
+h1{font-family:var(--mono);font-size:1.2rem;margin-bottom:.4rem;}
+.intro{font-size:.9rem;color:var(--ink2);max-width:860px;line-height:1.6;margin-bottom:1.6rem;}
+.variant{background:#fff8;border:1px solid var(--bdr);border-radius:14px;padding:1.1rem 1.1rem 1.3rem;margin:0 auto 1.6rem;max-width:1100px;}
+.variant h2{font-family:var(--mono);font-size:1rem;margin-bottom:.25rem;}
+.variant .desc{font-size:.85rem;color:var(--ink2);line-height:1.5;margin-bottom:1rem;max-width:820px;}
+.states{display:flex;gap:1.4rem;flex-wrap:wrap;align-items:flex-start;}
+.state{width:180px;}
+.state-h{font-family:var(--mono);font-size:.66rem;letter-spacing:.08em;text-transform:uppercase;color:var(--ink2);margin-bottom:.5rem;height:3.3em;}
+.mob-wrap{width:390px;max-width:100%;}
+.hint{font-family:var(--mono);font-size:.6rem;color:var(--ink2);margin-top:.45rem;}
+
+.panel{background:var(--sur);border:2.5px solid var(--ink);border-radius:14px;box-shadow:0 4px 0 rgba(26,26,24,.16);
+  padding:.85rem .9rem;text-align:center;position:relative;transition:transform .12s, box-shadow .12s, background .2s, border-color .2s, color .2s;}
+.panel-cap{font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;text-transform:uppercase;color:var(--ink2);margin-bottom:.3rem;line-height:1.2;}
+.panel-val{font-family:var(--mono);font-weight:600;line-height:1;color:var(--ink);font-size:2.1rem;}
+.col{display:flex;flex-direction:column;gap:.75rem;}
+
+/* The three counters (Cards completed, Cards left, Alternative) are the SAME
+   box in every state: same height, value = a number only, and a fixed-height
+   bottom slot holding either the plain line ("in total", "in this sequence",
+   "Locked") or the "Press to …" label. Nothing changes size when the offer
+   starts or ends. */
+.tile{height:7rem;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.slot{height:1.45rem;margin-top:.4rem;display:flex;align-items:center;justify-content:center;
+  font-family:var(--mono);font-size:.58rem;color:var(--ink2);line-height:1.2;}
+
+.panel-alt-locked{background:#eceae3;border-color:#b8b4a8;opacity:.45;box-shadow:0 4px 0 rgba(26,26,24,.08);}
+.panel-alt-locked .panel-val,.panel-alt-locked .panel-cap,.panel-alt-locked .slot{color:#8e8a80;}
+.panel-forfeit{border-color:var(--red);background:#fbe9e5;cursor:pointer;padding:.6rem .7rem;}
+.panel-forfeit .panel-val{font-size:.8rem;color:var(--red);}
+.panel-forfeit:hover,.panel-forfeit.hov{background:var(--red);}
+.panel-forfeit:hover .panel-val,.panel-forfeit.hov .panel-val{color:#fff;}
+
+/* V1: filled button + white "Press to …" label */
+.go,.sw{cursor:pointer;}
+.go:hover,.go.hov,.sw:hover,.sw.hov{transform:translateY(-2px);}
+.go:active,.sw:active{transform:translateY(2px);}
+.sw{background:var(--blue);border-color:#1e4f96;box-shadow:0 4px 0 #17406f;}
+.go{background:#f3a53a;border-color:#c98416;box-shadow:0 4px 0 #a86a0d;}
+.sw .panel-cap,.sw .panel-val{color:#fff;}
+.go .panel-cap,.go .panel-val{color:#5a3400;}
+.act{display:inline-block;padding:.25rem .6rem;border-radius:999px;background:#fff;
+  font-family:var(--mono);font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.2;}
+.sw .act{color:var(--blue);} .go .act{color:#a35f00;}
+.sw:hover,.sw.hov{background:#2560b0;box-shadow:0 6px 0 #17406f;}
+.go:hover,.go.hov{background:#e8921c;box-shadow:0 6px 0 #a86a0d;}
+.sw:hover .act,.sw.hov .act{background:#17406f;color:#fff;}
+.go:hover .act,.go.hov .act{background:#5a3400;color:#fff;}
+
+/* Phone row (as the WT_N phone layout: the three side by side, Give up full width below) */
+.mob .col{flex-direction:row;flex-wrap:wrap;gap:.5rem;}
+.mob .col > *{flex:1;min-width:0;}
+.mob .col > .panel-forfeit{flex:1 1 100%;}
+.mob .panel{padding:.5rem .4rem;}
+.mob .tile{height:5.1rem;}
+.mob .panel-cap{font-size:.5rem;margin-bottom:.15rem;}
+.mob .panel-val{font-size:1.4rem;}
+.mob .slot{height:1.2rem;margin-top:.3rem;font-size:.52rem;}
+.mob .act{font-size:.5rem;padding:.2rem .45rem;letter-spacing:.05em;}
+.mob .panel-forfeit{padding:.4rem .5rem;}
+.mob .panel-forfeit .panel-val{font-size:.8rem;}
+</style>
+</head>
+<body>
+<h1>WT_N: Resume / Switch buttons (mockup V1, rev. 3)</h1>
+<p class="intro">
+Changes from V1: Resume is <strong>orange</strong>, the colour of the main sequence. <strong>Cards completed</strong>, <strong>Cards left</strong> and <strong>Alternative</strong> are now always the same size, in every state and in all three tiles, so nothing grows or shrinks when the offer starts or ends. All three show only a number: the Alternative shows "13", not "13 cards". The bottom line of each tile holds either its plain text ("in total", "in this sequence", "Locked") or the "Press to …" label, in a slot of fixed height. <strong>Give up</strong> is under the Alternative and always the same size.
+The real hover works as well: move the mouse over the buttons.
+</p>
+<div id="out"></div>
+
+<script>
+const tile = (cls, cap, val, slot, attrs) => '<div class="panel tile ' + cls + '"' + (attrs || '') + '><div class="panel-cap">' + cap + '</div><div class="panel-val">' + val + '</div><div class="slot">' + slot + '</div></div>';
+const done = tile('', 'Cards completed', '7', 'in total');
+const leftPlain = tile('', 'Cards left', '18', 'in this sequence');
+const altLocked = tile('panel-alt-locked', 'Alternative', '?', 'Locked');
+const goBtn = h => tile('go' + (h ? ' hov' : ''), 'Cards left', '18', '<span class="act">Press to resume</span>', ' role="button"');
+const swBtn = h => tile('sw' + (h ? ' hov' : ''), 'Alternative', '13', '<span class="act">Press to switch</span>', ' role="button"');
+const giveUp = h => '<div class="panel panel-forfeit' + (h ? ' hov' : '') + '"><div class="panel-val">Give up sequence</div></div>';
+const col = (inner, extra) => '<div class="' + (extra || '') + '"><div class="col">' + inner + '</div></div>';
+let html = '<section class="variant"><h2>V1, rev. 3</h2><p class="desc">Orange Resume (Cards left, the colour of the main sequence) during the pause, blue Switch (Alternative) from the offer on; with the mouse over a button it lifts and its label turns dark.</p><div class="states">';
+html += '<div class="state"><div class="state-h">Before the offer</div>' + col(done + leftPlain + altLocked + giveUp(false)) + '</div>';
+html += '<div class="state"><div class="state-h">Offer pause</div>' + col(done + goBtn(false) + swBtn(false) + giveUp(false)) + '</div>';
+html += '<div class="state"><div class="state-h">Pause, mouse over the buttons</div>' + col(done + goBtn(true) + swBtn(true) + giveUp(true)) + '<div class="hint">(three hovered at once for comparison; in reality only one)</div></div>';
+html += '<div class="state"><div class="state-h">After the pause (alternative still available)</div>' + col(done + leftPlain + swBtn(false) + giveUp(false)) + '</div>';
+html += '</div><div class="states" style="margin-top:1.4rem;">';
+html += '<div class="state mob-wrap"><div class="state-h" style="height:auto;">Phone, before the offer</div>' + col(done + leftPlain + altLocked + giveUp(false), 'mob') + '</div>';
+html += '<div class="state mob-wrap"><div class="state-h" style="height:auto;">Phone, offer pause</div>' + col(done + goBtn(false) + swBtn(false) + giveUp(false), 'mob') + '</div>';
+html += '</div></section>';
+document.getElementById('out').innerHTML = html;
+</script>
+</body>
+</html>

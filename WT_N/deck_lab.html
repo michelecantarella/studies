@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WT_N deck lab</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54; --bdr:#d8d4c8;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b; --or:#f3a53a; --or2:#c98416; --gold:#f2c230;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;}
+.wrap{display:grid;grid-template-columns:330px minmax(0,1fr);gap:1rem;padding:1rem;max-width:1500px;margin:0 auto;}
+@media(max-width:900px){.wrap{grid-template-columns:1fr;padding:.75rem 16px;}}
+h1{font-family:var(--mono);font-size:1.1rem;margin-bottom:.3rem;}
+h2{font-family:var(--mono);font-size:.85rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:0 0 .5rem;}
+.box{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:.9rem 1rem;margin-bottom:1rem;}
+.intro{font-size:.84rem;line-height:1.55;color:var(--ink2);}
+.intro b{color:var(--ink);}
+fieldset{border:none;border-top:1px solid var(--bdr);padding:.6rem 0 .3rem;}
+legend{font-family:var(--mono);font-size:.7rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;padding-right:.4rem;}
+.row{display:flex;align-items:center;gap:.4rem;margin:.3rem 0;flex-wrap:wrap;}
+.row label{font-size:.8rem;color:var(--ink2);flex:1 1 100%;}
+.row input[type=number],.row input[type=text],.row select{font-family:var(--mono);font-size:.78rem;padding:.25rem .35rem;border:1px solid var(--bdr);border-radius:6px;background:var(--bg);width:64px;}
+.row input[type=text]{width:150px;}
+.row select{width:auto;}
+.row .to{font-size:.75rem;color:var(--ink2);}
+.hint{font-size:.72rem;color:var(--ink2);line-height:1.4;margin:.1rem 0 .3rem;}
+.btns{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem;}
+button{font-family:var(--mono);font-size:.74rem;letter-spacing:.04em;padding:.5rem .8rem;border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;border-radius:6px;}
+button:hover{background:transparent;color:var(--ink);}
+button.ghost{background:transparent;color:var(--ink);}
+button.ghost:hover{background:var(--ink);color:var(--bg);}
+.info{font-family:var(--mono);font-size:.74rem;line-height:1.7;color:var(--ink2);}
+.info b{color:var(--ink);}
+.strip{display:grid;gap:2px;margin:.6rem 0 .2rem;}
+.c{height:26px;border-radius:4px;border:1.5px solid #b8b3a5;background:#fff;position:relative;}
+.c.o{background:var(--or);border-color:var(--or2);}
+.c.w{background:var(--gold);border-color:#b8860b;}
+.c.pre{opacity:.35;}
+.c.offer{box-shadow:0 0 0 2px var(--blue);}
+.c.th{box-shadow:0 0 0 2px var(--grn);}
+.c.win{border-bottom:4px solid var(--ink2);}
+.legend{font-size:.72rem;color:var(--ink2);display:flex;gap:.9rem;flex-wrap:wrap;margin:.3rem 0 .6rem;}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:.3rem;border:1.5px solid #b8b3a5;}
+svg{display:block;width:100%;height:auto;}
+.axis{font-family:var(--mono);font-size:10px;fill:var(--ink2);}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.72rem;}
+th,td{border:1px solid var(--bdr);padding:.3rem .35rem;text-align:right;white-space:nowrap;}
+th{background:var(--bg);font-weight:600;text-align:center;}
+td.l{text-align:left;}
+.bad{color:var(--red);font-weight:700;}
+.tw{overflow-x:auto;}
+.note{font-size:.75rem;color:var(--ink2);line-height:1.5;margin-top:.5rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div>
+  <div class="box">
+    <h1>WT_N deck lab</h1>
+    <p class="intro">Rolls WT_N sequences with the <b>fitted decay</b> and shows what comes out. Set the ranges on the left, press <b>Run simulation</b>, and <b>Download ranges</b> when you like them: I will use that file to set the study.</p>
+  </div>
+  <div class="box" id="form"></div>
+</div>
+<div>
+  <div class="box">
+    <h2>How the density is set</h2>
+    <p class="intro">For each card, the <b>fair alternative</b> if it were offered there: for those still playing (counting the winning cards they may have found by then), staying costs the main cards left + (chance of not finding all of them) × the alternative, owed at the end; the fair alternative is the one equal to that cost, with the future cards counted at their density. The density decays from the first card as <b>d0 · (ρ + (1 − ρ) · (1 + t/τ)<sup>−α</sup>)</b> (a Pareto curve towards a floor ρ·d0), with ρ, τ, α fitted on each deck so that the fair alternative stays as close as possible to the one at the offer on every card. The fit may lengthen the alternative by at most the factor set on the left (a lower density later makes staying dearer, at the offer too).<br>With <b>1 winning card</b> the best decay is none. With <b>2–3</b> the fair alternative must drop a little on the very first cards (no one can finish there), and the decay can only win it back later; the denser the start, the smaller that drop. <b>Drift</b> in the table = how far, on average and at most, the fair alternative moves away from the one at the offer (in cards, from the densities).</p>
+  </div>
+  <div class="box">
+    <h2>One roll</h2>
+    <div class="row" style="margin-bottom:.4rem;">
+      <label style="flex:0 0 auto;">Band</label><select id="one-band"><option value="0">1</option><option value="1">2</option><option value="2" selected>3</option><option value="3">4</option><option value="4">5</option></select>
+      <label style="flex:0 0 auto;margin-left:.6rem;">Winning cards</label><select id="one-n"><option>1</option><option selected>2</option><option>3</option></select>
+      <button onclick="rollOne()" style="margin-left:.6rem;">Roll one</button>
+    </div>
+    <div id="one-info" class="info">—</div>
+    <div id="one-strip" class="strip"></div>
+    <div class="legend"><span><i style="background:#fff"></i>white</span><span><i style="background:var(--or);border-color:var(--or2)"></i>orange</span><span><i style="background:var(--gold);border-color:#b8860b"></i>winning card (one draw)</span><span><i style="box-shadow:0 0 0 2px var(--blue)"></i>offer</span><span><i style="border-bottom:4px solid var(--ink2)"></i>calibration window</span><span><i style="opacity:.35"></i>before the offer</span></div>
+    <div id="one-dens"></div>
+    <div id="one-fair"></div>
+  </div>
+  <div class="box">
+    <h2>Simulation</h2>
+    <div id="sim-status" class="info">Press Run simulation.</div>
+    <div id="sim-hist"></div>
+    <div class="tw"><div id="sim-table"></div></div>
+    <div id="sim-prof"></div>
+    <p class="note"><b>Alternative</b>: median [10%–90%] of the alternative offered. <b>Accepted</b>: share of rolls whose alternative is within the bounds (the others are redrawn when "redraw" is on). <b>Gap at 10 / 20</b>: for those still playing at card 10 / 20, cost of staying minus the alternative, in cards (0 = as fair as at the offer; negative = staying has become better). <b>Drift (max)</b>: how far the fair alternative (from the densities) moves away from the one at the offer, survivor-weighted mean and the largest, in cards. <b>Switch better</b>: share of offers where switching is better at the offer. <b>End</b>: chance of reaching the last card without all the winning cards (then the alternative is owed). <b>In window</b>: chance that all the winning cards fall within the calibration window (target = p_inside). <b>Density 20</b>: density of card 20 relative to the initial one.</p>
+  </div>
+</div>
+</div>
+
+<script>
+// ── Deck lab core (shared by the Node tests and WT_N/deck_lab.html) ──
+// Model (as WT_N): n winning cards; with r missing, an orange card holds one
+// w.p. min(1, r·h); reaching the last card without all of them = the
+// alternative is owed. For those still playing at card t (winning cards found
+// so far as expected, future cards as their densities), the fair alternative
+// A*(t) solves A = E[main cards left] + P(not all found)·A, i.e. A*(t) = Ē_t / P̄_t.
+// Density: a Pareto-type decay from the first card,
+//   d_t = d0 · (ρ + (1 − ρ)·(1 + t/τ)^(−α)),
+// with (ρ, τ, α) fitted on each deck so that A*(t) stays as close as possible
+// to A*(offer) on every card (survivor-weighted), with A*(offer) at most
+// `maxLonger` × what it would be with no decay.
+const LAB = (function(){
+  const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+  const unif = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[Math.floor(Math.random() * a.length)];
+  const hz = (h, r) => Math.min(1, r * h);
+  function pFoundWithin(K, h, n){ let st = new Array(n + 1).fill(0); st[n] = 1;
+    for(let i = 0; i < K; i++){ const nx = new Array(n + 1).fill(0); nx[0] = st[0]; for(let r = 1; r <= n; r++){ const p = hz(h, r); nx[r] += st[r] * (1 - p); nx[r - 1] += st[r] * p; } st = nx; }
+    return st[0]; }
+  // distribution of the number of orange cards among cards with chances ds
+  function countDist(ds){ let d = [1]; for(const x of ds){ const nx = new Array(d.length + 1).fill(0); d.forEach((v, k) => { nx[k] += v * (1 - x); nx[k + 1] += v * x; }); d = nx; } return d; }
+  // h so that all n winning cards fall within the window in p of the cases:
+  // on the window's actual orange cards (K), or in expectation over the window's densities.
+  function hForP(p, n, hMax, K, wDens){
+    const dist = K == null ? countDist(wDens) : null;
+    const f = h => K != null ? pFoundWithin(K, h, n) : dist.reduce((s, w, k) => s + w * pFoundWithin(k, h, n), 0);
+    let lo = 0, hi = hMax; if(f(hi) < p) return hi;
+    for(let i = 0; i < 40; i++){ const m = (lo + hi) / 2; if(f(m) < p) lo = m; else hi = m; } return (lo + hi) / 2; }
+  function step(st, h, x){ const n = st.length - 1, nx = new Array(n + 1).fill(0); nx[0] = st[0];
+    for(let r = 1; r <= n; r++){ const p = hz(h, r) * x; nx[r] += st[r] * (1 - p); nx[r - 1] += st[r] * p; } return nx; }
+  const alive = st => st.slice(1).reduce((s, v) => s + v, 0);
+  // Fair alternative for those still playing, card by card from o, given card chances xs
+  // (0/1 for cards already drawn and known, densities otherwise).
+  function fairCurve(n, h, xs, o){
+    const L = xs.length, E = [], Pp = [];
+    for(let t = 0; t <= L; t++){ E.push(new Float64Array(n + 1)); Pp.push(new Float64Array(n + 1)); Pp[t][0] = 1; }
+    for(let t = L - 1; t >= o; t--) for(let r = 1; r <= n; r++){ const p = hz(h, r) * xs[t]; E[t][r] = 1 + p * E[t+1][r-1] + (1 - p) * E[t+1][r]; Pp[t][r] = p * Pp[t+1][r-1] + (1 - p) * Pp[t+1][r]; }
+    let st = new Float64Array(n + 1); st[n] = 1; const A = [], S = [];
+    for(let t = o; t < L; t++){ let e = 0, p = 0, s = 0; for(let r = 1; r <= n; r++){ e += st[r] * E[t][r]; p += st[r] * Pp[t][r]; s += st[r]; }
+      A.push(p > 1e-12 ? e / p : 1e9); S.push(s);
+      const nx = new Float64Array(n + 1); nx[0] = st[0]; for(let r = 1; r <= n; r++){ const q = hz(h, r) * xs[t]; nx[r] += st[r] * (1 - q); nx[r-1] += st[r] * q; } st = nx; }
+    return { A, S };
+  }
+  function drift(c){ let a = 0, w = 0, mx = 0; for(let k = 1; k < c.A.length; k++){ const g = c.A[k] - c.A[0]; a += c.S[k] * g * g; w += c.S[k]; mx = Math.max(mx, Math.abs(g)); } return { rms: w ? Math.sqrt(a / w) : 0, mx }; }
+  const maxDrop = ds => { let m = 0; for(let t = 1; t < ds.length; t++) m = Math.max(m, 1 - ds[t] / ds[t - 1]); return m; };
+  const shape = (d0, rho, tau, a, L, dMin) => Array.from({ length: L }, (_, t) => Math.max(dMin, d0 * (rho + (1 - rho) * Math.pow(1 + t / tau, -a))));
+  const GRID = (() => { const g = [{ rho: 1, tau: 1, a: 0 }]; for(let rho = 0.1; rho < 0.999; rho += 0.1) for(const tau of [1, 2, 4, 8, 16]) for(const a of [0.5, 1, 1.5, 2, 3]) g.push({ rho, tau, a }); return g; })();
+  // Best decay for this deck: known = cards already drawn (0/1) for t < known.length.
+  function fitDecay(n, h, d0, o, L, P, known){
+    const xsOf = ds => known ? ds.map((d, t) => t < known.length ? (known[t] ? 1 : 0) : d) : ds;
+    const base = fairCurve(n, h, xsOf(shape(d0, 1, 1, 0, L, P.dMin)), o).A[0], cap = base * P.maxLonger;
+    const evalP = q => { const ds = shape(d0, q.rho, q.tau, q.a, L, P.dMin), c = fairCurve(n, h, xsOf(ds), o), dv = drift(c); return { q, ds, c, dv, ok: c.A[0] <= cap + 1e-9 && maxDrop(ds) <= (P.maxStep != null ? P.maxStep : 1) + 1e-9 }; };
+    let best = null;
+    for(const q of GRID){ const v = evalP(q); if(v.ok && (!best || v.dv.rms < best.dv.rms)) best = v; }
+    // local refinement
+    let stepR = 0.05, stepT = 0.5, stepA = 0.25;
+    for(let it = 0; it < 3; it++){
+      for(const dq of [[stepR,0,0],[-stepR,0,0],[0,stepT,0],[0,-stepT,0],[0,0,stepA],[0,0,-stepA]]){
+        const q = { rho: Math.min(1, Math.max(0.05, best.q.rho + dq[0])), tau: Math.max(0.5, best.q.tau * (1 + dq[1])), a: Math.max(0, best.q.a + dq[2]) };
+        const v = evalP(q); if(v.ok && v.dv.rms < best.dv.rms) best = v; }
+      stepR /= 2; stepT /= 2; stepA /= 2;
+    }
+    best.base = base; return best;
+  }
+  // From card t with r missing, on the deck as drawn: expected main cards E and chance P of finding them all.
+  function EP(live, t, r, h){ let st = new Array(r + 1).fill(0); st[r] = 1; let E = 0;
+    for(let u = t; u < live.length; u++){ E += alive(st); st = step(st, h, live[u] ? 1 : 0); }
+    return { E, P: st[0] }; }
+  function stateAt(live, o, t, n, h){ let st = new Array(n + 1).fill(0); st[n] = 1; for(let u = o; u < t; u++) st = step(st, h, live[u] ? 1 : 0); return st; }
+  // Cost of staying minus A for those still playing at card t, on the deck as drawn.
+  function gapAt(live, o, t, n, h, A){ const st = stateAt(live, o, t, n, h), S = alive(st); if(S < 1e-9) return null;
+    let e = 0, p = 0; for(let r = 1; r <= n; r++){ if(!st[r]) continue; const v = EP(live, t, r, h); e += st[r] * v.E; p += st[r] * v.P; }
+    e /= S; p /= S; return { S, gap: e + (1 - p) * A - A, fair: p > 1e-9 ? e / p : Infinity }; }
+
+  function roll(P, band, n){
+    for(let tries = 0; tries < (P.maxTries || 60); tries++){
+      const L = rnd(P.lenLo, P.lenHi), d0 = n === 1 && P.d01Lo != null ? unif(P.d01Lo, P.d01Hi) : unif(P.d0Lo, P.d0Hi), pBand = pick(P.bands[band]);
+      const W = Math.min(L, rnd(P.winBase + P.winStep * n, P.winBase + P.winStep * n + P.winSpan)), minW = P.minWindow[n - 1];
+      const o = rnd(P.offerLo, P.offerHi), hMax = P.hMax[n - 1];
+      const round2 = x => Math.max(0.01, Math.round(x * 100) / 100);
+      // 1) decay fitted with h from the expected window
+      let h = round2(hForP(pBand, n, hMax, null, new Array(W).fill(d0)));
+      let fit = P.decay ? fitDecay(n, h, d0, o, L, P, null) : null;
+      let dens = fit ? fit.ds : new Array(L).fill(d0);
+      if(fit){ h = round2(hForP(pBand, n, hMax, null, dens.slice(0, W))); fit = fitDecay(n, h, d0, o, L, P, null); dens = fit.ds; }
+      // 2) the cards; at least minW orange in the window
+      const live = dens.map(d => Math.random() < d);
+      const win = [...Array(W).keys()], have = win.filter(t => live[t]).length;
+      if(have < minW){ const free = win.filter(t => !live[t]); for(let i = free.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [free[i], free[j]] = [free[j], free[i]]; } free.slice(0, minW - have).forEach(t => live[t] = true); }
+      const K = win.filter(t => live[t]).length;
+      // 3) h on the window as drawn (if so set); the decay refitted with the window as drawn, the cards after it redrawn
+      if(P.calib === 'realized') h = round2(hForP(pBand, n, hMax, K, null));
+      if(P.decay){ fit = fitDecay(n, h, d0, o, L, P, live.slice(0, W)); dens = fit.ds; for(let t = W; t < L; t++) live[t] = Math.random() < dens[t]; }
+      // the offer: fair alternative on the deck as drawn (E/P), ± variation
+      const v = EP(live, o, n, h); if(v.P < 1e-6) continue;
+      const xs = dens.map((d, t) => t < W ? (live[t] ? 1 : 0) : d), mc = fairCurve(n, h, xs, o);
+      const fair = v.E / v.P, base = P.altFrom === 'model' ? mc.A[0] : fair;
+      let alt = Math.round(base * (1 + (2 * Math.random() - 1) * P.noise));
+      const ahead = []; for(let t = o; t < L; t++) if(live[t]) ahead.push(t);
+      const best = ahead.length >= n ? ahead[n - 1] - o + 1 : L - o;
+      alt = Math.max(alt, best + 1, P.altFloor || 1);
+      if((alt < P.altMin || alt > P.altMax) && P.reject) continue;
+      const winners = []; let r = n; for(let t = o; t < L && r > 0; t++) if(live[t] && Math.random() < hz(h, r)){ winners.push(t); r--; }
+      const dv = drift(mc);
+      return { ok: true, tries, band, n, L, d0, pBand, W, K, h, o, live, dens, fair, model0: mc.A[0], noDecay: fit ? fit.base : mc.A[0],
+               shape: fit ? fit.q : null, driftRms: dv.rms, driftMax: dv.mx, alt, best, winners, pEndNo: 1 - v.P, pHit: pFoundWithin(K, h, n) };
+    }
+    return { ok: false, band, n };
+  }
+  function curve(R){ const out = []; for(let t = R.o; t < R.L; t++){ const g = gapAt(R.live, R.o, t, R.n, R.h, R.alt); out.push(g ? { t, S: g.S, fair: g.fair, gap: g.gap } : { t, S: 0 }); } return out; }
+  function modelCurve(R){ const xs = R.dens.map((d, t) => t < R.W ? (R.live[t] ? 1 : 0) : d), c = fairCurve(R.n, R.h, xs, R.o); return c.A.map((a, k) => ({ t: R.o + k, fair: a, S: c.S[k] })); }
+  return { roll, curve, modelCurve, gapAt, EP, fitDecay, fairCurve, hForP, pFoundWithin };
+})();
+if(typeof module !== 'undefined') module.exports = LAB;
+
+</script>
+<script>
+const DEFAULTS = {
+  lenLo: 30, lenHi: 35,
+  nAllowed: [1, 2, 3], hMax: [0.95, 0.5, 0.33],
+  bands: [[.25,.30,.35],[.40,.45],[.50],[.55,.60],[.65,.70,.75]],
+  winBase: 2, winStep: 2, winSpan: 4, minWindow: [1, 4, 7], calib: 'realized',
+  d0Lo: 0.55, d0Hi: 0.65, d01Lo: 0.40, d01Hi: 0.60, decay: true, maxLonger: 1.5, dMin: 0.03, maxStep: 0.12,
+  offerLo: 0, offerHi: 3, altFrom: 'fair', noise: 0.15, altFloor: 5, altMin: 3, altMax: 18, reject: false, maxTries: 60,
+  perCell: 100
+};
+const STORE = 'wtn_deck_lab_v5';
+let P = load();
+function load(){ try{ const s = JSON.parse(localStorage.getItem(STORE) || 'null'); if(s) return Object.assign({}, DEFAULTS, s); }catch(e){} return JSON.parse(JSON.stringify(DEFAULTS)); }
+function save(){ try{ localStorage.setItem(STORE, JSON.stringify(P)); }catch(e){} }
+const el = id => document.getElementById(id);
+const num = (k, step, w) => `<input type="number" id="f-${k}" step="${step || 1}" ${w ? 'style="width:' + w + 'px"' : ''}>`;
+const FIELDS = [
+  ['Sequence', [
+    ['Length (cards)', () => num('lenLo') + '<span class="to">to</span>' + num('lenHi'), 'Drawn first, uniform.'] ]],
+  ['Winning cards', [
+    ['Allowed', () => [1,2,3].map(n => `<label style="flex:0 0 auto"><input type="checkbox" id="f-nA${n}"> ${n}</label>`).join('')],
+    ['Max chance per box (1/2/3)', () => num('hMax0', .01, 52) + num('hMax1', .01, 52) + num('hMax2', .01, 52)] ]],
+  ['p_inside bands', [
+    ['Band 1', () => '<input type="text" id="f-b0">'], ['Band 2', () => '<input type="text" id="f-b1">'], ['Band 3', () => '<input type="text" id="f-b2">'],
+    ['Band 4', () => '<input type="text" id="f-b3">'], ['Band 5', () => '<input type="text" id="f-b4">', 'Values in %, comma separated; each roll picks one.'] ]],
+  ['Calibration window', [
+    ['Length = base + step × n + U(0, span)', () => num('winBase', 1, 46) + num('winStep', 1, 46) + num('winSpan', 1, 46)],
+    ['Min orange in it (n = 1/2/3)', () => num('minW0', 1, 46) + num('minW1', 1, 46) + num('minW2', 1, 46)],
+    ['h calibrated on', () => '<select id="f-calib"><option value="realized">the orange cards drawn in it</option><option value="expected">the expected ones</option></select>'] ]],
+  ['Density', [
+    ['Initial density, 2–3 winning cards', () => num('d0Lo', .01) + '<span class="to">to</span>' + num('d0Hi', .01)],
+    ['Initial density, 1 winning card', () => num('d01Lo', .01) + '<span class="to">to</span>' + num('d01Hi', .01)],
+    ['Fitted decay', () => '<label style="flex:0 0 auto"><input type="checkbox" id="f-decay"> on</label>'],
+    ['Alternative at most × (vs no decay)', () => num('maxLonger', .05)],
+    ['Lowest density', () => num('dMin', .01)],
+    ['Largest drop from one card to the next (share)', () => num('maxStep', .01)] ]],
+  ['Offer and alternative', [
+    ['Offer after (cards)', () => num('offerLo') + '<span class="to">to</span>' + num('offerHi')],
+    ['Alternative from', () => '<select id="f-altFrom"><option value="fair">fair value on the deck drawn</option><option value="model">fair value from the densities</option></select>'],
+    ['Variation ± (share)', () => num('noise', .01)],
+    ['Shortest alternative (cards)', () => num('altFloor')],
+    ['Bounds', () => num('altMin') + '<span class="to">to</span>' + num('altMax')],
+    ['Outside the bounds', () => '<label style="flex:0 0 auto"><input type="checkbox" id="f-reject"> redraw the deck</label>'] ]],
+  ['Simulation', [
+    ['Rolls per band × n', () => num('perCell', 50)] ]]
+];
+function buildForm(){
+  let h = '';
+  FIELDS.forEach(([lg, rows]) => { h += `<fieldset><legend>${lg}</legend>`; rows.forEach(([lab, f, hint]) => { h += `<div class="row"><label>${lab}</label>${f()}</div>` + (hint ? `<div class="hint">${hint}</div>` : ''); }); h += '</fieldset>'; });
+  h += `<div class="btns"><button onclick="runSim()">Run simulation</button><button class="ghost" onclick="download()">Download ranges</button><button class="ghost" onclick="el('f-file').click()">Load ranges</button><button class="ghost" onclick="resetDefaults()">Defaults</button></div><input type="file" id="f-file" accept=".json" style="display:none" onchange="loadFile(this)">`;
+  el('form').innerHTML = h; toForm();
+  el('form').addEventListener('change', () => { fromForm(); save(); });
+}
+const simple = ['lenLo','lenHi','winBase','winStep','winSpan','d0Lo','d0Hi','d01Lo','d01Hi','maxLonger','dMin','maxStep','offerLo','offerHi','noise','altFloor','altMin','altMax','perCell'];
+function toForm(){
+  simple.forEach(k => el('f-' + k).value = P[k]);
+  [0,1,2].forEach(i => { el('f-hMax' + i).value = P.hMax[i]; el('f-minW' + i).value = P.minWindow[i]; el('f-nA' + (i + 1)).checked = P.nAllowed.includes(i + 1); });
+  [0,1,2,3,4].forEach(b => el('f-b' + b).value = P.bands[b].map(x => Math.round(x * 100)).join(', '));
+  ['calib','altFrom'].forEach(k => el('f-' + k).value = P[k]);
+  el('f-decay').checked = !!P.decay; el('f-reject').checked = !!P.reject;
+}
+function fromForm(){
+  simple.forEach(k => { const v = parseFloat(el('f-' + k).value); if(!isNaN(v)) P[k] = v; });
+  P.hMax = [0,1,2].map(i => parseFloat(el('f-hMax' + i).value) || DEFAULTS.hMax[i]);
+  P.minWindow = [0,1,2].map(i => Math.max(0, parseInt(el('f-minW' + i).value) || 0));
+  P.nAllowed = [1,2,3].filter(n => el('f-nA' + n).checked); if(!P.nAllowed.length) P.nAllowed = [1];
+  P.bands = [0,1,2,3,4].map(b => { const v = el('f-b' + b).value.split(/[,; ]+/).map(x => parseFloat(x)).filter(x => !isNaN(x) && x > 0 && x < 100).map(x => x / 100); return v.length ? v : P.bands[b]; });
+  ['calib','altFrom'].forEach(k => P[k] = el('f-' + k).value);
+  P.decay = el('f-decay').checked; P.reject = el('f-reject').checked;
+  P.lenHi = Math.max(P.lenLo, P.lenHi); P.d0Hi = Math.max(P.d0Lo, P.d0Hi); P.offerHi = Math.max(P.offerLo, P.offerHi); P.altMax = Math.max(P.altMin, P.altMax);
+}
+function resetDefaults(){ P = JSON.parse(JSON.stringify(DEFAULTS)); toForm(); save(); }
+function loadFile(inp){ const f = inp.files[0]; if(!f) return; const r = new FileReader(); r.onload = () => { try{ const j = JSON.parse(r.result); P = Object.assign({}, DEFAULTS, j.params || j); toForm(); save(); el('sim-status').textContent = 'Ranges loaded from ' + f.name + '.'; }catch(e){ alert('Not a valid ranges file.'); } }; r.readAsText(f); inp.value = ''; }
+let LAST = null;
+function download(){
+  fromForm();
+  const out = { file: 'WT_N deck ranges', version: 2, saved: new Date().toISOString(), params: P, summary: LAST };
+  const b = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' }), a = document.createElement('a');
+  a.href = URL.createObjectURL(b); a.download = 'wtn_deck_ranges.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// ── charts ──
+function svgLine(series, opts){
+  const W = 760, H = opts.h || 170, l = 36, r = 10, t = 14, b = 24, xs = opts.xMax, ys = opts.yMax;
+  const X = x => l + (W - l - r) * x / xs, Y = y => t + (H - t - b) * (1 - Math.min(y, ys) / ys);
+  let s = `<svg viewBox="0 0 ${W} ${H}">`;
+  for(let k = 0; k <= 4; k++){ const y = ys * k / 4; s += `<line x1="${l}" x2="${W - r}" y1="${Y(y)}" y2="${Y(y)}" stroke="#e7e3d8"/><text class="axis" x="${l - 4}" y="${Y(y) + 3}" text-anchor="end">${opts.fmt ? opts.fmt(y) : Math.round(y)}</text>`; }
+  for(let x = 0; x <= xs; x += 5) s += `<text class="axis" x="${X(x)}" y="${H - 8}" text-anchor="middle">${x}</text>`;
+  (opts.marks || []).forEach(m => s += `<line x1="${X(m.x)}" x2="${X(m.x)}" y1="${t}" y2="${H - b}" stroke="${m.c}" stroke-dasharray="3 3"/>`);
+  series.forEach(se => { const pts = se.pts.filter(p => p[1] != null && isFinite(p[1])); if(!pts.length) return;
+    if(se.bars){ const bw = (W - l - r) / xs * 0.8; pts.forEach(p => s += `<rect x="${X(p[0]) - bw / 2}" y="${Y(p[1])}" width="${bw}" height="${Y(0) - Y(p[1])}" fill="${se.c}" opacity=".85"/>`); }
+    else s += `<polyline fill="none" stroke="${se.c}" stroke-width="${se.w || 2}" ${se.dash ? 'stroke-dasharray="5 4"' : ''} points="${pts.map(p => X(p[0]) + ',' + Y(p[1])).join(' ')}"/>`; });
+  s += `<text class="axis" x="${l}" y="10">${opts.title || ''}</text></svg>`;
+  return s;
+}
+// ── one roll ──
+function rollOne(){
+  fromForm(); save();
+  const band = +el('one-band').value, n = +el('one-n').value, R = LAB.roll(P, band, n);
+  if(!R.ok){ el('one-info').innerHTML = '<span class="bad">No deck within the bounds after ' + P.maxTries + ' tries.</span>'; el('one-strip').innerHTML = el('one-dens').innerHTML = el('one-fair').innerHTML = ''; return; }
+  el('one-info').innerHTML = `length <b>${R.L}</b> · n <b>${R.n}</b> · p_inside <b>${Math.round(R.pBand * 100)}%</b> · window <b>${R.W}</b> cards, <b>${R.K}</b> orange · h <b>${Math.round(R.h * 100)}%</b> per box · initial density <b>${Math.round(R.d0 * 100)}%</b> · offer after <b>${R.o}</b>` + (R.shape ? ` · decay ρ <b>${Math.round(R.shape.rho * 100)}%</b> τ <b>${R.shape.tau.toFixed(1)}</b> α <b>${R.shape.a.toFixed(2)}</b> · fair alternative at the offer <b>${R.model0.toFixed(1)}</b> (no decay ${R.noDecay.toFixed(1)}) · drift <b>${R.driftRms.toFixed(1)}</b> (max ${R.driftMax.toFixed(1)})` : '') + `<br>alternative offered <b>${R.alt}</b> (fair on this deck ${R.fair.toFixed(1)}, best case ${R.best}) · switching better at the offer: <b>${R.fair > R.alt ? 'yes' : 'no'}</b> · chance of reaching the end without all: <b>${Math.round(R.pEndNo * 100)}%</b>` + (R.alt < P.altMin || R.alt > P.altMax ? ' · <span class="bad">outside the bounds</span>' : '');
+  const st = el('one-strip'); st.style.gridTemplateColumns = `repeat(${R.L}, minmax(0, 1fr))`;
+  st.innerHTML = R.live.map((v, t) => `<div class="c ${R.winners.includes(t) ? 'w' : v ? 'o' : ''} ${t < R.o ? 'pre' : ''} ${t === R.o ? 'offer' : ''} ${t < R.W ? 'win' : ''}" title="card ${t + 1}: density ${Math.round(R.dens[t] * 100)}%"></div>`).join('');
+  el('one-dens').innerHTML = svgLine([{ pts: R.dens.map((d, t) => [t + 0.5, d]), c: '#f3a53a', bars: true }, { pts: [[0, R.d0], [R.L, R.d0]], c: '#5a5a54', w: 1, dash: true }],
+    { xMax: R.L, yMax: 1, fmt: y => Math.round(y * 100) + '%', title: 'Chance each card is orange (dashed: initial density)', marks: [{ x: R.o, c: '#2f6fc8' }] });
+  const cv = LAB.curve(R), mc = LAB.modelCurve(R), ymax = Math.max(10, Math.ceil(Math.max(R.alt, mc[0].fair) * 2 / 5) * 5);
+  el('one-fair').innerHTML = svgLine([{ pts: cv.map(p => [p.t, p.fair]), c: '#e8a99a', w: 1.5 }, { pts: mc.map(p => [p.t, p.fair]), c: '#c84b2f', w: 2.5 }, { pts: [[R.o, R.alt], [R.L, R.alt]], c: '#2f6fc8', dash: true }, { pts: cv.map(p => [p.t, p.S * ymax]), c: '#b8b3a5', w: 1 }],
+    { xMax: R.L, yMax: ymax, title: 'Fair alternative if offered at each card: from the densities (red) · on the cards as drawn (light red) · offered (blue) · share still playing (grey)', marks: [{ x: R.o, c: '#2f6fc8' }] });
+  el('one-fair').innerHTML += '<div class="info">Fair alternative from the densities at card ' + [0, 3, 6, 9, 12, 20, R.L - 1 - R.o].filter(k => k < mc.length).map(k => '<b>' + (R.o + k) + '</b>: ' + mc[k].fair.toFixed(1)).join(' · ') + '</div>';
+}
+// ── simulation ──
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
+const Q = (a, q) => { if(!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
+function runSim(){
+  fromForm(); save(); el('sim-status').textContent = 'Running…';
+  setTimeout(() => {
+    const t0 = performance.now(), cells = [], allAlt = [], prof = { 1: [], 2: [], 3: [] };
+    P.nAllowed.forEach(n => { for(let b = 0; b < 5; b++){
+      const R = [], N = Math.max(10, Math.round(P.perCell)); let fail = 0, inB = 0;
+      for(let i = 0; i < N; i++){ const x = LAB.roll(P, b, n); if(!x.ok){ fail++; continue; } R.push(x); if(x.alt >= P.altMin && x.alt <= P.altMax) inB++; }
+      const g = { 10: [0, 0], 20: [0, 0] };
+      R.forEach(x => { [10, 20].forEach(T => { if(T >= x.L) return; const v = LAB.gapAt(x.live, x.o, T, n, x.h, x.alt); if(!v) return; g[T][0] += v.gap * v.S; g[T][1] += v.S; }); x.dens.forEach((d, t) => { (prof[n][t] = prof[n][t] || []).push(d / x.d0); }); allAlt.push(x.alt); });
+      const alts = R.map(x => x.alt);
+      cells.push({ n, band: b + 1, rolls: N, ok: R.length, failed: fail, accepted: P.reject ? R.length / N : inB / Math.max(1, R.length),
+        altMed: Q(alts, .5), alt10: Q(alts, .1), alt90: Q(alts, .9), le2: mean(alts.map(a => a <= 2 ? 1 : 0)), ge19: mean(alts.map(a => a >= 19 ? 1 : 0)),
+        gap10: g[10][1] ? g[10][0] / g[10][1] : null, gap20: g[20][1] ? g[20][0] / g[20][1] : null,
+        switchBetter: mean(R.map(x => x.fair > x.alt ? 1 : 0)), end: mean(R.map(x => x.pEndNo)), inWindow: mean(R.map(x => x.pHit)), target: mean(R.map(x => x.pBand)),
+        drift: mean(R.map(x => x.driftRms)), driftMax: mean(R.map(x => x.driftMax)), dens20: Q(R.filter(x => x.L > 20).map(x => x.dens[20] / x.d0), .5), hMed: Q(R.map(x => x.h), .5) });
+    } });
+    LAST = { at: new Date().toISOString(), ms: Math.round(performance.now() - t0), cells };
+    const pc = v => v == null || isNaN(v) ? '—' : Math.round(v * 100) + '%', f1 = v => v == null || isNaN(v) ? '—' : v.toFixed(1);
+    let h = '<table><tr><th>n</th><th>band</th><th>alternative</th><th>≤2</th><th>≥19</th><th>accepted</th><th>gap at 10</th><th>gap at 20</th><th>drift (max)</th><th>switch better</th><th>end</th><th>in window (target)</th><th>h</th><th>density 20</th></tr>';
+    cells.forEach(c => { h += `<tr><td>${c.n}</td><td>${c.band}</td><td>${c.altMed} [${c.alt10}–${c.alt90}]</td><td class="${c.le2 > .05 ? 'bad' : ''}">${pc(c.le2)}</td><td class="${c.ge19 > .1 ? 'bad' : ''}">${pc(c.ge19)}</td><td class="${c.accepted < .8 ? 'bad' : ''}">${pc(c.accepted)}</td><td class="${Math.abs(c.gap10) > 1 ? 'bad' : ''}">${f1(c.gap10)}</td><td class="${Math.abs(c.gap20) > 1 ? 'bad' : ''}">${f1(c.gap20)}</td><td class="${c.drift > 1.5 ? 'bad' : ''}">${f1(c.drift)} (${f1(c.driftMax)})</td><td>${pc(c.switchBetter)}</td><td>${pc(c.end)}</td><td>${pc(c.inWindow)} (${pc(c.target)})</td><td>${pc(c.hMed)}</td><td>${pc(c.dens20)}</td></tr>`; });
+    el('sim-table').innerHTML = h + '</table>';
+    const mx = Math.max(30, Q(allAlt, .98) || 30), bins = new Array(mx + 1).fill(0); allAlt.forEach(a => bins[Math.min(mx, a)]++);
+    const maxB = Math.max(...bins) || 1;
+    el('sim-hist').innerHTML = svgLine([{ pts: bins.map((v, a) => [a, v / maxB]).filter(p => p[0] >= P.altMin && p[0] <= P.altMax), c: '#2f6fc8', bars: true }, { pts: bins.map((v, a) => [a, v / maxB]).filter(p => p[0] < P.altMin || p[0] > P.altMax), c: '#c84b2f', bars: true }],
+      { xMax: mx + 1, yMax: 1, h: 140, fmt: () => '', title: 'Alternatives offered, all cells (red: outside the bounds; last bar = ' + mx + ' or more)' });
+    const cols = { 1: '#2a7a4b', 2: '#2f6fc8', 3: '#c84b2f' }, Lmax = P.lenHi;
+    el('sim-prof').innerHTML = svgLine(P.nAllowed.map(n => ({ pts: prof[n].map((a, t) => [t + 0.5, a && a.length > 20 ? mean(a) : null]), c: cols[n] })),
+      { xMax: Lmax, yMax: 1.2, fmt: y => Math.round(y * 100) + '%', title: 'Mean density card by card, relative to the initial one (green n=1, blue n=2, red n=3)' });
+    el('sim-status').innerHTML = `${cells.reduce((s, c) => s + c.ok, 0)} decks in ${LAST.ms} ms. ` + (P.reject ? 'Redrawing outside the bounds.' : 'Not redrawing: "accepted" = share within the bounds.');
+  }, 30);
+}
+buildForm(); rollOne();
+</script>
+</body>
+</html>

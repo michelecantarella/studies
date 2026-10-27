@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WT_N brute force</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+
+:root {
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b;
+  --warn:#d4860a; --bdr:#d8d4c8;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;}
+
+/* ── BOOT OVERLAY ─────────────────────────────────────────────── */
+#boot-overlay{
+  position:fixed;inset:0;z-index:9999;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+}
+#boot-overlay .boot-spin{
+  width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PANEL CARDS (task screen) ───────────────────────────────────
+   Chunky, rounded, slightly-raised tiles. Each is its own self-contained
+   unit of information so nothing on the task screen needs a legend to be
+   read. `.panel.is-button` variants are the ones that are also clickable;
+   the rest are pure readouts and deliberately give no hover affordance. */
+.panel{
+  background:var(--sur);border:2.5px solid var(--ink);border-radius:14px;
+  box-shadow:0 4px 0 rgba(26,26,24,.16);
+  padding:.85rem .9rem;text-align:center;position:relative;
+  transition:transform .12s, box-shadow .12s, background .2s, border-color .2s, color .2s;
+}
+.panel-cap{
+  font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink2);margin-bottom:.3rem;line-height:1.2;
+}
+.panel-val{font-family:var(--mono);font-weight:600;line-height:1;color:var(--ink);}
+.panel-sub{font-family:var(--mono);font-size:.58rem;color:var(--ink2);margin-top:.3rem;line-height:1.3;}
+.panel-lg .panel-val{font-size:2.1rem;}
+.panel-md .panel-val{font-size:1.5rem;}
+.panel-sm{padding:.6rem .7rem;}
+.panel-sm .panel-val{font-size:1.05rem;}
+
+/* Clickable panels: real button affordance, pressed state on click. */
+.panel.is-button{cursor:pointer;}
+.panel.is-button:hover:not(:disabled):not(.is-locked){transform:translateY(-2px);box-shadow:0 6px 0 rgba(26,26,24,.18);}
+.panel.is-button:active:not(:disabled):not(.is-locked){transform:translateY(2px);box-shadow:0 1px 0 rgba(26,26,24,.18);}
+.panel.is-locked{opacity:.45;cursor:not-allowed;box-shadow:0 4px 0 rgba(26,26,24,.08);}
+
+/* Alternative-sequence panel: grey and "Locked" (no length shown) until the
+   alternative is offered; from then on filled blue with its length, and a
+   real button (.is-button) that switches, after a confirm, for the rest of
+   the main sequence — see paintPanels_()/openAltSwitch_(). */
+.panel-alt-locked{background:#eceae3;border-color:#b8b4a8;}
+.panel-alt-locked .panel-val,.panel-alt-locked .panel-cap,.panel-alt-locked .panel-sub{color:#8e8a80;}
+.panel-alt-open{background:var(--blue);border-color:#1e4f96;box-shadow:0 4px 0 #17406f;}
+.panel-alt-open .panel-val,.panel-alt-open .panel-cap,.panel-alt-open .panel-sub{color:#fff;}
+.panel-alt-open .panel-cap{opacity:.88;}
+/* As WT_N: Cards completed, Cards left and Alternative cards are the same box,
+   a number only and a fixed bottom line; here every screen is the offer pause,
+   so Cards left is always the orange Resume button and the Alternative the blue
+   Switch button. */
+#panel-done,#panel-tasksleft,#panel-alt{height:7rem;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+#panel-done .panel-sub,#panel-tasksleft .panel-sub,#panel-alt .panel-sub{height:1.45rem;margin-top:.4rem;display:flex;align-items:center;justify-content:center;}
+.panel-act{display:inline-block;padding:.25rem .6rem;border-radius:999px;background:#fff;
+  font-family:var(--mono);font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.2;}
+.panel-alt-open .panel-act{color:var(--blue);}
+#panel-alt.panel-alt-open.is-button:hover{background:#2560b0;box-shadow:0 6px 0 #17406f;}
+#panel-alt.panel-alt-open.is-button:hover .panel-act{background:#17406f;color:#fff;}
+.panel-resume{background:#f3a53a;border-color:#c98416;box-shadow:0 4px 0 #a86a0d;}
+.panel-resume .panel-cap,.panel-resume .panel-val{color:#5a3400;}
+.panel-resume .panel-act{color:#a35f00;}
+#panel-tasksleft.panel-resume.is-button:hover{background:#e8921c;box-shadow:0 6px 0 #a86a0d;}
+#panel-tasksleft.panel-resume.is-button:hover .panel-act{background:#5a3400;color:#fff;}
+/* Reminder when the offer banner closes: the alternative is still there. */
+.panel-alt-open.alt-flash{animation:altFlash .8s ease-in-out 3;}
+@keyframes altFlash{
+  0%,100%{box-shadow:0 4px 0 #17406f; transform:none;}
+  50%{box-shadow:0 4px 0 #17406f, 0 0 0 6px rgba(47,111,200,.45); transform:scale(1.04);}
+}
+/* Same pulse for the Give up button (No-winning-card choice). */
+.panel-forfeit.attn-flash{animation:attnFlash .8s ease-in-out 3;}
+@keyframes attnFlash{
+  0%,100%{transform:none;}
+  50%{box-shadow:0 4px 0 rgba(26,26,24,.16), 0 0 0 6px rgba(200,75,47,.35); border-color:var(--red); transform:scale(1.04);}
+}
+
+/* Reward / penalty accents. */
+.panel-reward .panel-val{color:var(--grn);}
+.panel-penalty .panel-val{color:var(--red);}
+
+/* Forfeit tile. */
+.panel-forfeit{border-color:var(--red);background:#fbe9e5;}
+.panel-forfeit .panel-val{font-size:.8rem;color:var(--red);}
+.panel-forfeit:hover{background:var(--red);}
+.panel-forfeit:hover .panel-val{color:#fff;}
+
+/* ── TASK CARD (centre) ──────────────────────────────────────────
+   White while the sequence cannot end yet; turns amber the moment the
+   sequence enters the zone where each task carries a real chance of
+   being the last one, with the probability stated across the top. */
+.taskcard{
+  background:var(--sur);border:2.5px solid var(--ink);border-radius:18px;
+  box-shadow:0 5px 0 rgba(26,26,24,.16);
+  padding:1rem 1.1rem 1.2rem;transition:background .35s, border-color .35s;
+  position:relative; /* anchors the no-activity overlay */
+}
+/* "No activity" overlay — sits ON TOP of the whole card + deck, translucent
+   so the cards show through, rather than being rendered as a card itself. */
+.noact-overlay{
+  position:absolute;inset:0;z-index:60;border-radius:18px;
+  background:rgba(245,242,235,.92);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;
+  font-family:var(--mono);text-align:center;
+}
+.noact-cap{font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
+.noact-title{font-size:1.15rem;font-weight:700;color:var(--ink);}
+.taskcard.is-live{background:#fdf0dc;border-color:#c98416;}
+/* Top row of the card: the end-probability pill (left, prominent) and the
+   status banner (fills the rest). */
+/* Chance the sequence contains the winning card — big number on top of the card. */
+/* Wrapped in the same orange as the live cards — a pill/badge, not bare text. */
+.prob-top{display:none !important;} /* WT_J: no probability on screen, the bar is gone */
+.seq-strip{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr);gap:3px;margin:.1rem auto 1rem;max-width:100%;}
+.ss-c{height:22px;border-radius:4px;border:1.5px solid #b8b3a5;background:var(--sur);}
+.ss-c.o{background:#f3a53a;border-color:#c98416;}
+.ss-c.a{background:#5a8fd6;border-color:#1e4f96;}
+.ss-c.done{background:#ece9e1;border-color:#d4d0c4;}
+.ss-c.done.o{background:#ecd9bd;border-color:#cdb488;}
+.ss-c.done.a{background:#cfdcef;border-color:#9fb6da;}
+.ss-c.cur{box-shadow:0 0 0 2px var(--ink);}
+@media (max-width:640px){ .seq-strip{gap:2px;margin-bottom:.6rem;} .ss-c{height:14px;border-width:1px;border-radius:3px;} }
+/* WT_K: winning-card tracker (replaces the sequence strip) */
+.win-tracker{display:flex;align-items:center;justify-content:center;gap:.6rem;margin:.1rem auto .9rem;font-family:var(--mono);}
+.wt-lbl{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-right:.2rem;}
+.wt-slot{width:48px;height:44px;border-radius:7px;border:2px dashed #c9c3b3;background:transparent;display:flex;align-items:center;justify-content:center;font-size:1.3rem;color:transparent;}
+.wt-slot .wt-h{font-size:.78rem;font-weight:700;color:#b06a00;}
+.wt-slot.found{border:2px solid #b8860b;background:#f2c230;color:#7a5600;box-shadow:0 3px 0 rgba(122,86,0,.25);}
+.wt-slot.found.new{animation:wtPop .7s ease;}
+@keyframes wtPop{0%{transform:scale(.4);}60%{transform:scale(1.25);}100%{transform:scale(1);}}
+.win-tracker.is-alt{opacity:.45;}
+/* WT_L: the per-card chance, big, in the orange card's banner */
+.q-big{font-size:1.5rem;font-weight:700;margin-left:.45rem;vertical-align:middle;line-height:1;}
+.q-big.q-small{font-size:1.15rem;}
+@media (max-width:640px){ .q-big{font-size:1.2rem;} .q-big.q-small{font-size:1rem;} }
+@media (max-width:640px){ .wt-slot{width:38px;height:32px;font-size:1rem;} .wt-slot .wt-h{font-size:.68rem;} .win-tracker{gap:.4rem;margin-bottom:.6rem;} }
+/* WT_K: deck choice on the briefing screen */
+.deck-choice{margin:1rem 0 .4rem;}
+.deck-choice-h{font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-bottom:.6rem;}
+.deck-tile{border:2px solid var(--bdr);border-radius:12px;padding:.7rem .8rem;margin-bottom:.6rem;cursor:pointer;background:var(--sur);transition:border-color .2s, box-shadow .2s;}
+.deck-tile.single{cursor:default;}
+.deck-tile:not(.single):hover{border-color:var(--ink2);box-shadow:0 3px 0 rgba(26,26,24,.14);background:#fbf8f1;}
+.deck-tile.sel{border-color:var(--ink);box-shadow:0 3px 0 rgba(26,26,24,.18);}
+.deck-tile-name{font-family:var(--mono);font-size:.72rem;color:var(--ink2);margin-bottom:.4rem;}
+.deck-strip{display:grid;gap:2px;} /* one column per card of the LONGEST possible deck (deckMaxLen_): the longest fills the bar, shorter ones visibly end sooner */
+.deck-strip .ss-c{height:auto;aspect-ratio:1/1.15;min-height:8px;}
+@media (max-width:640px){
+  .wrap{padding:1rem .75rem 2rem;}
+  .card{padding:1.3rem 1.1rem;}
+  .deck-tile{padding:.6rem .6rem;}
+  .slider-row{flex-wrap:wrap;gap:.3rem .5rem !important;}
+  .slider-row input[type=range]{order:-1;flex:1 1 calc(100% - 2rem) !important;}
+  .slider-row .sl-lbl{width:auto !important;flex:1 1 40% !important;text-align:left !important;}
+  .slider-row .sl-lbl.r{text-align:right !important;}
+}
+.prob-top-pill{
+  display:inline-block;background:#f3a53a;color:#5a3400;border-radius:12px;padding:.5rem 1.1rem;
+}
+.prob-top-label{
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+  color:#5a3400;opacity:.85;margin-bottom:.1rem;line-height:1.2;
+}
+.prob-top-num{
+  font-family:var(--mono);font-weight:600;font-size:2.1rem;line-height:1;color:#5a3400;
+}
+/* Card-status banner — at the BOTTOM of the card, full width. */
+.taskcard-banner{
+  font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.02em;
+  text-align:center;padding:.45rem .6rem;border-radius:10px;line-height:1.35;
+  background:#eceae3;color:var(--ink2);transition:background .35s, color .35s;
+  min-height:2.1rem;display:flex;align-items:center;justify-content:center;
+  margin:.4rem -.35rem -.35rem;
+}
+.taskcard.is-live .taskcard-banner{background:#f6c98a;color:#6b3d05;}
+.taskcard.is-alt  .taskcard-banner{background:#dbe8fb;color:#1e4f96;}
+/* The target line and the offer banner occupy EXACTLY the same vertical
+   box (box-sizing + identical height + margin), so swapping one for the
+   other when the offer appears never shifts the card below it. */
+.taskcard-target, .taskcard-offer{
+  box-sizing:border-box;height:2.8rem;min-height:2.8rem;margin-bottom:.55rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.taskcard-target{
+  font-family:var(--mono);font-size:1.05rem;font-weight:600;text-align:center;
+  color:var(--ink);gap:.4rem;
+}
+.taskcard-offer{
+  display:none;border:2px solid var(--blue);background:#e8f1ff;border-radius:10px;
+  padding:.3rem .8rem;text-align:center;
+  font-family:var(--mono);font-size:.9rem;font-weight:600;color:var(--blue);
+}
+/* Grows to fit the "Do you accept the offer?"/"Do you confirm your choice?"
+   sub-block and its buttons — the fixed 2.8rem height above only applies to
+   the collapsed single-line state shared with .taskcard-target. */
+.taskcard-offer.is-expanded{height:auto;flex-direction:column;gap:.5rem;padding:.6rem .8rem;}
+.offer-ask-line{margin:0;font-size:.8rem;}
+.offer-btn-row{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;}
+.offer-btn-row .btn{font-size:.7rem;padding:.55rem 1rem;}
+
+/* ── HAND CARD-STACK (deck) ──────────────────────────────────────
+   The whole sequence is a stack of cards. The card being played is the front
+   card (the real grid), kept centred; the rest of the sequence sits BEHIND it,
+   each card the same size but offset to the right so only its edge peeks out
+   (white = safe, orange = can end). Completed cards fan out greyed to the
+   left. renderDeck_() creates the .deck-card elements. */
+#st-grid-wrap{text-align:center;}
+.hand-stack{position:relative;display:inline-block;margin:.7rem 0;isolation:isolate;} /* own stacking context: behind-cards past the 19th (negative z-index) stay drawn instead of falling behind the task card */
+/* Front card = the grid, sits on top and opaque so it hides the overlapped
+   parts of the cards behind it. inline-block so the stack (and the
+   absolutely-positioned behind-cards) size to exactly the grid card. */
+#st-grid-outer{display:inline-block;position:relative;z-index:20;margin:0;}
+/* The front card (the grid) takes the look of the card TYPE it represents:
+   white with a grey border on a safe card, orange on a card the sequence can
+   end on — matching the behind-cards exactly. */
+.grid-box{border:2.5px solid #b8b3a5;border-radius:12px;box-shadow:0 4px 0 rgba(26,26,24,.14);transition:background .35s,border-color .35s;}
+.taskcard.is-live .grid-box{background:#f3a53a;border-color:#c98416;}
+/* Switched to the alternative — the task being played is blue too. */
+.taskcard.is-alt{background:#eaf2ff;border-color:#2f6fc8;}
+.taskcard.is-alt .grid-box{background:#5a8fd6;border-color:#1e4f96;}
+/* Behind-cards: same box as the front card, offset via translateX. Safe
+   (white) cards get the same grey border, not black. */
+.deck-card{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  border:2.5px solid #b8b3a5;border-radius:12px;background:var(--sur);
+  box-shadow:0 4px 0 rgba(26,26,24,.12);
+}
+.deck-card.is-live{background:#f3a53a;border-color:#c98416;}
+/* Completed cards: soft grey with a light (not black) border. A completed
+   card that was ORANGE (a card the sequence could have ended on) keeps a
+   muted grey-orange tint, so it stays clear it was a live card. */
+.deck-card.is-done{background:#ece9e1;border-color:#d4d0c4;box-shadow:0 3px 0 rgba(26,26,24,.05);}
+.deck-card.is-done-live{background:#ecd9bd;border-color:#cdb488;box-shadow:0 3px 0 rgba(26,26,24,.05);}
+.deck-card.is-alt{background:#5a8fd6;border-color:#1e4f96;}
+@keyframes handAdvance{from{transform:translateX(16px);opacity:.5;}to{transform:translateX(0);opacity:1;}}
+.hand-advance #st-grid-outer{animation:handAdvance .3s ease;}
+@keyframes newHandIn{from{transform:translateX(48px) scale(.96);opacity:0;}to{transform:translateX(0) scale(1);opacity:1;}}
+.new-hand #hand-stack{animation:newHandIn .45s ease;}
+@keyframes pillPulse{0%,100%{transform:scale(1);}30%{transform:scale(1.12);}}
+#prob-pill.pulse,#prob-num.pulse{animation:pillPulse .7s ease;display:inline-block;}
+#taskcard-banner.pulse{animation:pillPulse .7s ease;}
+/* Card flash used by the training walkthrough. */
+@keyframes cardFlash{0%,100%{box-shadow:0 4px 0 rgba(26,26,24,.14);}45%{box-shadow:0 0 0 4px #2f6fc8;}}
+.card-flash{animation:cardFlash .6s ease;}
+/* End-of-sequence reveal, drawn like the game's deck: the cards completed
+   in full colour, the cards not played greyed, the winning card in gold with a label, and a
+   brace under each run of completed cards. One CSS grid: row 1 labels above,
+   row 2 cards, row 3 braces, row 4 brace labels — so braces line up exactly. */
+.rv{display:grid;column-gap:3px;row-gap:3px;margin:1.3rem auto .5rem;align-items:end;}
+.rv-c{grid-row:2;aspect-ratio:1/1.12;border-radius:18%;border:1.5px solid #b8b3a5;background:var(--sur);box-shadow:0 2px 0 rgba(26,26,24,.12);}
+.rv-c.live{background:#f3a53a;border-color:#c98416;}
+.rv-c.alt{background:#5a8fd6;border-color:#1e4f96;}
+.rv-c.faded{background:#ece9e1;border-color:#d4d0c4;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.faded-live{background:#ecd9bd;border-color:#cdb488;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.faded-alt{background:#cfdcef;border-color:#9fb6da;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.win{background:#f2c230;border-color:#b8860b;}
+.rv-top{grid-row:1;justify-self:center;text-align:center;font-family:var(--mono);font-size:.7rem;font-weight:600;color:#9a7300;white-space:nowrap;line-height:1.25;}
+.rv-brace{grid-row:3;height:8px;margin-top:2px;border:2px solid var(--ink2);border-top:none;border-radius:0 0 8px 8px;position:relative;}
+.rv-brace::after{content:'';position:absolute;left:50%;bottom:-7px;width:2px;height:6px;background:var(--ink2);transform:translateX(-50%);}
+.rv-brace-lbl{grid-row:4;justify-self:center;margin-top:6px;font-size:.75rem;color:var(--ink2);white-space:nowrap;}
+
+/* Confetti burst on finishing a sequence (endTask()'s 'completed'/'switched'
+   outcomes) — a canvas-drawn physics burst (see spawnConfetti_) launched
+   from the top edge of the result heading, not a CSS animation. Deliberately
+   NOT clipped to .card: position:fixed + inset:0 covers the whole viewport
+   regardless of where this element sits in the DOM, since none of its
+   ancestors (.card included) use a transform/filter/will-change that would
+   give position:fixed descendants a containing block other than the
+   viewport — so the burst can fly and fall across the full screen, not just
+   inside the small result box it started from. pointer-events:none so it
+   never blocks clicking the Continue button underneath, however high its
+   z-index. */
+.confetti-layer{position:fixed;inset:0;pointer-events:none;z-index:9999;}
+#tc-confetti-canvas{display:block;width:100%;height:100%;}
+
+/* ── TASK SCREEN LAYOUT ─────────────────────────────────────── */
+.st-wrap{
+  max-width:960px;margin:0 auto;padding:1.5rem 1.25rem 2rem;
+  display:flex;flex-direction:column;align-items:center;gap:1.1rem;
+}
+#st-board{
+  display:grid;grid-template-columns:180px minmax(0,1fr) 180px;
+  gap:1.1rem;align-items:start;justify-content:center;width:100%;max-width:900px;margin:0 auto;
+  position:relative;
+}
+.st-col{display:flex;flex-direction:column;gap:.75rem;}
+
+/* ── SCREENS ─────────────────────────────────────────────────── */
+.screen{display:none;padding-top:2rem;min-height:100vh;}
+.screen.active{display:block;}
+.wrap{max-width:700px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+.wrap-wide{max-width:860px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+
+/* ── CARD ────────────────────────────────────────────────────── */
+.card{background:var(--sur);border:1px solid var(--bdr);padding:2rem;position:relative;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--red);}
+details summary::-webkit-details-marker{display:none;}
+details summary{list-style:none;}
+
+/* ── TYPE ────────────────────────────────────────────────────── */
+.lbl{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin-bottom:.4rem;}
+h1{font-family:var(--mono);font-size:1.4rem;font-weight:600;line-height:1.2;margin-bottom:1rem;}
+h2{font-family:var(--mono);font-size:.95rem;font-weight:500;margin:1.2rem 0 .4rem;}
+p{line-height:1.7;color:var(--ink2);margin-bottom:.8rem;font-size:.93rem;}
+p strong{color:var(--ink);}
+ul{padding-left:1.3rem;margin-bottom:.8rem;}
+li{line-height:1.7;color:var(--ink2);font-size:.93rem;}
+li strong{color:var(--ink);}
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+.btn{font-family:var(--mono);font-size:.76rem;line-height:1;letter-spacing:.06em;padding:.65rem 1.5rem;
+  border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;
+  transition:all .15s;text-transform:uppercase;display:inline-block;}
+.btn:hover:not(:disabled){background:transparent;color:var(--ink);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--ink);}
+.btn-outline:hover:not(:disabled){background:var(--ink);color:var(--bg);}
+.btn-red{border-color:var(--red);background:var(--red);color:#fff;}
+.btn-red:hover:not(:disabled){background:transparent;color:var(--red);}
+.btn-blue{border-color:var(--blue);background:var(--blue);color:#fff;}
+.btn-blue:hover:not(:disabled){background:transparent;color:var(--blue);}
+.btn-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.2rem;}
+
+/* ── NOTICE ──────────────────────────────────────────────────── */
+.notice{font-family:var(--mono);font-size:.73rem;padding:.6rem .9rem;
+  background:var(--bg);border-left:3px solid var(--warn);color:var(--ink2);margin:.8rem 0;}
+
+/* ── FORM ────────────────────────────────────────────────────── */
+.frow{margin-bottom:1rem;}
+.frow label{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:.3rem;color:var(--ink2);}
+.frow select,.frow input[type=text],.frow input[type=number]{
+  font-family:var(--sans);font-size:.93rem;
+  padding:.42rem .7rem;border:1.5px solid var(--bdr);background:var(--bg);color:var(--ink);width:100%;}
+.frow select:focus,.frow input:focus{outline:none;border-color:var(--ink);}
+
+/* ── INSTRUCTION CANVAS ──────────────────────────────────────── */
+canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(--sur);}
+
+/* ── TASK SCREEN ─────────────────────────────────────────────── */
+.grid-outer{display:flex;justify-content:center;margin:.8rem 0;}
+.grid-box{padding:10px;background:var(--sur);display:inline-block;}
+.grow-el{display:flex;gap:5px;margin-bottom:5px;}
+.grow-el:last-child{margin-bottom:0;}
+.ecell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:1.35rem;border:1px solid var(--bdr);background:var(--sur);border-radius:3px;
+  cursor:default;transition:background .08s;line-height:1;user-select:none;}
+.ecell.ph{color:#ccc;font-size:.9rem;}
+.ecell.live{cursor:pointer;}
+.ecell.live:hover{border-color:var(--ink);}
+.ecell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+/* ── GRACE ───────────────────────────────────────────────────── */
+/* Reward / chance-of-winning panels on the briefing screen: two equal
+   halves, same height, each revealed with a short fade-in. */
+.grace-boxes{display:flex;gap:.75rem;margin-bottom:.9rem;}
+.grace-box{flex:1 1 0;min-width:0;visibility:hidden;}
+.grace-box.is-shown{visibility:visible;animation:graceBoxIn .35s ease;}
+@keyframes graceBoxIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+#screen-grace .grace-inner{min-height:calc(100vh - 80px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.7rem;text-align:center;}
+
+/* ── TRAINING GREY-OUT ───────────────────────────────────────── */
+/* Applied to every part of the real #screen-subtask not currently being
+   explained; a step lights up exactly what it's introducing by adding
+   .train-lit alongside (see trainLight_()). */
+.train-dim{filter:grayscale(1) opacity(.4);pointer-events:none;}
+.train-dim.train-lit{filter:none;opacity:1;}
+
+/* ── END-OF-TRAINING COMPREHENSION CHECK ────────────────────────
+   Sliding 2/3-panel carousel with a dot progress indicator, one question
+   visible at a time — see trainScreen16_/trainCompAnswer_. Blue theme to
+   match the rest of this app's tip/offer boxes (train-tip, taskcard-offer),
+   not copied from any other study's palette. */
+.compcheck-viewport{overflow:hidden;}
+.compcheck-track{display:flex;transition:transform .35s ease;}
+.compcheck-panel{flex:0 0 100%;min-width:100%;box-sizing:border-box;}
+.compcheck-q{font-size:.88rem;font-weight:600;margin-bottom:.6rem;line-height:1.4;color:var(--ink);text-align:center;}
+.compcheck-dots{display:flex;gap:6px;justify-content:center;margin-top:.8rem;}
+.compcheck-dot{width:8px;height:8px;border-radius:50%;background:#c3d6ef;transition:background .2s;}
+.compcheck-dot.active{background:var(--blue);}
+.compcheck-err{color:#c84b2f;font-size:.78rem;margin-top:.6rem;min-height:1rem;text-align:center;}
+.radio-list{display:flex;flex-direction:column;gap:.5rem;}
+.radio-option{font-size:.85rem;line-height:1.4;text-align:left;cursor:pointer;
+  padding:.6rem .8rem;border:1px solid var(--bdr);border-radius:8px;
+  background:var(--sur);color:var(--ink);transition:border-color .15s,background .15s;}
+.radio-option:hover{border-color:var(--blue);}
+
+/* ── OFFER BOX ───────────────────────────────────────────────── */
+.offer-box{border:1.5px solid var(--blue);padding:1.1rem 1.4rem;margin:1rem 0;position:relative;}
+
+/* ── STATS STRIP ─────────────────────────────────────────────── */
+.stats-strip{display:flex;border:1px solid var(--bdr);margin-bottom:1rem;}
+.sc{flex:1;padding:.45rem .65rem;border-right:1px solid var(--bdr);}
+.sc:last-child{border-right:none;}
+.sv{font-family:var(--mono);font-size:.95rem;font-weight:600;}
+.sl{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
+
+/* ── RESULTS TABLE ───────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.7rem 0;}
+th,td{padding:.4rem .6rem;border:1px solid var(--bdr);text-align:left;}
+#st-stat-table td{border:none;}
+th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;background:var(--bg);}
+.tfoot-row td{font-weight:500;background:var(--bg);}
+
+/* ── SAVE STATUS ─────────────────────────────────────────────── */
+.save-row{display:flex;align-items:center;gap:10px;padding:.7rem 0;}
+.save-spin{width:16px;height:16px;border:2px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
+
+@keyframes switchFlash{
+  0%,100%{opacity:1;}20%{opacity:.1;}40%{opacity:1;}60%{opacity:.1;}80%{opacity:1;}
+}
+.switch-flash{animation:switchFlash 1.5s ease;}
+
+/* ── MOBILE: TASK SCREEN COMPACTION ──────────────────────────────
+   Placed last in this stylesheet ON PURPOSE: every selector below already
+   exists earlier (panel/taskcard/screen/etc.) with equal specificity, and
+   CSS breaks same-specificity ties by SOURCE ORDER, not by whether a rule
+   sits inside a @media block — an earlier media-query override would
+   otherwise be silently beaten by a later unconditional rule. Being last
+   guarantees these mobile overrides always win when the condition matches.
+   The task screen used to force a long scroll on every phone (three stacked
+   sections — panel row, task card, panel row — each sized as if there were
+   room to spare) before the participant could even see the offer buttons.
+   Everything below shrinks the surrounding chrome (panel padding/fonts,
+   card padding/margins, screen padding) so the same information fits in
+   far less height; the actual game grid (.ecell) is deliberately left
+   untouched — those are real tap targets, not decoration to shrink. Desktop
+   (anything above 820px) is completely unaffected. */
+@media(max-width:820px){
+  .screen{padding-top:.6rem;}
+  .st-wrap{padding:.6rem .75rem 1.5rem;gap:.6rem;}
+  #st-board{grid-template-columns:1fr;max-width:420px;gap:.6rem;}
+  /* align-items:flex-start (not the default stretch) so a short panel
+     (panel-sm) never gets forced up to match its taller row-mate
+     (panel-lg)'s height — each panel is only as tall as its own content. */
+  .st-col{flex-direction:row;gap:.5rem;align-items:flex-start;}
+  .st-col > *{flex:1;}
+  /* Left row: sequence/reward/penalty side by side, Give up on its own full-width row below;
+     right row: counters + Alternative, Resume now (during an offer) full width below. */
+  #st-col-left, #st-col-right{flex-wrap:wrap;}
+  #st-col-left > #panel-forfeit{flex:1 1 100%;}
+  #panel-done,#panel-tasksleft,#panel-alt{height:5.1rem;min-width:0;}
+  #panel-done .panel-sub,#panel-tasksleft .panel-sub,#panel-alt .panel-sub{height:1.2rem;margin-top:.3rem;}
+  .panel-act{font-size:.5rem;padding:.2rem .45rem;letter-spacing:.05em;}
+  .panel{padding:.5rem .55rem;}
+  .panel-sm{padding:.4rem .5rem;}
+  .panel-cap{font-size:.5rem;margin-bottom:.15rem;}
+  .panel-sub{font-size:.52rem;margin-top:.15rem;}
+  /* panel-lg's 2.1rem value (designed for a spacious desktop side column)
+     is by far the single biggest thing in either panel row on a cramped
+     phone width — knocked down close to panel-md's size instead. */
+  .panel-lg .panel-val{font-size:1.4rem;}
+  .panel-md .panel-val{font-size:1.15rem;}
+  .panel-sm .panel-val{font-size:.92rem;}
+  .taskcard{padding:.7rem .8rem .8rem;}
+  .prob-top{margin:-.1rem 0 .4rem;}
+  .prob-top-pill{padding:.35rem .8rem;}
+  .prob-top-label{font-size:.54rem;}
+  .prob-top-num{font-size:1.6rem;}
+  .hand-stack{margin:.4rem 0;}
+  .taskcard-target, .taskcard-offer{height:2.3rem;min-height:2.3rem;margin-bottom:.35rem;}
+  .taskcard-offer.is-expanded{padding:.45rem .6rem;}
+  .offer-ask-line{font-size:.76rem;}
+  #st-cd-slot{min-height:1.2rem;margin-top:.2rem;}
+  .taskcard-banner{min-height:1.7rem;padding:.35rem .5rem;margin:.3rem -.2rem -.2rem;}
+}
+
+/* brute-force additions */
+#bf-bar{position:fixed;left:0;right:0;bottom:0;background:#fffbe6;border-top:1px solid #e6c800;font-family:var(--mono);font-size:.75rem;padding:.4rem .8rem;display:flex;gap:.8rem;align-items:center;justify-content:space-between;z-index:50;}
+#bf-bar button{font-family:var(--mono);font-size:.72rem;padding:.2rem .6rem;cursor:pointer;border:1px solid #e6c800;background:#fff7cc;border-radius:2px;}
+#bf-done{display:none;text-align:center;padding:3rem 1rem;font-family:var(--mono);}
+.bf-bonus{font-size:.8rem;color:#7a5600;margin:.2rem 0 .4rem;}
+</style>
+</head>
+<body>
+<div id="screen-subtask" class="screen active">
+  <div class="st-wrap">
+    <div id="st-board">
+      <div class="st-col" id="st-col-left">
+        <div class="panel panel-lg" id="panel-seq">
+          <div class="panel-cap">Sequence</div>
+          <div class="panel-val" id="s-seq">1</div>
+        </div>
+        <div class="panel panel-sm panel-reward" id="panel-reward">
+          <div class="panel-cap">Reward</div>
+          <div class="panel-val" id="s-pay">0.25 Points</div>
+        </div>
+        <div class="panel panel-sm panel-penalty" id="panel-penalty">
+          <div class="panel-cap">Penalties</div>
+          <div class="panel-val" id="s-penalty">0.00 Points</div>
+        </div>
+      </div>
+      <div>
+        <div class="taskcard is-safe" id="taskcard">
+          <div id="taskcard-body">
+            <div class="win-tracker" id="seq-strip"></div>
+            <div id="st-grid-wrap" style="position:relative;">
+              <div class="hand-stack" id="hand-stack">
+                <div class="grid-outer" id="st-grid-outer"><div class="grid-box" id="st-grid"></div></div>
+              </div>
+            </div>
+            <div class="taskcard-offer is-expanded" id="st-instr-offer" style="display:flex;">
+              <div id="st-offer-banner-text">The alternative sequence is now available</div>
+              <div id="st-offer-ask" style="display:block;">
+                <p class="offer-ask-line" id="bf-line"></p>
+              </div>
+            </div>
+            <div class="taskcard-banner" id="taskcard-banner"></div>
+          </div>
+        </div>
+      </div>
+      <div class="st-col" id="st-col-right">
+        <div class="panel panel-lg" id="panel-done">
+          <div class="panel-cap">Cards completed</div>
+          <div class="panel-val" id="s-done">0</div>
+          <div class="panel-sub">in total</div>
+        </div>
+        <div class="panel panel-lg panel-resume is-button" id="panel-tasksleft" onclick="choose('stay')" role="button" tabindex="0">
+          <div class="panel-cap">Cards left</div>
+          <div class="panel-val" id="s-tasksleft">0</div>
+          <div class="panel-sub"><span class="panel-act">Press to resume</span></div>
+        </div>
+        <div class="panel panel-lg panel-alt-open is-button" id="panel-alt" onclick="choose('switch')" role="button" tabindex="0">
+          <div class="panel-cap">Alternative cards</div>
+          <div class="panel-val" id="s-alt-val">?</div>
+          <div class="panel-sub"><span class="panel-act">Press to switch</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="bf-done"></div>
+<div id="bf-bar">
+  <span id="bf-meta"></span>
+  <span>Cards left = continue · Alternative cards = switch · keys C / A · no winning card by the last card = the alternative is owed</span>
+  <span><button onclick="downloadData()">Download data</button> <button onclick="deleteAnswers()">Delete my answers</button> <button onclick="exitNow()">Exit</button></span>
+</div>
+<script>
+// ── WT_N brute force (standalone; WT_N's own CSS, task-screen markup and generator) ──
+// Every screen is one version of a REAL WT_N pair: a sequence ("seed") drawn by
+// WT_N's own code (copied below from WT_N/index.html: designSeed_ — length,
+// Pareto decay, calibration window, h, regime, the one offer and its
+// alternative — and deckFromSeed_), shown as WT_N shows it at the offer:
+//   full  — played from the start: the cards completed before the offer (the
+//           offer comes at random before the last winning card) are the sunk
+//           cost, and the winning cards found by then show as found;
+//   trunc — the same sequence cut at that offer: 0 cards completed, only the
+//           winning cards still missing, the same cards ahead, h and alternative.
+// Regime 0 (each sequence 1 or 2), as most WT_N participants.
+// The two versions of a pair are spread through the upcoming screens (never
+// two in a row). Every answer is saved to localStorage at once; Exit downloads
+// CSV + JSON. Decision time is recorded, excluding time with the tab hidden.
+// No timer. To refresh the generator after a change to WT_N:
+// node WT_N/tools/sync_wtn_code.js WT_N/index.html WT_N/proto_brute.html WT_N/pairs_lab.html.
+const P = { regime: 0, queueMin: 16, minGap: 3, gridR: 3, gridC: 3 };
+const STORE = 'wtn_brute_michele_v1';
+const el = id => document.getElementById(id);
+const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+const shuf = a => { a = a.slice(); for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+
+// ── WT_N's generator (verbatim from WT_N/index.html) ──
+const WTN = (function(){
+/*__WTN_BEGIN__*/
+const CFG = {
+  numTasks:   5,
+  // 3×3 grid (was 5×5) — nine cells, so each task is quicker: 9 × 500ms =
+  // 4.5s reveal + 2.5s countdown = ~7s per grid (was ~15s).
+  gridR:      3,
+  gridC:      3,
+  revealMs:   500, // per-cell reveal interval — 9 cells × 500ms = 4.5s reveal phase
+  submitSecs: 2.5, // 4.5s reveal + 2.5s = ~7s total per grid — see showSubmit()/trainShowCountdown_()
+  // ── ONE SEQUENCE PER SECTION (WT_F) ──────────────────────────────
+  // No more looping hands: each section's main sequence is a single window
+  // of `length` cards, all shown on screen from the start. Every card is
+  // independently marked live (orange, can be the winning card) or safe
+  // (white); the LAST card is always orange. `pInside` (disclosed) is the
+  // chance the winning card is somewhere in the window; if it is, it's
+  // uniform over the orange cards. If the window runs out without a
+  // winning card, the participant is moved onto the alternative
+  // automatically (reward kept) — see autoSwitchOrDefer_().
+  // Window length ~ Uniform[winLo, winHi].
+  winLo:      30,   // WT_N: main sequence of 30–35 cards (worse decks up to 40); see lengthLo/Hi
+  winHi:      35,
+  // ── WT_N ──
+  lengthLo: 30, lengthHi: 35,    // cards per sequence, uniform, drawn first
+  calibWBase: 2, calibWStep: 2, calibWSpan: 4, // calibration window W ~ U(2 + 2n, 6 + 2n) cards (n = winning cards)
+  d0By: {1: [0.40, 0.60], 2: [0.55, 0.65], 3: [0.55, 0.65]}, // initial density (chance the first card is orange) by winning cards, drawn per sequence; then the fitted decay (fitDecay_; none with 1)
+  decayMaxLonger: 1.5,           // the decay may lengthen the fair alternative at the offer by at most this factor (vs no decay)
+  decayDMin: 0.03,               // lowest density of any card
+  drawDebtKLo: 0.75, drawDebtKHi: 1, // share of the orange-card 'debt' carried to the next card, drawn per sequence (drawWithDebt_)
+  decayMaxStep: 0.12,            // no card more than 12% less likely to be orange than the one before (no cliffs)
+  decayFitOffer: 1,              // offer position (cards completed) the decay is fitted for (the offer comes at 0–3)
+  altNoiseShare: 0.15,           // the alternative = its fair value × (1 ± U(0, 15%))
+  altMin: 5,                     // and at least 5 cards
+  maxOffers: 1,                  // ONE offer per sequence (no re-offers)
+  altMaxFactor: 2,               // the alternative is at most 2 × the cards left at the offer
+  // WT_N: reaching the last card without all the winning cards moves the participant onto the alternative (as WT_F)
+  deckTriesMax: 40,              // worse-deck candidates tried before taking the worst found
+  minWindowBy: {1: 1, 2: 4, 3: 7}, // orange cards guaranteed in the calibration window, by number of winning cards (so the top band can be reached)
+  // ── WT_M ──
+  lengthM:    30,   // WT_M only (unused in WT_N: lengthLo/Hi)
+  d1Lo: 0.40, d1Hi: 0.60,        // WT_M only (WT_N: d0By)
+  decayLo: 0.75, decayHi: 0.90,  // WT_M only (WT_N: fitDecay_)
+  minOrangePerSection: 0,        // WT_N: no minimum after the calibration window
+  nWinnersLo: 1, nWinnersHi: 3,  // WT_M only (WT_N: nWinnersW)
+  nWinnersW: [0.25, 0.25, 0.50], // WT_N: 1 / 2 / 3 winning cards in 25 / 25 / 50% of the sequences
+  minOrangeWindowBy: {1: 3, 2: 4, 3: 6}, // WT_M only (WT_N: at least n orange cards in the calibration window)
+  hMaxBy: {1: 0.95, 2: 0.50, 3: 0.33},   // cap on h so that (missing) × h ≤ 1
+  giftShowP: 0,     // WT_N: no boxes already filled at the start (WT_M: 0.5)
+  firstOfferMax: 3, // WT_M only (WT_N: offerLo/Hi, see drawOffersM_)
+  offerLo: 1, offerHi: 10, // WT_N: the offer after 1–10 cards completed (before the last winning card)
+  offerPosPow: 2,   // WT_N: P(offer after k cards) ∝ k² (mostly late)
+  altFairLo: 4.7, altFairHi: 26, // WT_N: offers only with the fair alternative within its 5th–95th percentiles (simulated, before the cut)
+  regimeW: {0: 0.30, 1: 0.30, 2: 0.30, 3: 0.10}, // WT_N: share of participants per placement regime (3 = the small independent-timing check)
+  offerGapMax: 7,   // later offers: within this many cards after the previous winning card
+  altWhiteFloor: false, // the WT_K/WT_L "longer than the longest white run" floor on the alternative (off)
+  deckD1Lo: 0.45, deckD1Hi: 0.70, // worse decks: first-window density × this
+  deckWorseAbsM: 6, deckWorseRelM: 0.4, // worse decks: at least max(6, 40% of E) more expected cards than the assigned one
+  calibCards: 10,   // WT_L: q is calibrated on the first 10 cards (the offer comes by 3/4 of them)
+  bodyCards:  20,   // WT_L: used only by the old Beta families (unused): they spanned cards 1–20
+  qFreq:      'realized', // WT_L: how q is calibrated — 'realized' (on the first calibCards' actual orange cards: three winning cards fall there in p_inside% of the cases, sequence by sequence), 'window' (their expected share) or 'seq' (whole sequence); see drawSeqL_
+  hazard: 'split',      // WT_L: 'split' — each missing winning card has chance h (shown in its box) of being on the orange card in play; 'const' — every orange card w.p. q. See hazR_
+  hMax: 0.33,           // WT_L 'split': h at most 33% (3 missing → a card is a winner w.p. ≤ 99%)
+  minOrangeWindow: 6,   // WT_L: orange cards guaranteed (at random positions) in the first calibCards cards, so h can reach the top band; the tail always gets nWinners
+  maxWhiteRunCap: 8, // WT_L: if set, no run of white cards longer than this (a random card of a longer run is turned orange until none is left); null = off
+  altNoiseScale: 1,     // WT_L 'noise' alternative: half-width of the variation, in units of the gap to the nearest scenario (see drawAltTrue_)
+  // Each non-final card's live/safe mark is an independent draw, orange with
+  // this probability — NOT tied to pInside, which governs only whether the
+  // winning card is in the window at all. See drawLiveMask_().
+  liveMarkP:  0.4,
+  // End probability: [min,max] cut into 5 equal-width bands; each section
+  // draws from its own band (no band repeated), uniformly, rounded to the
+  // nearest 5% — see P_QUINTILES_.
+  pInsideMin:  0.10,
+  pInsideMax:  0.90,
+  // WT_M: the five p_inside bands, explicit (each respondent gets one sequence per band;
+  // within a band the value is uniform over its list).
+  pBandValues: [[0.25, 0.30, 0.35], [0.40, 0.45], [0.50], [0.55, 0.60], [0.65, 0.70, 0.75]], // WT_N: the extremes (10–20%, 80–90%) dropped
+  // Offer position: Beta(a,a) over the window (a>1 → centred, offers at the
+  // very start or end rarer), discretised into one slice per card — see
+  // drawPause_(). Truncated at the ending when the ending is drawn first.
+  pauseBetaA: 1,   // Beta(1,1) = uniform over the positions where the offer can be placed (validPause_)
+  // ── WT_J: two windows, two peaks (see drawTwoMass_) ──
+  orangeShareLo: 0.50, // share of all cards that are orange (WT_L: 50%; WT_K: 35–50%)
+  orangeShareHi: 0.50,
+  nWinners: 3,         // winning cards needed; the sequence ends at the third
+  altScenIMax: 2,      // WT_L 'scenI': the alternative is at most twice the cards left
+  altPythScale: 1.12,  // WT_L: hypotenuse = cards left × this, calibrated so that switching beats the geometric-mean cost of staying in about half of the offers
+  altRule: 'noise',    // WT_L: 'noise' (expected cards in the actual scenario ± a random variation, used), 'scen' (WT_K's scenarios) or 'pyth' (WT_F's right triangle); see drawAltTrue_
+  pauseDistDraws: 400, // WT_L: draws used to compute the regime-1 offer distribution for regimes 2 and 3
+  deckOrangeLo: 0.30,  // WT_L: orange share of the worse decks (of all their cards, guaranteed ones included)
+  deckOrangeHi: 0.40,
+  // WT_L: shape of the orange cards along the sequence (see drawShape_): one
+  // family per sequence, mixed with a flat floor so no stretch is ever empty
+  // or crowded.
+  shapeFamilies: ['uniform'], // WT_L: uniform only ('mass1'/'mass2'/'mass3' available in drawShape_, unused)
+  massShare: 0.40,     // share of the orange weight carried by the mass points (the rest is the uniform base)
+  massSdLo: 2,         // spread of each mass point, in cards: U(2, 4)
+  massSdHi: 4,
+  shapeFloor: 0.30,    // every card keeps at least 30% of the average orange chance
+  shapeMaxRatio: 2.5,  // shapes peaking above 2.5× their average are redrawn
+  offerHalfShare: 0.75, // WT_L: offer uniform from the start to 3/4 of the calibration window (calibCards)
+  // WT_K: weights of the scenarios 0 / 1 / 2 winning cards found, given the
+  // number actually found (row); calibrated for switching better in ~50% of offers.
+  altScenW: { 0: [0.50, 0.50, 0], 1: [0.25, 0.50, 0.25], 2: [0, 0.50, 0.50] }, // WT_L: 50% the actual number found, the rest the nearest scenario(s)
+  deckCounts: [1, 2, 3], // WT_K: decks shown before each sequence, drawn per sequence
+  deckWorseAbs: 4,     // a non-default deck needs at least 4 more expected cards
+  deckWorseRel: 1.25,  //   and 25% more than the default
+  deckLenAddMax: 5,    // a worse deck may be up to 5 cards longer, so no deck exceeds winHi + 5 = 40 cards
+  maxDensity: 0.6,     // per-card density cap in a window (see drawTwoMass_)
+  minPeak: 2,          // at least 2 orange cards in each window
+  adjPenalty: 0.35,    // weight of a card next to an orange card (see placeBell_): breaks up solid orange blocks
+  cardPMax: 0.75,      // no card more than 75% likely to be orange
+  bump1: 0,            // WT_J: per-card density 1-bump at a window's edges, 1+bump at its centre, first window (see drawTwoMass_)
+  bump2: 0,            //   and second window (0 = uniform: each section has one density, set by pInside)
+  offerLoShare: 0,     // earliest offer: before the first card (sunk time must vary from zero)
+  peakSd: 0.20,        // spread (unused since the binomial windows) of the orange cards around each window's middle, as a share of its length
+  gapLo: 0, gapHi: 0,  // no white cards forced between the two windows: the dead zone comes only from their sparse edges
+  offerShare: 0.35,    // latest offer at 35% of the whole sequence, and before the left section's last orange card (pauseCap_)
+  altSd: 0.15,         // alternative = E[cards left] × (1 + e), e ~ N(0, altSd) truncated to ±altSpread
+  altSpread: 0.30,
+  altShortP: 0.50,     // chance the alternative is drawn shorter than E (WT_K: with three winning cards a shorter one almost always fits)
+  // Rewards: each respondent gets a total pool ~ Uniform{1.00, 1.05, …, 1.50},
+  // split at random across the 5 sequences, each getting at least rewardMin,
+  // in steps of rewardStep — see drawRewardSplit_(). Independent of the
+  // sequences' own draws, so a reward never leaks anything about them.
+  rewardPoolLo: 1.00,
+  rewardPoolHi: 1.50,
+  rewardMin:    0.10,
+  rewardStep:   0.05,
+};
+const rnd  = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const shuf = a => { const r=[...a]; for(let i=r.length-1;i>0;i--){const j=rnd(0,i);[r[i],r[j]]=[r[j],r[i]];} return r; };
+
+function pickWeighted_(w){
+  const tot = w.reduce((a,b)=>a+b,0);
+  let r = Math.random()*tot;
+  for(let i=0;i<w.length;i++){ r -= w[i]; if(r < 0) return i; }
+  return w.length-1;
+}
+const _pauseW = {};
+function pauseWeights_(L){
+  if(_pauseW[L]) return _pauseW[L];
+  const a = CFG.pauseBetaA, SUB = 50, w = [];
+  for(let k=0;k<L;k++){
+    let s=0;
+    for(let j=0;j<SUB;j++){ const x=(k+(j+0.5)/SUB)/L; s += Math.pow(x,a-1)*Math.pow(1-x,a-1); }
+    w.push(s);
+  }
+  return (_pauseW[L] = w);
+}
+// `ok(k)` (optional) restricts the support further (see validPause_).
+function drawPause_(L, maxPause, ok){
+  const w = pauseWeights_(L).slice(0, Math.max(0, maxPause)+1).map((x,k)=> (!ok || ok(k)) ? x : 0);
+  return w.some(x=>x>0) ? pickWeighted_(w) : 0;
+}
+
+// ── QUINTILE-STRATIFIED PROBABILITY ─────────────────────────────────
+// [pInsideMin,pInsideMax] = [10%,90%] is cut into 5 bands of EQUAL WIDTH
+// (16 points each: 10–26, 26–42, 42–58, 58–74, 74–90).
+// SESSION.pQuintileOrder (shuffled once at consent) assigns one band to each
+// section — drawn without replacement, so every respondent sees exactly one
+// section from each band, in random order. Within its band pInside is drawn
+// uniformly and rounded to the nearest 5%.
+//
+// Rounding is done so that bands never overlap: each 5% value belongs to the
+// band containing it (10–25, 30–40, 45–55, 60–70, 75–90), and the draw is
+// uniform over those values — the same as a uniform draw over the band's
+// share of the line followed by rounding, with no value reachable from two
+// bands.
+const P_GRID_ = (function(){
+  const g=[]; for(let v=CFG.pInsideMin; v<=CFG.pInsideMax+1e-9; v+=0.05) g.push(Math.round(v*20)/20);
+  return g;
+})();
+// WT_M: the five bands are set explicitly (CFG.pBandValues) instead of cut
+// into equal widths. WT_N: 25–35, 40–45, 50, 55–60, 65–75 (5% steps).
+const P_QUINTILES_ = (function(){
+  return CFG.pBandValues.map(values => ({ lo: values[0], hi: values[values.length-1], values: values.slice() }));
+})();
+// Draw pInside from band `qIdx` (0-4): uniform over its 5% values.
+function drawPInsideFromQuintile_(qIdx){
+  return pick(P_QUINTILES_[qIdx].values);
+}
+
+// The sequence's live/safe pattern: every card but the last is
+// independently, randomly marked live (w.p. CFG.liveMarkP) or safe (mixed,
+// not blocks); the last card is ALWAYS live, so the window always closes on
+// a card that could have been the winning one.
+function drawLiveMask_(length){
+  const live = Array.from({length}, ()=> Math.random() < CFG.liveMarkP);
+  live[length-1] = true;
+  return live;
+}
+function liveTaskNumbersOf_(live){
+  const out=[]; for(let k=0;k<live.length;k++) if(live[k]) out.push(k+1); // 1-indexed card numbers
+  return out;
+}
+
+// ── Participant-perspective benchmarks ──
+// Participants know nothing about the regimes or the pairing, so every
+// benchmark uses the beliefs of the model they are told about: each winning
+// card still missing has the same chance h (shown in each empty box of the
+// tracker) of being on the orange card in play, at most one per card, so with
+// r missing an orange card is a winning card w.p. r·h, independently card by
+// card. The regime is never used.
+//
+// ── WT_M ──
+// One sequence of CFG.lengthM cards (worse decks longer). Orange cards are
+// dense at the start and thin out: the first 10 cards are orange w.p. d1
+// (U(CFG.d1Lo, d1Hi)), cards 11–20 w.p. d1·f, 21–30 w.p. d1·f², and so on,
+// with the decay f ~ U(CFG.decayLo, decayHi) per sequence; at least
+// CFG.minOrangeWindowBy[n] orange cards in the first 10 (random positions).
+// The number of winning cards n is 1, 2 or 3 (uniform). h is calibrated on the
+// first 10 cards' actual orange cards so that all n winning cards fall there in
+// p_band% of the cases. With n < 3 the tracker shows either n boxes or 3 boxes
+// with 3 − n already filled (CFG.giftShowP). The sequence ends on the n-th
+// winning card or on its last card (the reward is earned either way).
+// Offers: the first between card 0 and CFG.firstOfferMax; then one after each
+// winning card, between it and the next (at most CFG.offerGapMax cards after
+// it), following the regimes; each re-sets the alternative, which stays
+// available in between. Every sequence is a "seed" that is played in full by
+// one participant and truncated at its first shown offer by another (paired).
+function nW_(win){ return win && win.nW != null ? win.nW : CFG.nWinners; }
+function winnersFound_(win, lp){
+  return (win.winners || []).filter(m => m <= lp).slice(0, nW_(win)).length;
+}
+function comb_(n, k){ if(k < 0 || k > n) return 0; let c = 1; for(let i = 1; i <= k; i++) c = c * (n - k + i) / i; return c; }
+function pAtLeast_(n, r, q){
+  let below = 0; for(let i = 0; i < r && i <= n; i++) below += comb_(n, i) * Math.pow(q, i) * Math.pow(1 - q, n - i);
+  return Math.max(0, 1 - below);
+}
+// With r winning cards missing, an orange card holds one w.p. r·h.
+function hazR_(h, r){ return Math.min(1, r * h); }
+// P(all r missing winning cards found within n orange cards in a row).
+function pFoundWithin_(n, h, r){
+  let st = new Array(r + 1).fill(0); st[r] = 1;
+  for(let i = 0; i < n; i++){
+    const nx = new Array(r + 1).fill(0); nx[0] = st[0];
+    for(let k = 1; k <= r; k++){ const p = hazR_(h, k); nx[k] += st[k] * (1 - p); nx[k-1] += st[k] * p; }
+    st = nx;
+  }
+  return st[0];
+}
+// h with P(all r within W orange cards) = p, capped so that r·h ≤ 1.
+function hForP_(W, p, r){
+  let lo = 0, hi = CFG.hMaxBy[r];
+  for(let i = 0; i < 50; i++){ const m = (lo + hi) / 2; if(pFoundWithin_(W, m, r) < p) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+// End-card distribution from lp with r missing (default: those actually missing).
+function endDist_(win, lp, rIf){
+  const ahead = win.liveTaskNumbers.filter(m => m > lp), q = win.q;
+  const r = rIf != null ? rIf : nW_(win) - winnersFound_(win, lp);
+  if(r <= 0) return { d: [], pNo: 0 };
+  let st = new Array(r + 1).fill(0); st[r] = 1; const d = [];
+  for(const m of ahead){
+    const nx = new Array(r + 1).fill(0);
+    for(let k = 1; k <= r; k++){ if(!st[k]) continue; const p = hazR_(q, k); nx[k] += st[k] * (1 - p); if(k === 1) d.push({ card: m, p: st[k] * p }); else nx[k-1] += st[k] * p; }
+    st = nx;
+  }
+  return { d, pNo: Math.max(0, st.reduce((s, v) => s + v, 0)) };
+}
+// Expected MAIN-sequence cards still to play from lp (to the last winning card, or to the end).
+function eRemaining_(win, lp){
+  const { d, pNo } = endDist_(win, lp);
+  return d.reduce((s, x) => s + x.p * (x.card - lp), 0) + pNo * (win.length - lp);
+}
+function eRemainingIf_(win, lp, r){
+  const { d, pNo } = endDist_(win, lp, r);
+  return d.reduce((s, x) => s + x.p * (x.card - lp), 0) + pNo * (win.length - lp);
+}
+function pAhead_(win, lp){
+  if(nW_(win) - winnersFound_(win, lp) <= 0) return 0;
+  return 1 - endDist_(win, lp).pNo;
+}
+// WT_N: reaching the last card without all the winning cards means doing the
+// alternative, so staying costs the main cards plus, if not completed, the alternative.
+function stayCost_(win, lp, altDur){ return eRemaining_(win, lp) + (1 - pAhead_(win, lp)) * (altDur || 0); }
+function stayCostGeo_(win, lp, altDur){
+  const { d, pNo } = endDist_(win, lp);
+  let el = d.reduce((s, x) => s + x.p * Math.log(x.card - lp), 0);
+  if(pNo > 0) el += pNo * Math.log((win.length - lp) + (altDur || 0)); // WT_N: then the alternative
+  return Math.exp(el);
+}
+function maxWhiteRun_(win){
+  let r = 0, best = 0;
+  for(const v of win.live){ r = v ? 0 : r + 1; best = Math.max(best, r); }
+  return best;
+}
+// Fewest cards to the end if staying from `pause`: the r-th orange card ahead.
+function bestCase_(win, pause, rIf){
+  const ahead = win.liveTaskNumbers.filter(m => m > pause), r = rIf != null ? rIf : nW_(win) - winnersFound_(win, pause);
+  return r > 0 && ahead.length >= r ? ahead[r-1] - pause : 0;
+}
+function lastWinner_(win){ const n = nW_(win), w = win.winners || []; return w.length >= n ? w[n - 1] : null; }
+
+// ── WT_N: the deck ──
+// The density (chance a card is orange) decays from the first card along a
+// Pareto-type curve towards a floor:
+//   d_t = d0 · (ρ + (1 − ρ) · (1 + t/τ)^(−α)),   d0 ~ U(CFG.d0By[n]),
+// with (ρ, τ, α) fitted on each sequence so that the FAIR ALTERNATIVE for those
+// still playing — if it were offered at any card — stays as close as possible
+// to the one at the offer. For those still playing at card t (counting the
+// winning cards they may have found by then, future cards at their density),
+// staying costs E[main cards left] + P(not all found) × A, the alternative
+// being owed at the end; the fair alternative is the A equal to that cost,
+// A*(t) = Ē_t / P̄_t (fairCurve_). The fit minimises the survivor-weighted
+// distance of A*(t) from A*(offer), subject to A*(offer) ≤ CFG.decayMaxLonger ×
+// its value with no decay (a lower density later makes staying dearer at the
+// offer too) and to no card dropping more than CFG.decayMaxStep below the one before. With 1 winning card the best decay is none; with 2–3 the fair
+// alternative must dip a little on the first cards (no one can finish there),
+// and the decay wins it back later (simulated in WT_N/deck_lab.html).
+// The calibration window (the first W cards, W ~ U(CFG.calibWBase +
+// CFG.calibWStep·n, … + CFG.calibWSpan)) holds at least CFG.minWindowBy[n]
+// orange cards; h is calibrated on its orange cards as drawn, and the decay is
+// then refitted with the window as drawn (the cards after it redrawn).
+// P(orange count) for cards with chances ds.
+function countDist_(ds){ let d = [1]; for(const x of ds){ const nx = new Array(d.length + 1).fill(0); d.forEach((v, k) => { nx[k] += v * (1 - x); nx[k + 1] += v * x; }); d = nx; } return d; }
+// h with P(all r within the window) = p, in expectation over the window's densities.
+function hForPExp_(wDens, p, r){
+  const dist = countDist_(wDens), f = h => dist.reduce((s, w, k) => s + w * pFoundWithin_(k, h, r), 0);
+  let lo = 0, hi = CFG.hMaxBy[r]; if(f(hi) < p) return hi;
+  for(let i = 0; i < 40; i++){ const m = (lo + hi) / 2; if(f(m) < p) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+// Fair alternative for those still playing at each card from o (A) and their share (S),
+// given each card's chance of being orange xs (0/1 for cards already drawn and known).
+function fairCurve_(n, h, xs, o){
+  const L = xs.length, E = [], P = [];
+  for(let t = 0; t <= L; t++){ E.push(new Float64Array(n + 1)); P.push(new Float64Array(n + 1)); P[t][0] = 1; }
+  for(let t = L - 1; t >= o; t--) for(let r = 1; r <= n; r++){ const p = hazR_(h, r) * xs[t]; E[t][r] = 1 + p * E[t+1][r-1] + (1 - p) * E[t+1][r]; P[t][r] = p * P[t+1][r-1] + (1 - p) * P[t+1][r]; }
+  let st = new Float64Array(n + 1); st[n] = 1; const A = [], S = [];
+  for(let t = o; t < L; t++){
+    let e = 0, p = 0, s = 0; for(let r = 1; r <= n; r++){ e += st[r] * E[t][r]; p += st[r] * P[t][r]; s += st[r]; }
+    A.push(p > 1e-12 ? e / p : 1e9); S.push(s);
+    const nx = new Float64Array(n + 1); nx[0] = st[0]; for(let r = 1; r <= n; r++){ const q = hazR_(h, r) * xs[t]; nx[r] += st[r] * (1 - q); nx[r-1] += st[r] * q; } st = nx;
+  }
+  return { A, S };
+}
+// Survivor-weighted RMS and largest distance of A*(t) from A*(offer), in cards.
+function fairDrift_(c){ let a = 0, w = 0, mx = 0; for(let k = 1; k < c.A.length; k++){ const g = c.A[k] - c.A[0]; a += c.S[k] * g * g; w += c.S[k]; mx = Math.max(mx, Math.abs(g)); } return { rms: w ? Math.sqrt(a / w) : 0, mx }; }
+// Largest relative drop in density from one card to the next.
+function maxDrop_(ds){ let m = 0; for(let t = 1; t < ds.length; t++) m = Math.max(m, 1 - ds[t] / ds[t - 1]); return m; }
+function decayCurve_(d0, q, L){ return Array.from({ length: L }, (_, t) => Math.max(CFG.decayDMin, d0 * (q.rho + (1 - q.rho) * Math.pow(1 + t / q.tau, -q.a)))); }
+const DECAY_GRID_ = (() => { const g = [{ rho: 1, tau: 1, a: 0 }]; for(let i = 1; i <= 9; i++) for(const tau of [1, 2, 4, 8, 16]) for(const a of [0.5, 1, 1.5, 2, 3]) g.push({ rho: i / 10, tau, a }); return g; })();
+// The best decay for this sequence: `known` = cards already drawn (t < known.length).
+function fitDecay_(n, h, d0, o, L, known){
+  const xsOf = ds => ds.map((d, t) => t === L - 1 ? 1 : known && t < known.length ? (known[t] ? 1 : 0) : d);
+  const cap = fairCurve_(n, h, xsOf(decayCurve_(d0, { rho: 1, tau: 1, a: 0 }, L)), o).A[0] * CFG.decayMaxLonger;
+  const evalQ = q => { const ds = decayCurve_(d0, q, L), c = fairCurve_(n, h, xsOf(ds), o); return { q, ds, dv: fairDrift_(c), ok: c.A[0] <= cap + 1e-9 && maxDrop_(ds) <= CFG.decayMaxStep + 1e-9 }; };
+  let best = null;
+  for(const q of DECAY_GRID_){ const v = evalQ(q); if(v.ok && (!best || v.dv.rms < best.dv.rms)) best = v; }
+  let sR = 0.05, sT = 0.5, sA = 0.25; // local refinement
+  for(let it = 0; it < 3; it++){
+    for(const dq of [[sR,0,0],[-sR,0,0],[0,sT,0],[0,-sT,0],[0,0,sA],[0,0,-sA]]){
+      const q = { rho: Math.min(1, Math.max(0.05, best.q.rho + dq[0])), tau: Math.max(0.5, best.q.tau * (1 + dq[1])), a: Math.max(0, best.q.a + dq[2]) };
+      const v = evalQ(q); if(v.ok && v.dv.rms < best.dv.rms) best = v;
+    }
+    sR /= 2; sT /= 2; sA /= 2;
+  }
+  return best;
+}
+// WT_N: the last card is always orange (reaching it without all the winning
+// cards means doing the alternative, so it must be able to hold one); the fit
+// counts it as certainly orange, so the expectations stay balanced.
+// WT_N: the cards are drawn one by one with a carried 'debt': card t is orange w.p.
+// d_t + k × (orange cards expected so far − drawn so far), within [2%, 97%], with k drawn per
+// sequence in [CFG.drawDebtKLo, drawDebtKHi] — runs of white (or orange) cards still happen at
+// random but are made up for on the following cards, so the deck follows its density curve.
+// From card `from` on, the debt starting at 0.
+function drawWithDebt_(ds, from, out, k){
+  out = out || new Array(ds.length).fill(false);
+  let debt = 0;
+  for(let t = from || 0; t < ds.length; t++){
+    const p = Math.min(0.97, Math.max(0.02, ds[t] + k * debt));
+    out[t] = Math.random() < p;
+    debt += ds[t] - (out[t] ? 1 : 0);
+  }
+  return out;
+}
+// At least minW orange cards (random positions) among the first W.
+function fillWindow_(live, W, minW){
+  const win = [...Array(W).keys()], have = win.filter(t => live[t]).length;
+  if(have < minW) shuf(win.filter(t => !live[t])).slice(0, minW - have).forEach(t => live[t] = true);
+}
+// Winning cards from position `from` (cards completed) with r missing, card by card.
+function drawWinnersFrom_(nums, from, h, r){
+  const w = []; for(const m of nums){ if(m <= from) continue; if(r === 0) break; if(Math.random() < hazR_(h, r)){ w.push(m); r--; } } return w;
+}
+// WT_N: the ONE offer, after pos cards completed, pos between CFG.offerLo (1:
+// with 0 the two versions of a pair would be the same) and CFG.offerHi (10),
+// P(pos = k) ∝ k^CFG.offerPosPow (mostly late: fewer low-cost pauses, the
+// pairs already give the zero-cost side). Always before the LAST winning card;
+// the winning cards found by then stay found.
+//   regime 1: the winning cards are drawn first, then pos from that
+//             distribution capped at last − 1 (if the last one comes early);
+//   regime 2: pos drawn first from regime 1's distribution on the same sequence,
+//             then the winning cards, redrawn until the last one comes after pos
+//             (or the sequence ends without all of them);
+//   regime 3: pos drawn from regime 1's distribution on the same sequence, the
+//             winning cards independently, NO redraw: if the last winning card
+//             comes at or before pos the offer is never made (wasted) and the
+//             sequence ends there (simulated: 25% of the offers).
+// Not shown either when the ending is certain (fewer orange cards ahead than
+// winning cards missing).
+function drawOfferPos_(maxPos){
+  const hi = Math.min(CFG.offerHi, maxPos); if(hi < CFG.offerLo) return null;
+  const w = []; for(let k = CFG.offerLo; k <= hi; k++) w.push(Math.pow(k, CFG.offerPosPow));
+  return CFG.offerLo + pickWeighted_(w);
+}
+function drawOffersM_(win, subRegime){
+  const n = win.nW, L = win.length, nums = win.liveTaskNumbers, h = win.q;
+  const lastOf = w => w.length === n ? w[n - 1] : null;
+  let winners, pos, wasted = false;
+  if(subRegime === 1){
+    winners = drawWinnersFrom_(nums, 0, h, n); const last = lastOf(winners);
+    pos = drawOfferPos_((last != null ? last : L) - 1);
+    if(pos == null){ pos = 0; wasted = true; } // the last winning card on card 1: no room for an offer (redrawn by designSeed_)
+  } else {
+    // regimes 2 and 3: from regime 1's distribution on this same sequence (CFG.pauseDistDraws regime-1 draws),
+    // so that they differ from regime 1 only in how the offer relates to the winning cards
+    if(subRegime === 2 || subRegime === 3){ const d = []; for(let k = 0; k < CFG.pauseDistDraws; k++){ const last = lastOf(drawWinnersFrom_(nums, 0, h, n)); const p = drawOfferPos_((last != null ? last : L) - 1); if(p != null) d.push(p); } pos = d.length ? pick(d) : drawOfferPos_(L - 1); }
+    else pos = drawOfferPos_(L - 1);
+    if(subRegime === 2){ for(let k = 0; ; k++){ winners = drawWinnersFrom_(nums, 0, h, n); const last = lastOf(winners); if(last == null || last > pos || k > 500) break; } }
+    else { winners = drawWinnersFrom_(nums, 0, h, n); const last = lastOf(winners); if(last != null && last <= pos) wasted = true; }
+  }
+  const found = winners.filter(m => m <= pos).length, r = n - found;
+  const tmp = { length: L, live: win.live, liveTaskNumbers: nums, q: h, nW: n, winners: winners.filter(m => m <= pos) };
+  const ahead = nums.filter(m => m > pos).length;
+  let shown = !wasted && r > 0 && pos < L && ahead >= r;
+  const alt = shown ? altForOffer_(tmp, pos, r) : {};
+  // WT_N: only offers whose fair alternative is within [CFG.altFairLo, altFairHi] (the 5th–95th
+  // percentiles of the fair value): outside it the sequence is redrawn (regimes 1–2, designSeed_)
+  // or, in regime 3 (never redrawn), played without an offer.
+  const outOfBounds = shown && (alt.eStay < CFG.altFairLo || alt.eStay > CFG.altFairHi);
+  if(outOfBounds) shown = false;
+  const offer = Object.assign({ k: 1, pos, missing: r, found, wasted, certain: !wasted && r > 0 && ahead < r, outOfBounds, shown }, shown ? alt : {});
+  return { winners, offers: [offer] };
+}
+// The alternative at an offer: the fair alternative on the sequence as drawn
+// (the alternative is owed at the end if not all the winning cards are found,
+// so A solves A = E + (1 − p)·A, i.e. A = E / p; E = expected main cards, p =
+// chance of finding all the missing ones) × (1 ± U(0, CFG.altNoiseShare));
+// rounded; at least the best case + 1 and CFG.altMin, at most CFG.altMaxFactor × the cards left.
+function altForOffer_(win, pos, r){
+  const p = 1 - endDist_(win, pos, r).pNo, eMain = eRemainingIf_(win, pos, r);
+  const a = p > 0.05 ? eMain / p : CFG.altMaxFactor * (win.length - pos);
+  const hw = CFG.altNoiseShare * a;
+  const left = win.length - pos, hi = Math.max(1, Math.round(CFG.altMaxFactor * left));
+  const lo = Math.min(hi, Math.max(bestCase_(win, pos, r) + 1, CFG.altMin || 1, CFG.altWhiteFloor ? maxWhiteRun_(win) + 1 : 1));
+  const alt = Math.min(hi, Math.max(lo, Math.round(a + (2 * Math.random() - 1) * hw)));
+  return { alt, eStay: a, eMain, halfWidth: hw, altLo: lo, altHi: hi };
+}
+// A full design ("seed"): deck, h, n, gift display, winners and the offer.
+// WT_N: length ~ U(CFG.lengthLo, lengthHi) drawn first; density decaying from
+// the first card (fitDecay_, see "WT_N: the deck"); h calibrated on the
+// calibration window's orange cards as drawn; ONE offer. Worse decks pass the
+// assigned deck's h and decay shape (opts.q, opts.shape): nothing is refitted.
+function designSeed_(qIdx, regime, opts){
+  opts = opts || {};
+  const redrawWhy = { out_of_bounds: 0, certain: 0, no_room: 0 }; // WT_N: why earlier draws of this sequence were rejected
+  for(let tries = 0; ; tries++){
+    const n = opts.nW != null ? opts.nW : 1 + pickWeighted_(CFG.nWinnersW);
+    const length = opts.length != null ? opts.length : rnd(CFG.lengthLo, CFG.lengthHi);
+    const d0 = opts.d1 != null ? opts.d1 : CFG.d0By[n][0] + Math.random() * (CFG.d0By[n][1] - CFG.d0By[n][0]);
+    const W = Math.min(length, opts.calibW != null ? opts.calibW : rnd(CFG.calibWBase + CFG.calibWStep * n, CFG.calibWBase + CFG.calibWStep * n + CFG.calibWSpan));
+    const minW = opts.minWindow != null ? opts.minWindow : CFG.minWindowBy[n];
+    const pBand = drawPInsideFromQuintile_(qIdx);
+    const debtK = opts.debtK != null ? opts.debtK : CFG.drawDebtKLo + Math.random() * (CFG.drawDebtKHi - CFG.drawDebtKLo); // per sequence
+    const r2 = x => Math.min(CFG.hMaxBy[n], Math.max(0.01, Math.round(x * 100) / 100));
+    let h = opts.q, shape = opts.shape || null, ds, drift = null;
+    if(shape){ ds = decayCurve_(d0, shape, length); }
+    else {
+      // 1) fitted with h from the expected window, h re-set on the fitted window densities, refitted
+      if(h == null) h = r2(hForPExp_(new Array(W).fill(d0), pBand, n));
+      let f = fitDecay_(n, h, d0, CFG.decayFitOffer, length, null);
+      if(opts.q == null){ h = r2(hForPExp_(f.ds.slice(0, W), pBand, n)); f = fitDecay_(n, h, d0, CFG.decayFitOffer, length, null); }
+      ds = f.ds; shape = f.q;
+    }
+    // 2) the cards, at least minW orange in the window
+    const live = drawWithDebt_(ds, 0, null, debtK);
+    live[length - 1] = true;
+    fillWindow_(live, W, minW);
+    const K = live.slice(0, W).filter(v => v).length;
+    // 3) h on the window as drawn; the decay refitted with the window as drawn, the cards after it redrawn
+    if(!opts.shape){
+      if(opts.q == null && CFG.qFreq === 'realized') h = r2(hForP_(K, pBand, n));
+      const f = fitDecay_(n, h, d0, CFG.decayFitOffer, length, live.slice(0, W));
+      ds = f.ds; shape = f.q; drift = f.dv;
+      drawWithDebt_(ds, W, live, debtK);
+      live[length - 1] = true;
+    }
+    const nums = []; live.forEach((v, k) => { if(v) nums.push(k + 1); });
+    const subRegime = opts.subRegime != null ? opts.subRegime : (regime === 0 ? pick([1, 2]) : regime);
+    const win = { length, live, liveTaskNumbers: nums, q: h, nW: n };
+    const plan = drawOffersM_(win, subRegime);
+    if(subRegime !== 3 && !plan.offers.some(o => o.shown) && tries < 50){ // regimes 1–2: the offer must be shown (not certain, within bounds); regime 3: never redrawn
+      const o0 = plan.offers[0] || {}; redrawWhy[o0.outOfBounds ? 'out_of_bounds' : o0.certain ? 'certain' : 'no_room']++;
+      continue;
+    }
+    const gift = n < 3 && (opts.gift != null ? opts.gift : Math.random() < CFG.giftShowP);
+    return { qIdx, pBand, nW: n, length, live: live.map(v => v ? 1 : 0).join(''), q: h, d1: d0,
+             densities: ds.map((x, t) => t === length - 1 ? 1 : Math.round(x * 1000) / 1000), shape: { rho: Math.round(shape.rho * 1000) / 1000, tau: Math.round(shape.tau * 100) / 100, a: Math.round(shape.a * 1000) / 1000 },
+             drift: drift ? Math.round(drift.rms * 100) / 100 : null, calibW: W, W1: K, debtK: Math.round(debtK * 1000) / 1000, redraws: tries, redrawWhy,
+             subRegime, gift, winners: plan.winners, offers: plan.offers };
+  }
+}
+// The deck a participant plays from a seed: 'full', or 'trunc' — cut at the
+// SHOWN offer (t0 cards): the cards before it are removed, and so are the
+// winning cards found before it (WT_N: the tracker shows only the ones still
+// missing, none already found); the offer moves to 0.
+function deckFromSeed_(seed, version){
+  const full = [...seed.live].map(c => c === '1');
+  const first = seed.offers.find(o => o.shown);
+  const t0 = version === 'trunc' && first ? first.pos : 0;
+  const live = full.slice(t0), length = live.length;
+  const nums = []; live.forEach((v, k) => { if(v) nums.push(k + 1); });
+  const before = seed.winners.filter(m => m <= t0).length;
+  const nW = seed.nW - before;
+  const winners = seed.winners.filter(m => m > t0).map(m => m - t0);
+  const offers = seed.offers.filter(o => o.pos >= t0).map(o => Object.assign({}, o, { pos: o.pos - t0 }));
+  const nBoxes = version === 'trunc' ? nW : (seed.gift ? 3 : seed.nW), prefilled = version === 'trunc' ? 0 : (seed.gift ? 3 - seed.nW : 0);
+  return { length, live, liveTaskNumbers: nums, q: seed.q, nW, winners, offers, nBoxes, prefilled, truncOffset: t0 };
+}
+// Everything the rest of the page expects from a task (benchmarks at the first
+// shown offer, the old single-offer fields kept for the exports).
+function taskFromDeck_(seed, dk, extra){
+  const win = { length: dk.length, live: dk.live, liveTaskNumbers: dk.nums || dk.liveTaskNumbers, q: dk.q, nW: dk.nW, winners: dk.winners };
+  const first = dk.offers.find(o => o.shown) || null;
+  const pause = first ? first.pos : dk.length;
+  const altDuration = first ? first.alt : null;
+  const livePattern = dk.live.map(v => v ? 'L' : 'S').join('');
+  const liveTotal = win.liveTaskNumbers.length, activePassed = win.liveTaskNumbers.filter(m => m <= pause).length;
+  const end = lastWinner_(win);
+  const eStart = eRemaining_(Object.assign({}, win, { winners: [] }), 0);
+  // WT_N: p_inside on the sequence's own calibration window (the first calibW cards of the FULL
+  // sequence, seed.W1 of them orange), the same for both versions of a pair
+  const W1 = seed.W1 != null ? seed.W1 : win.liveTaskNumbers.filter(m => m <= CFG.calibCards).length;
+  return Object.assign({
+    subRegime: seed.subRegime, length: dk.length, live: dk.live, liveTaskNumbers: win.liveTaskNumbers,
+    q: dk.q, nW: dk.nW, nBoxes: dk.nBoxes, prefilled: dk.prefilled, gift: seed.gift ? 1 : 0, nWinnersSeq: seed.nW,
+    d1: seed.d1, densities: seed.densities, calibW: seed.calibW, debtK: seed.debtK, truncOffset: dk.truncOffset,
+    designRedraws: seed.redraws, designRedrawWhy: seed.redrawWhy ? Object.keys(seed.redrawWhy).map(k => k + ':' + seed.redrawWhy[k]).join(',') : null,
+    pBand: seed.pBand, pInside: pFoundWithin_(W1, seed.q, seed.nW), pAll: pFoundWithin_(W1, seed.q, seed.nW), pAllSeq: pFoundWithin_(liveTotal, dk.q, dk.nW),
+    half: seed.calibW != null ? seed.calibW : CFG.calibCards, nFirstHalf: W1, orangeShare: liveTotal / dk.length, shapeFamily: 'pareto', shapeParams: seed.shape ? 'rho=' + seed.shape.rho + ',tau=' + seed.shape.tau + ',alpha=' + seed.shape.a + ',drift=' + seed.drift + ',W=' + seed.calibW : 'W=' + seed.calibW,
+    pQuintileIdx: seed.qIdx, pQuintileLo: P_QUINTILES_[seed.qIdx].lo, pQuintileHi: P_QUINTILES_[seed.qIdx].hi,
+    winners: dk.winners, ends: end != null, endPos: end, nReq: end != null ? end : dk.length,
+    offerPlan: dk.offers, pause, offerWasted: !first,
+    altGlobalEnd: first ? pause + altDuration : null, altDuration, altWindowLo: first ? first.altLo : null, altWindowHi: first ? first.altHi : null,
+    altScenario: first ? first.found : null, altEScenario: first ? first.eStay : null,
+    activePassedAtPause: activePassed, inactivePassedAtPause: pause - activePassed,
+    activeLeftAtPause: liveTotal - activePassed, inactiveLeftAtPause: (dk.length - liveTotal) - (pause - activePassed),
+    leftPattern: livePattern.slice(0, pause), rightPattern: livePattern.slice(pause),
+    pAheadAtPause: pAhead_(win, pause), eRemAtPause: eRemaining_(win, pause),
+    stayCostAtPause: eRemaining_(win, pause), eRemAtStart: eStart, eStart,
+    winnersFoundAtPause: winnersFound_(win, pause),
+  }, extra || {});
+}
+// Per-respondent rewards (drawn once at consent), as WT_L.
+function drawRewardSplit_(){
+  const unit = CFG.rewardStep, n = CFG.numTasks;
+  const poolUnits = rnd(Math.round(CFG.rewardPoolLo/unit), Math.round(CFG.rewardPoolHi/unit));
+  const units = Array(n).fill(Math.round(CFG.rewardMin/unit));
+  let left = poolUnits - units.reduce((a,b)=>a+b,0);
+  while(left-- > 0) units[rnd(0,n-1)]++;
+  const toMoney = u => Math.round(u*unit*100)/100;
+  return { pool: toMoney(poolUnits), split: units.map(toMoney) };
+}
+// The decks shown before a sequence: the assigned one (the seed's version) and,
+// with 2 or 3 decks, worse ones made relative to it: same h and number of
+// winning cards and decay shape, sparser (initial density × CFG.deckD1Lo–Hi) and longer
+// (2 … CFG.deckLenAddMax cards more), kept only if MUCH worse — fewer orange
+// cards and at least max(CFG.deckWorseAbsM, CFG.deckWorseRelM × E) more expected cards.
+function buildDeckChoiceM_(seed, version, regime){
+  const def = taskFromDeck_(seed, deckFromSeed_(seed, version));
+  const n = pick(CFG.deckCounts), decks = [def];
+  let tries = 0, best = null;
+  const margin = Math.max(CFG.deckWorseAbsM, CFG.deckWorseRelM * def.eStart);
+  const worse = d => d.liveTaskNumbers.length < def.liveTaskNumbers.length && d.eStart >= def.eStart + margin;
+  while(decks.length < n){
+    tries++;
+    const s = designSeed_(seed.qIdx, regime, { nW: def.nW, q: def.q, gift: false, subRegime: seed.subRegime,
+      length: Math.min(CFG.lengthHi + CFG.deckLenAddMax, def.length + rnd(2, CFG.deckLenAddMax)),
+      d1: seed.d1 * (CFG.deckD1Lo + Math.random() * (CFG.deckD1Hi - CFG.deckD1Lo)), calibW: seed.calibW, minWindow: def.nW,
+      shape: seed.shape || { rho: 1, tau: 1, a: 0 }, debtK: seed.debtK });
+    s.gift = seed.gift && def.nW === seed.nW; // same tracker look as the assigned deck
+    const d = taskFromDeck_(s, Object.assign(deckFromSeed_(s, 'full'), { nBoxes: def.nBoxes, prefilled: def.prefilled }), { isWorseDeck: true });
+    if(worse(d) || tries > CFG.deckTriesMax){ decks.push(worse(d) ? d : (best && best.eStart > d.eStart ? best : d)); tries = 0; best = null; }
+    else if(!best || d.eStart > best.eStart) best = d;
+  }
+  const order = shuf(decks.map((_, i) => i));
+  return { decks: order.map(i => decks[i]), defaultPos: order.indexOf(0) };
+}
+// ── Pairing plan ──
+// SESSION.seedPlan[i] = { seed_id, version: 'full'|'trunc', role: 'pair'|'new', seed }.
+// Built once per respondent (prepareSeedPlan_, before the first sequence):
+// for each sequence's band, an unpaired seed from the backend (its missing
+// version, from another participant) if there is one; otherwise a new seed,
+// played as 'full' or 'trunc' at random and uploaded so that someone else
+// plays the other version. Seeds with no shown offer cannot be truncated and
+// are played in full, unpooled.
+function newSeedId_(){ return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+async function prepareSeedPlan_(){
+  if(SESSION.seedPlan && SESSION.seedPlan.length === CFG.numTasks) return;
+  const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
+  const bands = Array.from({length: CFG.numTasks}, (_, i) => (SESSION.pQuintileOrder || [0,1,2,3,4])[i % 5]);
+  let claimed = [];
+  if(backendConfigured_() && _demoMode < 2){
+    try{
+      const res = await fetchWithTimeout_(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'seedClaim', pid:_prolificID, study_id:_studyID, bands }) }, 8000);
+      const js = await res.json(); if(js && Array.isArray(js.seeds)) claimed = js.seeds;
+    }catch(e){ claimed = []; }
+  }
+  const plan = [], fresh = [];
+  bands.forEach((b, i) => {
+    const c = claimed.find(x => x && x.band === b && !plan.some(p => p.seed_id === x.seed_id));
+    if(c && c.design){ plan.push({ seed_id: c.seed_id, version: c.version, role: 'pair', seed: c.design }); return; }
+    const seed = designSeed_(b, regime), pairable = seed.offers.some(o => o.shown);
+    const version = pairable ? (Math.random() < 0.5 ? 'full' : 'trunc') : 'full';
+    const id = newSeedId_();
+    plan.push({ seed_id: id, version, role: pairable ? 'new' : 'unpaired', seed });
+    if(pairable) fresh.push({ seed_id: id, band: b, version, design: seed });
+  });
+  SESSION.seedPlan = plan;
+  if(fresh.length) seedPost_({ action:'seedAdd', pid:_prolificID, study_id:_studyID, seeds: fresh });
+}
+// Fire-and-forget seed bookkeeping (add / release / done).
+function seedPost_(payload){
+  if(!backendConfigured_() || _demoMode >= 2) return;
+  postToBackend_(payload, 3).catch(()=>{});
+}
+function generateTasks(){
+  const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
+  if(!SESSION.seedPlan || SESSION.seedPlan.length !== CFG.numTasks){ // offline fallback: all new, unpooled
+    SESSION.seedPlan = Array.from({length: CFG.numTasks}, (_, i) => { const b = (SESSION.pQuintileOrder || [0,1,2,3,4])[i % 5];
+      return { seed_id: newSeedId_(), version: 'full', role: 'unpaired', seed: designSeed_(b, regime) }; });
+  }
+  return Array.from({length:CFG.numTasks},(_,i)=>{
+    const p = SESSION.seedPlan[i];
+    const choice = buildDeckChoiceM_(p.seed, p.version, regime);
+    if(!SESSION.rewardSplit){ const r = drawRewardSplit_(); SESSION.rewardPool = r.pool; SESSION.rewardSplit = r.split; }
+    const pay = SESSION.rewardSplit[i];
+    return Object.assign({ index:i, regime, pay, seedId: p.seed_id, seedVersion: p.version, seedRole: p.role }, choice.decks[choice.defaultPos], {
+             deckOptions: choice.decks, nDecks: choice.decks.length, deckDefaultPos: choice.defaultPos,
+             deckChosenPos: null,
+             offerLog: [], curOffer: null, nextOfferIdx: 0,
+             penaltyAtPause:null,
+             altRevealed:false, autoSwitched:false, autoSwitchAtTime:null,
+             completed:null, switched:null, forfeited:null, earnings:0,
+             offerAtTask:null, offerAtTime:null, offerFiredAt:null, pauseSecs:null,
+             deliberationSecs:null, autoRefused:false, offerChoice:null,
+             switchTaken:false, switchSource:null, switchTakenAtTask:null, switchTakenAtTime:null,
+             switchPressedAtTask:null, switchPressedAtTime:null, switchOffer:null,
+             dialogOpens:0, dialogCancels:0, altStartedAt:null,
+             forfeitTaken:false, forfeitTakenAtTask:null, forfeitTakenAtTime:null, forfeitPhase:null,
+             startAt:null, grids:[] });
+  });
+}
+// Swap the deck chosen on the briefing screen into the task (display position k).
+// A deck other than the assigned one breaks the pairing: the seed version goes
+// back to the pool (released) and the sequence is played unpaired.
+function applyDeckChoice_(task, k){
+  if(!task || !task.deckOptions) return;
+  task.deckChosenPos = k;
+  const keep = { seedId: task.seedId, seedVersion: task.seedVersion, seedRole: task.seedRole };
+  Object.assign(task, task.deckOptions[k], keep);
+  if(k !== task.deckDefaultPos){
+    if(task.seedRole === 'pair' || task.seedRole === 'new') seedPost_({ action:'seedRelease', pid:_prolificID, seed_id: task.seedId, version: task.seedVersion });
+    task.seedRole = 'released';
+  }
+}
+
+
+/*__WTN_END__*/
+  return { CFG, designSeed_, deckFromSeed_, hazR_ };
+})();
+
+// With r winning cards missing, from the cards ahead: expected main cards E and
+// chance p of finding them all (within the first k cards if k is given).
+function epAhead(ahead, h, r, k){ let st = new Array(r + 1).fill(0); st[r] = 1; let E = 0; const K = k != null ? Math.min(k, ahead.length) : ahead.length;
+  for(let u = 0; u < K; u++){ E += 1 - st[0]; const nx = new Array(r + 1).fill(0); nx[0] = st[0]; for(let q = 1; q <= r; q++){ const p = ahead[u] ? WTN.hazR_(h, q) : 0; nx[q] += st[q] * (1 - p); nx[q - 1] += st[q] * p; } st = nx; }
+  return { E, p: st[0] }; }
+let SEQ = 0;
+// One WT_N pair (band uniform, as each participant gets one sequence per band).
+function newPair(){
+  for(;;){
+    const band = rnd(0, 4), seed = WTN.designSeed_(band, P.regime, {}), o = seed.offers.find(x => x.shown);
+    if(!o) continue;
+    const versions = ['full', 'trunc'].map(v => {
+      const dk = WTN.deckFromSeed_(seed, v), pos = v === 'full' ? o.pos : 0, found = dk.winners.filter(m => m <= pos).length;
+      return { version: v, live: dk.live, pos, nBoxes: dk.nBoxes, prefilled: dk.prefilled + found, r: dk.nW - found, length: dk.length };
+    });
+    const ahead = versions[0].live.slice(versions[0].pos), r = versions[0].r, ep = epAhead(ahead, seed.q, r), stay = ep.E + (1 - ep.p) * o.alt;
+    return { id: ++SEQ, seed, o, versions, ahead, r, h: seed.q, E: ep.E, p: ep.p, fair: o.eStay, alt: o.alt, stay, gain: stay - o.alt };
+  }
+}
+let queue = [];
+function enqueue(sc){
+  shuf(sc.versions).forEach(ver => {
+    const item = { sc, ver };
+    for(let t = 0; t < 50; t++){
+      const pos = rnd(Math.min(queue.length, 1), queue.length);
+      const near = queue.slice(Math.max(0, pos - P.minGap), pos + P.minGap).some(q => q.sc.id === sc.id);
+      if(!near || t === 49){ queue.splice(pos, 0, item); break; }
+    }
+  });
+}
+function refill(){ while(queue.length < P.queueMin) enqueue(newPair()); }
+
+// ── WT_L drawing (fanned deck, tracker, front card) ──
+function maxFanWidth_(){
+  const card = el('taskcard'), front = el('st-grid-outer');
+  if(!card || !front || !card.clientWidth || !front.offsetWidth) return 121;
+  return Math.max(40, Math.floor((card.clientWidth - front.offsetWidth) / 2) - 20);
+}
+function fanLayout_(stack, nRight, nLeft){
+  const room = 2 * maxFanWidth_(), n = nRight + nLeft, step = n > 0 ? Math.min(11, room / n) : 11;
+  stack.style.left = ((nLeft - nRight) * step / 2) + 'px';
+  return step;
+}
+function drawDeck_(live, pos){
+  const stack = el('hand-stack'); stack.querySelectorAll('.deck-card').forEach(n => n.remove());
+  const add = (cls, dir, i, step) => { const c = document.createElement('div'); c.className = 'deck-card ' + cls; c.style.transform = 'translateX(' + (dir * i * step) + 'px)'; c.style.zIndex = String(19 - i); stack.appendChild(c); };
+  const step = fanLayout_(stack, Math.max(0, live.length - pos - 1), Math.max(0, pos));
+  for(let k = pos + 1, i = 1; k < live.length; k++, i++) add(live[k] ? 'is-live' : '', +1, i, step);
+  for(let k = pos - 1, i = 1; k >= 0; k--, i++) add(live[k] ? 'is-done-live' : 'is-done', -1, i, step);
+}
+function drawTracker_(nBoxes, found, h){
+  const out = ['<span class="wt-lbl">Winning cards</span>'];
+  for(let k = 0; k < nBoxes; k++) out.push(k < found ? '<div class="wt-slot found">&#9733;</div>' : '<div class="wt-slot"><span class="wt-h">' + Math.round(h * 100) + '%</span></div>');
+  el('seq-strip').innerHTML = out.join('');
+}
+function drawGrid_(){
+  const g = el('st-grid'); g.innerHTML = '';
+  for(let r = 0; r < P.gridR; r++){ const row = document.createElement('div'); row.className = 'grow-el';
+    for(let c = 0; c < P.gridC; c++){ const cell = document.createElement('div'); cell.className = 'ecell ph'; cell.textContent = '·'; row.appendChild(cell); }
+    g.appendChild(row); }
+}
+
+// ── trials and data ──
+let data = [];
+try{ data = JSON.parse(localStorage.getItem(STORE) || '[]'); }catch(e){ data = []; }
+SEQ = data.reduce((m, r) => Math.max(m, r.pair_id || r.scenario_id || 0), 0);
+let cur = null, shownAt = 0, hiddenMs = 0, hiddenSince = null, exited = false;
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden) hiddenSince = performance.now();
+  else if(hiddenSince != null){ hiddenMs += performance.now() - hiddenSince; hiddenSince = null; }
+});
+function render(){
+  refill();
+  const j = queue.findIndex(q => !cur || q.sc.id !== cur.sc.id);
+  cur = queue.splice(Math.max(0, j), 1)[0];
+  const { sc, ver } = cur, live = ver.live, nextLive = live[ver.pos];
+  el('taskcard').className = 'taskcard ' + (nextLive ? 'is-live' : 'is-safe');
+  el('taskcard-banner').textContent = nextLive ? 'This card can be a winning card' : 'This card cannot be a winning card';
+  drawGrid_();
+  drawTracker_(ver.nBoxes, ver.prefilled, sc.h);
+  drawDeck_(live, ver.pos);
+  el('bf-line').innerHTML = '&nbsp;';
+  el('s-seq').textContent = String(data.length + 1);
+  el('s-done').textContent = String(ver.pos);
+  el('s-tasksleft').textContent = String(live.length - ver.pos);
+  el('s-alt-val').textContent = String(sc.alt);
+  el('bf-meta').textContent = 'answered: ' + data.length + ' · pairs: ' + SEQ;
+  shownAt = performance.now(); hiddenMs = 0; hiddenSince = document.hidden ? shownAt : null;
+}
+function choose(c){
+  if(!cur || exited) return;
+  const { sc, ver } = cur, sd = sc.seed;
+  const now = performance.now(), hid = hiddenMs + (hiddenSince != null ? now - hiddenSince : 0);
+  data.push({
+    n: data.length + 1, ts: new Date().toISOString(),
+    rt_ms: Math.round(now - shownAt), hidden_ms: Math.round(hid), rt_active_ms: Math.round(now - shownAt - hid),
+    design_version: 'wtn_pairs', pair_id: sc.id, version: ver.version, sunk: ver.pos, trunc_offset: sc.o.pos,
+    n_winners: sd.nW, r_missing: sc.r, n_boxes: ver.nBoxes, prefilled: ver.prefilled, gift: sd.gift ? 1 : 0,
+    h: sc.h, cards_left: ver.length - ver.pos, alt: sc.alt, fair_alt: +sc.fair.toFixed(3), e_main: +sc.E.toFixed(3), p_found: +sc.p.toFixed(3),
+    e_stay: +sc.stay.toFixed(3), gain: +sc.gain.toFixed(3),   // e_stay = main cards + (1 − p_found) × alternative; gain = e_stay − alt
+    p_win_by_alt: +epAhead(sc.ahead, sc.h, sc.r, sc.alt).p.toFixed(3),
+    band: sd.qIdx + 1, p_band: sd.pBand, len: sd.length, calib_w: sd.calibW, sub_regime: sd.subRegime, d1: +sd.d1.toFixed(3),
+    densities: sd.densities.join('|'), shape: sd.shape ? 'rho=' + sd.shape.rho + ',tau=' + sd.shape.tau + ',alpha=' + sd.shape.a : '',
+    ahead: sc.ahead.map(v => v ? 'L' : 'S').join(''), before: ver.live.slice(0, ver.pos).map(v => v ? 'L' : 'S').join(''),
+    choice: c, switched: c === 'switch' ? 1 : 0,
+  });
+  try{ localStorage.setItem(STORE, JSON.stringify(data)); }catch(e){}
+  render();
+}
+function toCSV(rows){
+  if(!rows.length) return '';
+  const k = [...new Set(rows.flatMap(r => Object.keys(r)))], q = v => /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  return k.join(',') + '\n' + rows.map(r => k.map(x => q(r[x] == null ? '' : r[x])).join(',')).join('\n');
+}
+function dl(name, text, type){
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function downloadData(){
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  dl('wtn_brute_' + stamp + '.csv', toCSV(data), 'text/csv');
+  dl('wtn_brute_' + stamp + '.json', JSON.stringify(data, null, 1), 'application/json');
+}
+// Answers live only in this browser's localStorage (key STORE, plus any left
+// by earlier versions of the prototype: every key starting with 'wtl_brute').
+function deleteAnswers(){
+  if(!confirm('Delete all ' + data.length + ' saved answers from this browser? This cannot be undone (files you already downloaded are not affected).')) return;
+  try{ Object.keys(localStorage).filter(k => k.startsWith('wtn_brute')).forEach(k => localStorage.removeItem(k)); }catch(e){}
+  data = []; SEQ = 0; queue = []; cur = null; render();
+}
+function exitNow(){
+  downloadData(); exited = true;
+  el('screen-subtask').style.display = 'none';
+  el('bf-done').style.display = 'block';
+  el('bf-done').textContent = 'Done: ' + data.length + ' answers saved and downloaded (wtn_brute_*.csv / .json). They also stay in this browser: reopening the page continues from here.';
+}
+document.addEventListener('keydown', e => { if(e.key === 'c' || e.key === 'C') choose('stay'); if(e.key === 'a' || e.key === 'A') choose('switch'); });
+window.addEventListener('resize', () => { if(cur && !exited) drawDeck_(cur.ver.live, cur.ver.pos); });
+render();
+</script>
+</body>
+</html>
