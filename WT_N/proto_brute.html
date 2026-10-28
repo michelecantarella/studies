@@ -621,7 +621,7 @@ const CFG = {
   decayLo: 0.75, decayHi: 0.90,  // WT_M only (WT_N: fitDecay_)
   minOrangePerSection: 0,        // WT_N: no minimum after the calibration window
   nWinnersLo: 1, nWinnersHi: 3,  // WT_M only (WT_N: nWinnersW)
-  nWinnersW: [0.25, 0.25, 0.50], // WT_N: 1 / 2 / 3 winning cards in 25 / 25 / 50% of the sequences
+  nWinnersW: [0.05, 0.20, 0.75], // WT_N: 1 / 2 / 3 winning cards in 5 / 20 / 75% of the sequences (truncated versions show only the winning cards still missing, mostly one: over both versions, about 39 / 22 / 38% of the sequences played show 1 / 2 / 3 boxes)
   minOrangeWindowBy: {1: 3, 2: 4, 3: 6}, // WT_M only (WT_N: at least n orange cards in the calibration window)
   hMaxBy: {1: 0.95, 2: 0.50, 3: 0.33},   // cap on h so that (missing) × h ≤ 1
   giftShowP: 0,     // WT_N: no boxes already filled at the start (WT_M: 0.5)
@@ -629,7 +629,7 @@ const CFG = {
   offerLo: 1, offerHi: 10, // WT_N: the offer after 1–10 cards completed (before the last winning card)
   offerPosPow: 2,   // WT_N: P(offer after k cards) ∝ k² (mostly late)
   altFairLo: 4.7, altFairHi: 26, // WT_N: offers only with the fair alternative within its 5th–95th percentiles (simulated, before the cut)
-  regimeW: {0: 0.30, 1: 0.30, 2: 0.30, 3: 0.10}, // WT_N: share of participants per placement regime (3 = the small independent-timing check)
+  regimeW: {0: 0.25, 1: 0.25, 2: 0.25, 3: 0.25}, // WT_N: share of participants per placement regime. Regime 3 is off (&noreg3=1) for the pilots and the first 1,000 participants, and added for the rest only if regimes 1 and 2 differ (prereg §34): then a quarter each
   offerGapMax: 7,   // later offers: within this many cards after the previous winning card
   altWhiteFloor: false, // the WT_K/WT_L "longer than the longest white run" floor on the alternative (off)
   deckD1Lo: 0.45, deckD1Hi: 0.70, // worse decks: first-window density × this
@@ -1171,32 +1171,38 @@ function buildDeckChoiceM_(seed, version, regime){
   return { decks: order.map(i => decks[i]), defaultPos: order.indexOf(0) };
 }
 // ── Pairing plan ──
-// SESSION.seedPlan[i] = { seed_id, version: 'full'|'trunc', role: 'pair'|'new', seed }.
-// Built once per respondent (prepareSeedPlan_, before the first sequence):
-// for each sequence's band, an unpaired seed from the backend (its missing
-// version, from another participant) if there is one; otherwise a new seed,
-// played as 'full' or 'trunc' at random and uploaded so that someone else
-// plays the other version. Seeds with no shown offer cannot be truncated and
-// are played in full, unpooled.
+// SESSION.seedPlan[i] = { seed_id, version: 'full'|'trunc', role: 'pair'|'new'|'unpaired', seed }.
+// Built once per respondent (prepareSeedPlan_, before the first sequence).
+// Versions: two full, two truncated and one at random, shuffled over the five
+// sequences. For each sequence (band, version) the backend is asked for an open
+// version of someone else's sequence (never the same partner twice, from any study
+// except the test modes); if there is none, a new sequence is drawn, played in the
+// version asked for, and pooled so that someone else plays the other one. A new
+// sequence with no shown offer (regime 3) cannot be truncated: it is played in full,
+// unpooled. Test modes (STUDY_ID pilot / studentpilot) never pool. Clearing mode
+// (?clear=1, for a last batch): every sequence takes an open version of either kind
+// if there is one, and nothing new is pooled.
 function newSeedId_(){ return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 async function prepareSeedPlan_(){
   if(SESSION.seedPlan && SESSION.seedPlan.length === CFG.numTasks) return;
   const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
   const bands = Array.from({length: CFG.numTasks}, (_, i) => (SESSION.pQuintileOrder || [0,1,2,3,4])[i % 5]);
+  const versions = _clearMode ? bands.map(() => 'any') : shuf(['full', 'full', 'trunc', 'trunc', Math.random() < 0.5 ? 'full' : 'trunc']);
+  const pooled = backendConfigured_() && _demoMode < 2 && !_isAnyPilot;
   let claimed = [];
-  if(backendConfigured_() && _demoMode < 2){
+  if(pooled){
     try{
       const res = await fetchWithTimeout_(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
-        body: JSON.stringify({ action:'seedClaim', pid:_prolificID, study_id:_studyID, bands }) }, 8000);
+        body: JSON.stringify({ action:'seedClaim', pid:_prolificID, study_id:_studyID, slots: bands.map((b, i) => ({ band: b, version: versions[i] })) }) }, 8000);
       const js = await res.json(); if(js && Array.isArray(js.seeds)) claimed = js.seeds;
     }catch(e){ claimed = []; }
   }
   const plan = [], fresh = [];
   bands.forEach((b, i) => {
-    const c = claimed.find(x => x && x.band === b && !plan.some(p => p.seed_id === x.seed_id));
-    if(c && c.design){ plan.push({ seed_id: c.seed_id, version: c.version, role: 'pair', seed: c.design }); return; }
-    const seed = designSeed_(b, regime), pairable = seed.offers.some(o => o.shown);
-    const version = pairable ? (Math.random() < 0.5 ? 'full' : 'trunc') : 'full';
+    const c = claimed[i];
+    if(c && c.design && c.band === b){ plan.push({ seed_id: c.seed_id, version: c.version, role: 'pair', seed: c.design }); return; }
+    const seed = designSeed_(b, regime), pairable = seed.offers.some(o => o.shown) && pooled && !_clearMode;
+    const version = pairable ? versions[i] : 'full';
     const id = newSeedId_();
     plan.push({ seed_id: id, version, role: pairable ? 'new' : 'unpaired', seed });
     if(pairable) fresh.push({ seed_id: id, band: b, version, design: seed });

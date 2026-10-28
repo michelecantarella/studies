@@ -233,6 +233,15 @@ function getSeedSheet_()  { return ensureSheet_(SEED_SHEET, SEED_HEADER); }
 function cellValue_(v) {
   if (v === null || v === undefined) return '';
   if (typeof v === 'object') return JSON.stringify(v);
+  // Strings made only of numbers must not be reinterpreted by the sheet's locale
+  // (with an Italian locale "2,5" becomes 2.5, "4,24,30" a date, and "0.638" a
+  // time, 638 minutes): a single number is written as a number, a list of numbers
+  // (joined by "," or "|", e.g. winning_cards "4,24,30", deck_d1_options
+  // "0.638|0.41") as text. The leading apostrophe is not stored in the value.
+  if (typeof v === 'string') {
+    if (/^-?\d+(\.\d+)?$/.test(v)) return Number(v);
+    if (/^[0-9.,|\s\-]+$/.test(v) && /[.,|]/.test(v)) return "'" + v;
+  }
   return v;
 }
 
@@ -444,33 +453,59 @@ function seedOpen_(r, v, nowMs) {
   if (st === 'claimed') { var t = Date.parse(r[v + '_at']); return !(t > 0) || nowMs - t > SEED_CLAIM_HOURS * 3600 * 1000; }
   return false;
 }
-// One claim per requested band: an open version of a design made by someone
-// else (and not already played by this pid), preferring designs whose other
-// version is already done, then the oldest.
-function seedClaim_(pid, study_id, bands, now) {
+// Sequences from the unpaid test modes (STUDY_ID pilot / studentpilot) are never pooled.
+function isPilotStudy_(study_id) { return /^(pilot|studentpilot)$/i.test(String(study_id || '')); }
+// One claim per requested slot {band, version}: an open version (the one asked
+// for, or either with 'any') of a design made by someone else and not already
+// played by this pid, from any study except the test modes; preferring designs
+// whose other version is already done, then the oldest. Partners are unique: the
+// claimant is never paired twice with the same person (in this claim, or in pairs
+// already formed in the sheet). Returns one entry per slot (null = none open).
+function seedClaim_(pid, slots, now) {
   var sheet = getSeedSheet_(), rows = seedRows_(sheet), nowMs = Date.parse(now), out = [], used = {};
-  (bands || []).forEach(function(b) {
-    var best = null, bestScore = -1;
+  var partnerOf = function(r, v) { var other = v === 'full' ? 'trunc' : 'full'; return String(r[other + '_pid'] || r.created_by || ''); };
+  var partners = {};
+  rows.forEach(function(r) {
+    ['full', 'trunc'].forEach(function(v) { if (String(r[v + '_pid']) === String(pid)) partners[partnerOf(r, v)] = true; });
+  });
+  (slots || []).forEach(function(slot) {
+    var best = null, bestScore = -1, want = slot && slot.version;
     rows.forEach(function(r) {
-      if (used[r._row] || String(r.band) !== String(b) || String(r.study_id) !== String(study_id || '')) return;
+      if (used[r._row] || String(r.band) !== String(slot.band) || isPilotStudy_(r.study_id)) return;
       if (String(r.created_by) === String(pid)) return;
       ['full', 'trunc'].forEach(function(v) {
+        if (want && want !== 'any' && v !== want) return;
         var other = v === 'full' ? 'trunc' : 'full';
         if (!seedOpen_(r, v, nowMs) || String(r[other + '_pid']) === String(pid)) return;
+        var partner = partnerOf(r, v); if (partner && partners[partner]) return;
         var score = (r[other + '_status'] === 'done' ? 2 : 1) * 1e13 - (Date.parse(r.created_at) || 0);
         if (score > bestScore) { bestScore = score; best = { r: r, v: v }; }
       });
     });
     if (!best) { out.push(null); return; }
     used[best.r._row] = true;
+    partners[partnerOf(best.r, best.v)] = true;
     var f = {}; f[best.v + '_status'] = 'claimed'; f[best.v + '_pid'] = pid; f[best.v + '_at'] = now;
     seedSet_(sheet, best.r._row, f);
     var design = null; try { design = JSON.parse(best.r.design_json); } catch (e) {}
-    out.push({ band: b, seed_id: best.r.seed_id, version: best.v, design: design });
+    out.push({ band: slot.band, seed_id: best.r.seed_id, version: best.v, design: design });
+  });
+  return out;
+}
+// Open versions still waiting for a partner, by band and version (for planning a clearing batch).
+function seedPoolStatus_(now) {
+  var rows = seedRows_(getSeedSheet_()), nowMs = Date.parse(now), out = { open: 0, by_band: {} };
+  rows.forEach(function(r) {
+    if (isPilotStudy_(r.study_id)) return;
+    ['full', 'trunc'].forEach(function(v) {
+      if (!seedOpen_(r, v, nowMs)) return;
+      out.open++; var k = String(r.band); out.by_band[k] = out.by_band[k] || { full: 0, trunc: 0 }; out.by_band[k][v]++;
+    });
   });
   return out;
 }
 function seedAdd_(pid, study_id, seeds, now) {
+  if (isPilotStudy_(study_id)) return; // test modes never pooled
   var sheet = getSeedSheet_();
   (seeds || []).forEach(function(s) {
     var row = new Array(SEED_HEADER.length).fill('');
@@ -504,6 +539,7 @@ function doGet(e) {
   lock.waitLock(10000);
   try {
     var action = e.parameter.action;
+    if (action === 'pool') return jsonOut_(seedPoolStatus_(new Date().toISOString())); // ?action=pool: open versions waiting for a partner
     if (action !== 'lookup') return jsonOut_({ error: 'unknown action' });
 
     var pid = e.parameter.pid;
@@ -554,7 +590,11 @@ function doPost(e) {
     var lockS = LockService.getScriptLock();
     lockS.waitLock(10000);
     try {
-      if (body.action === 'seedClaim') return jsonOut_({ ok: true, seeds: seedClaim_(pid, study_id, body.bands, now) });
+      if (body.action === 'seedClaim') {
+        if (isPilotStudy_(study_id)) return jsonOut_({ ok: true, seeds: [] });
+        var slots = body.slots || (body.bands || []).map(function(x) { return { band: x, version: 'any' }; });
+        return jsonOut_({ ok: true, seeds: seedClaim_(pid, slots, now) });
+      }
       if (body.action === 'seedAdd') { seedAdd_(pid, study_id, body.seeds, now); return jsonOut_({ ok: true }); }
       seedMark_(pid, body.seed_id, body.version, body.action === 'seedDone' ? 'done' : 'release', now);
       return jsonOut_({ ok: true });
