@@ -2167,7 +2167,7 @@ function maxFanWidth_(){
 // Winning cards whose slot has already popped (key: sequence + card), so a
 // slot pops once even when the screen is redrawn (e.g. around the offer).
 const _wtPopped = new Set();
-function renderStrip_(winners, pos, altMode, h, nBoxes, prefilled){
+function renderStrip_(winners, pos, altMode, h, nBoxes, prefilled, noPop){
   const s = el('seq-strip'); if(!s) return;
   if(!winners){ s.innerHTML = ''; s.dataset.sig = ''; return; }
   // WT_M: nBoxes boxes (1–3), the first `prefilled` already filled at the start.
@@ -2183,7 +2183,7 @@ function renderStrip_(winners, pos, altMode, h, nBoxes, prefilled){
   for(let k = 0; k < nBoxes; k++){
     const wCard = k >= prefilled ? winners[k - prefilled] : null;
     const key = (trainingActive ? 'T' + trainStep : 'S' + S.taskIdx) + ':' + wCard;
-    const isFound = k < found, isNew = isFound && wCard != null && wCard === pos && !altMode && !_wtPopped.has(key);
+    const isFound = k < found, isNew = isFound && !noPop && wCard != null && wCard === pos && !altMode && !_wtPopped.has(key);
     if(isNew) _wtPopped.add(key);
     out.push('<div class="wt-slot'+(isFound?' found':'')+(isNew?' new':'')+'">'+(isFound?'&#9733;':(hTxt && !altMode ? '<span class="wt-h">'+hTxt+'</span>' : ''))+'</div>');
   }
@@ -2254,8 +2254,9 @@ function paintPanels_(){
   if(!task) return;
 
   const done = el('s-done'), doneSub = el('s-done-sub');
-  if(done) done.textContent = S.subtaskDone;
-  if(doneSub) doneSub.textContent = S.phase==='alt' ? ('of '+task.altDuration+' in the alternative') : 'in total';
+  // WT_N: always the cards completed in total in this sequence (main + alternative)
+  if(done) done.textContent = totalTasksSoFar_();
+  if(doneSub) doneSub.textContent = 'in total';
 
   // Cards left in the main sequence — hidden during the alternative, where
   // it would just restate "cards completed" above as a countdown.
@@ -3105,8 +3106,8 @@ const TRAIN = {
   live: [false, false, true, false, true, true, false, false, false, false, false, true, false, true, true],
   pInside: 1,
   q: 0.20,          // WT_L: demo chance that each missing winning card is on an orange card (shown in its box)
-  winners: [5, 12, 15], // WT_K: the demo's three winning cards
-  altDuration: 8,   // offered after 2 cards: ends on card 10, in the white gap (real range 6-9)
+  winners: [3, 12, 15], // WT_N: the demo's three winning cards — the first on card 3, the orange card of screens 10-11, found on screen 12
+  altDuration: 8,   // offered after the first winning card (3 cards completed)
   altDuration2: 6,  // WT_M: the new alternative offered after the first winning card (card 5)
   pay: 0.10,
 };
@@ -3120,6 +3121,7 @@ let _trainOnTaskCompleteContinue=null;
 
 const TRAIN_LAST_STEP = 17;
 const TRAIN_CHANCE_STEP = 11; // WT_N: the tracker shows the chance per box from this screen on
+const TRAIN_FOUND_STEP = 12;  // WT_N: the screen where the first winning card is found (its box pops only here)
 let trainPenalty = 0;       // display-only mistake tally for the practice round
 let trainSelected = new Set();
 let _trainSkipCurrent = null; // set by a screen with a debug-skippable in-flight action
@@ -3150,8 +3152,10 @@ function trainResetGridPlaceholders_(){
 // safe/live state and the probability) and 'taskcard-body' (the actual
 // target + grid) so a step can call out one half without re-flashing the
 // other — see trainLightUpTo_.
+// WT_N: Cards completed and Cards left are never dimmed (they are part of the card stack's
+// reading from the first screen); btn-resume-alt no longer exists.
 const TRAIN_PARTS = ['panel-seq','panel-reward','panel-penalty','panel-forfeit',
-                     'taskcard-banner','taskcard-body','panel-done','panel-alt','btn-resume-alt'];
+                     'taskcard-banner','taskcard-body','panel-alt'];
 
 // Tracks every id that has ever been flashed this training run, so a part
 // introduced once is never flashed again just because a later step keeps it
@@ -3231,7 +3235,7 @@ function renderTrainHand_(pos, altMode){
   stack.querySelectorAll('.deck-card').forEach(n=>n.remove());
   const total = altMode ? TRAIN.altDuration : TRAIN.length;
   const liveMask = TRAIN.live;
-  renderStrip_(TRAIN.winners, altMode ? 0 : pos, altMode, CFG.hazard === 'split' && trainStep >= TRAIN_CHANCE_STEP ? TRAIN.q : null); // WT_N: the chance per box appears at screen 11
+  renderStrip_(TRAIN.winners, altMode ? 0 : pos, altMode, CFG.hazard === 'split' && trainStep >= TRAIN_CHANCE_STEP ? TRAIN.q : null, undefined, undefined, trainStep !== TRAIN_FOUND_STEP); // WT_N: the chance per box appears at screen 11; the winning card pops only on screen 12, where it is found
   const add = (cls, dir, i, step) => {
     const c=document.createElement('div');
     c.className='deck-card '+cls;
@@ -3343,8 +3347,8 @@ function trainPaint_(o){
   const seq=el('s-seq'); if(seq) seq.textContent='Demo';
   const pay=el('s-pay'); if(pay) pay.textContent=money_(TRAIN.pay);
   const pen=el('s-penalty'); if(pen) pen.textContent = money_(trainPenalty>0 ? -trainPenalty : 0);
-  const done=el('s-done'); if(done) done.textContent = (o.done!=null? o.done : 0);
-  const doneSub=el('s-done-sub'); if(doneSub) doneSub.textContent = o.alt ? ('of '+TRAIN.altDuration+' in the alternative') : 'in total';
+  const done=el('s-done'); if(done) done.textContent = (o.done!=null? o.done : 0) + (o.alt ? (o.mainDone||0) : 0); // WT_N: in total (main + alternative)
+  const doneSub=el('s-done-sub'); if(doneSub) doneSub.textContent = 'in total';
   const tlPanel=el('panel-tasksleft'); if(tlPanel) tlPanel.style.display = o.alt ? 'none' : '';
   const tl=el('s-tasksleft'), tlSub=el('s-tasksleft-sub');
   if(tl){
@@ -3385,7 +3389,7 @@ function trainPaint_(o){
     if(bannerText) bannerText.textContent = o.newOffer ? 'A new alternative sequence is now available' : 'The alternative sequence is now available';
     const askBlock=el('st-offer-ask');
     if(askBlock) askBlock.style.display = o.offerAsk ? 'block' : 'none';
-    setResumeBtn_(!!(o.offerAsk && !o.alt));
+    setResumeBtn_(!!((o.offerAsk || o.resume) && !o.alt)); // WT_N: Cards left is the Resume button whenever the offer pause is shown
     const ocd=el('st-offer-cd'); if(ocd) ocd.textContent = '30';
   }
   const cdSlot=el('st-cd-slot'); if(cdSlot) cdSlot.style.display = o.offerAsk ? 'none' : '';
@@ -3534,6 +3538,9 @@ function renderTrainStep(){
   const g=el('st-grid'); if(g) g.classList.remove('card-flash');
   const pn=el('prob-num'); if(pn) pn.classList.remove('pulse');
   const ws=el('seq-strip'); if(ws) ws.classList.remove('switch-flash');
+  // WT_N: and every other leftover flash (e.g. Cards left, flashed at screen 14 and hidden at 15,
+  // would replay its animation when shown again at 16)
+  document.querySelectorAll('#screen-subtask .switch-flash').forEach(n => n.classList.remove('switch-flash'));
   const bnr=el('taskcard-banner'); if(bnr) bnr.classList.remove('pulse');
   // The offer countdown is screen-14-only and not reset by trainPaint_ (only
   // #st-instr-offer/#st-offer-ask are) — hide it fresh on every step so
@@ -3559,7 +3566,7 @@ function trainScreen1_(){
   el('st-target').textContent = pick(EMOJIS);
   trainFlashCard_();
   renderTip_(
-    'This is a card. To complete it, click <b>every instance</b> of the target emoji as the grid fills in. Press Reveal grid to try it.',
+    'Welcome to the experiment! This is a card. To complete it, click <b>every instance</b> of the target emoji as the grid fills in. Press Reveal grid to try it.',
     tipContinue_('Reveal grid')
   );
 }
@@ -3698,10 +3705,10 @@ function trainScreen11_(){
   );
 }
 
-// 12. WT_K: a winning card is found — card 5 of the demo, just completed;
-// its slot in the tracker on top turns gold.
+// 12. A winning card is found: card 3 of the demo (the orange card of screens 10-11),
+// one card further on; its box in the tracker turns gold.
 function trainScreen12_(){
-  trainPaint_({done:5, live:!!TRAIN.live[5]});
+  trainPaint_({done:3, live:!!TRAIN.live[3]});
   trainLightUpTo_(['taskcard-body']);
   trainResetGridPlaceholders_(); el('st-target').textContent = pick(EMOJIS);
   renderTip_(
@@ -3710,13 +3717,14 @@ function trainScreen12_(){
   );
 }
 
-// 11. The alternative is offered — and its length revealed. Continues on
-// the same orange card as Screen 10.
+// 13. The alternative is offered — and its length revealed. Continues from screen 12:
+// 3 cards completed, the first winning card found.
 function trainScreen13_(){
-  trainPaint_({done:2, live:true, offered:true, offerBanner:true});
+  trainPaint_({done:3, live:!!TRAIN.live[3], offered:true, offerBanner:true, resume:true});
   trainLightUpTo_(['panel-alt','taskcard-banner','taskcard-body']);
   trainFlashOfferBanner_(); // flash "The alternative sequence is now available"
   flashSwitchAvailable();   // and the panel explained right here — the ONLY place this ever flashes
+  { const tl=el('panel-tasksleft'); if(tl){ tl.classList.remove('switch-flash'); void tl.offsetWidth; tl.classList.add('switch-flash'); } } // WT_N: and the Resume (Cards left) button
   renderTip_(
     'At some point during the sequence, we will offer you an <b>alternative sequence</b>, which allows you to complete a <b>fixed number of cards</b> to earn the reward, with no winning cards to find.',
     tipContinue_()
@@ -3725,7 +3733,7 @@ function trainScreen13_(){
 
 // 12. Switching = clicking the Alternative button (the only way).
 function trainScreen14_(){
-  trainPaint_({done:2, live:true, offered:true, offerBanner:true, offerAsk:true});
+  trainPaint_({done:3, live:!!TRAIN.live[3], offered:true, offerBanner:true, offerAsk:true});
   trainLightUpTo_(['panel-alt','panel-tasksleft','taskcard-banner','taskcard-body']);
   flashSwitchAvailable(); // flash the Alternative button again
   trainFlashOfferCountdown_(); // and the pause's countdown / the Resume (Cards left) button
@@ -3737,7 +3745,7 @@ function trainScreen14_(){
 }
 
 function trainScreen15_(){
-  trainPaint_({done:0, alt:true});
+  trainPaint_({done:0, alt:true, mainDone:3}); // switched after the 3 main cards of screens 12-14
   trainLightUpTo_(['panel-alt','taskcard-banner','taskcard-body']);
   trainResetGridPlaceholders_(); el('st-target').textContent = pick(EMOJIS);
   trainFlashCards_();
