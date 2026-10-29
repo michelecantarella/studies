@@ -1995,7 +1995,9 @@ async function prepareSeedPlan_(){
     const c = claimed[i];
     if(c && c.design && c.band === b){ plan.push({ seed_id: c.seed_id, version: c.version, role: 'pair', seed: c.design }); return; }
     const seed = designSeed_(b, regime), pairable = seed.offers.some(o => o.shown) && pooled && !_clearMode;
-    const version = pairable ? versions[i] : 'full';
+    // without the pool (demomode=2, test modes) the versions are still played as assigned, unpaired, so the
+    // truncated version can be seen; nothing is posted. Clearing mode and sequences with no offer: full.
+    const version = pairable || (!pooled && !_clearMode && seed.offers.some(o => o.shown)) ? versions[i] : 'full';
     const id = newSeedId_();
     // a new full version is pooled when its deck is chosen (applyDeckChoice_), and only if it is the assigned deck
     plan.push({ seed_id: id, version, role: pairable ? 'new' : 'unpaired', seed, pendingAdd: pairable && version === 'full' });
