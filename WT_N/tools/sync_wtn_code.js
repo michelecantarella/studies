@@ -1,6 +1,6 @@
 // Copies WT_N's generator (CFG + the design code) from WT_N/index.html into the
 // pages that reuse it verbatim, between /*__WTN_BEGIN__*/ and /*__WTN_END__*/:
-//   node WT_N/tools/sync_wtn_code.js WT_N/index.html WT_N/proto_brute.html WT_N/pairs_lab.html
+//   node WT_N/tools/sync_wtn_code.js WT_N/index.html WT_N/proto_brute.html WT_N/pairs_lab.html WT_N/deck_alt_lab.html
 const fs = require('fs');
 const [src, ...targets] = process.argv.slice(2);
 const idx = fs.readFileSync(src, 'utf8').replace(/\r\n/g, '\n');

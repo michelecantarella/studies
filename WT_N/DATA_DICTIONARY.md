@@ -109,7 +109,7 @@ Columns marked **£** hold a plain number (£ for Prolific, "Points" on screen f
 | winners_found_at_exit | 0–3 | WT_K: winning cards found when the main sequence was left (3 = finished) |
 | alt_scenario | 0–2 | WT_K: winning cards found in the scenario the alternative was centred on (drawn at random, not the actual number) |
 | alt_e_scenario | number | WT_K: expected cards to the third winning card in that scenario |
-| n_decks | 1–3 | WT_K: decks shown before the sequence (drawn per sequence, each equally likely) |
+| n_decks | 1–3 | WT_K: decks shown before the sequence (drawn per sequence, each equally likely). WT_N from 2026-10-29: always 1 in truncated versions (the choice only precedes full versions); rows with `seed_version` = trunc and `n_decks` > 1 are the first 8 participants |
 | deck_default_pos | 1–3 | WT_K: display position of the default deck (the sequence's own band) |
 | deck_chosen_pos | 1–3 | WT_K: display position of the deck played |
 | chose_default | 0/1 | WT_K: the deck played was the default (always 1 with one deck) |
@@ -269,7 +269,7 @@ The single-offer columns above (`pause`, `pause_*`, `alt_duration`, `alt_window_
 | p_all | 0–1 | Chance that all the winning cards fall within the first 10 cards, given h and their actual orange cards (≈ `p_band`). WT_N: within the calibration window (`calib_window` cards of the full sequence, `n_first_half` of them orange), the same in both versions of a pair |
 | seed_id | text | The design shared by a pair (`Seeds` sheet) |
 | seed_version | full / trunc | The version played: whole design, or cut at its first shown offer |
-| seed_role | text | `pair` (completes a design from the pool), `new` (created it; the other version goes to the pool), `unpaired` (no shown offer, or offline), `released` (another deck was chosen: back to the pool) |
+| seed_role | text | `pair` (completes a design from the pool), `new` (created it; the other version goes to the pool), `unpaired` (no shown offer, or offline), `released` (another deck was chosen when completing a waiting sequence: back to the pool). From 2026-10-29 a `new` full version is pooled only once its deck is chosen and only if it is the assigned one; with a worse deck it is `unpaired` and nothing is pooled |
 | trunc_offset | number | Cards removed at the start (`trunc`: the design's first offer point; `full`: 0). The same point in the full design is `offer_pos + trunc_offset` |
 
 ## Sheet: `Seeds` (WT_M: the pairing pool)

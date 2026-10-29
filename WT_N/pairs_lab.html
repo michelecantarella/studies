@@ -518,7 +518,7 @@ function drawOffersM_(win, subRegime){
   // WT_N: only offers whose fair alternative is within [CFG.altFairLo, altFairHi] (the 5th–95th
   // percentiles of the fair value): outside it the sequence is redrawn (regimes 1–2, designSeed_)
   // or, in regime 3 (never redrawn), played without an offer.
-  const outOfBounds = shown && (alt.eStay < CFG.altFairLo || alt.eStay > CFG.altFairHi);
+  const outOfBounds = shown && !win.noBounds && (alt.eStay < CFG.altFairLo || alt.eStay > CFG.altFairHi); // not for worse decks (win.noBounds): longer by construction
   if(outOfBounds) shown = false;
   const offer = Object.assign({ k: 1, pos, missing: r, found, wasted, certain: !wasted && r > 0 && ahead < r, outOfBounds, shown }, shown ? alt : {});
   return { winners, offers: [offer] };
@@ -578,7 +578,7 @@ function designSeed_(qIdx, regime, opts){
     }
     const nums = []; live.forEach((v, k) => { if(v) nums.push(k + 1); });
     const subRegime = opts.subRegime != null ? opts.subRegime : (regime === 0 ? pick([1, 2]) : regime);
-    const win = { length, live, liveTaskNumbers: nums, q: h, nW: n };
+    const win = { length, live, liveTaskNumbers: nums, q: h, nW: n, noBounds: !!opts.noBounds };
     const plan = drawOffersM_(win, subRegime);
     if(subRegime !== 3 && !plan.offers.some(o => o.shown) && tries < 50){ // regimes 1–2: the offer must be shown (not certain, within bounds); regime 3: never redrawn
       const o0 = plan.offers[0] || {}; redrawWhy[o0.outOfBounds ? 'out_of_bounds' : o0.certain ? 'certain' : 'no_room']++;
@@ -653,13 +653,17 @@ function drawRewardSplit_(){
   return { pool: toMoney(poolUnits), split: units.map(toMoney) };
 }
 // The decks shown before a sequence: the assigned one (the seed's version) and,
-// with 2 or 3 decks, worse ones made relative to it: same h and number of
+// with 2 or 3 decks, worse ones made relative to it. WT_N: only in the FULL
+// version — the choice is part of the sequence's past, like the cards completed;
+// the truncated version starts at the offer and always shows its one deck. Every
+// deck carries its design (seedDesign). Worse decks are never pooled: same h and number of
 // winning cards and decay shape, sparser (initial density × CFG.deckD1Lo–Hi) and longer
 // (2 … CFG.deckLenAddMax cards more), kept only if MUCH worse — fewer orange
 // cards and at least max(CFG.deckWorseAbsM, CFG.deckWorseRelM × E) more expected cards.
 function buildDeckChoiceM_(seed, version, regime){
   const def = taskFromDeck_(seed, deckFromSeed_(seed, version));
-  const n = pick(CFG.deckCounts), decks = [def];
+  def.seedDesign = seed;
+  const n = version === 'trunc' ? 1 : pick(CFG.deckCounts), decks = [def];
   let tries = 0, best = null;
   const margin = Math.max(CFG.deckWorseAbsM, CFG.deckWorseRelM * def.eStart);
   const worse = d => d.liveTaskNumbers.length < def.liveTaskNumbers.length && d.eStart >= def.eStart + margin;
@@ -668,9 +672,10 @@ function buildDeckChoiceM_(seed, version, regime){
     const s = designSeed_(seed.qIdx, regime, { nW: def.nW, q: def.q, gift: false, subRegime: seed.subRegime,
       length: Math.min(CFG.lengthHi + CFG.deckLenAddMax, def.length + rnd(2, CFG.deckLenAddMax)),
       d1: seed.d1 * (CFG.deckD1Lo + Math.random() * (CFG.deckD1Hi - CFG.deckD1Lo)), calibW: seed.calibW, minWindow: def.nW,
-      shape: seed.shape || { rho: 1, tau: 1, a: 0 }, debtK: seed.debtK });
+      shape: seed.shape || { rho: 1, tau: 1, a: 0 }, debtK: seed.debtK, noBounds: true }); // a worse deck may be chosen (then played unpaired): its offer must be shown even if its alternative is long
     s.gift = seed.gift && def.nW === seed.nW; // same tracker look as the assigned deck
     const d = taskFromDeck_(s, Object.assign(deckFromSeed_(s, 'full'), { nBoxes: def.nBoxes, prefilled: def.prefilled }), { isWorseDeck: true });
+    d.seedDesign = s;
     if(worse(d) || tries > CFG.deckTriesMax){ decks.push(worse(d) ? d : (best && best.eStart > d.eStart ? best : d)); tries = 0; best = null; }
     else if(!best || d.eStart > best.eStart) best = d;
   }
@@ -711,8 +716,9 @@ async function prepareSeedPlan_(){
     const seed = designSeed_(b, regime), pairable = seed.offers.some(o => o.shown) && pooled && !_clearMode;
     const version = pairable ? versions[i] : 'full';
     const id = newSeedId_();
-    plan.push({ seed_id: id, version, role: pairable ? 'new' : 'unpaired', seed });
-    if(pairable) fresh.push({ seed_id: id, band: b, version, design: seed });
+    // a new full version is pooled when its deck is chosen (applyDeckChoice_), and only if it is the assigned deck
+    plan.push({ seed_id: id, version, role: pairable ? 'new' : 'unpaired', seed, pendingAdd: pairable && version === 'full' });
+    if(pairable && version === 'trunc') fresh.push({ seed_id: id, band: b, version, design: seed });
   });
   SESSION.seedPlan = plan;
   if(fresh.length) seedPost_({ action:'seedAdd', pid:_prolificID, study_id:_studyID, seeds: fresh });
@@ -750,13 +756,24 @@ function generateTasks(){
   });
 }
 // Swap the deck chosen on the briefing screen into the task (display position k).
-// A deck other than the assigned one breaks the pairing: the seed version goes
-// back to the pool (released) and the sequence is played unpaired.
+// WT_N: a new full version is pooled only if the assigned deck is chosen; with a
+// worse deck the sequence is played unpaired and nothing is pooled (no one else is
+// made to play a worse deck). When the sequence already exists (closing a pair), a
+// deck other than the assigned one breaks the pairing: the version goes back to the
+// pool (released) and the sequence is played unpaired.
 function applyDeckChoice_(task, k){
   if(!task || !task.deckOptions) return;
   task.deckChosenPos = k;
   const keep = { seedId: task.seedId, seedVersion: task.seedVersion, seedRole: task.seedRole };
   Object.assign(task, task.deckOptions[k], keep);
+  const p = (SESSION.seedPlan || [])[task.index];
+  if(task.seedRole === 'new' && task.seedVersion === 'full' && p && p.pendingAdd){
+    p.pendingAdd = false;
+    if(k === task.deckDefaultPos && p.seed && (p.seed.offers || []).some(o => o.shown)){
+      seedPost_({ action:'seedAdd', pid:_prolificID, study_id:_studyID, seeds: [{ seed_id: task.seedId, band: p.seed.qIdx, version: 'full', design: p.seed }] });
+    } else task.seedRole = 'unpaired';
+    return;
+  }
   if(k !== task.deckDefaultPos){
     if(task.seedRole === 'pair' || task.seedRole === 'new') seedPost_({ action:'seedRelease', pid:_prolificID, seed_id: task.seedId, version: task.seedVersion });
     task.seedRole = 'released';

@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WT_N deck alternatives lab</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{ --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54; --bdr:#d8d4c8; --red:#c84b2f; --green:#2e7d4f; --blue:#2f6fc8; --or:#f3a53a; --or2:#c98416; --gold:#f2c230;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;padding:1rem 16px 3rem;}
+.wrap{max-width:1400px;margin:0 auto;}
+h1{font-family:var(--mono);font-size:1.1rem;margin-bottom:.3rem;}
+h2{font-family:var(--mono);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:0 0 .5rem;}
+.box{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:.9rem 1rem;margin-bottom:1rem;}
+.intro{font-size:.84rem;line-height:1.55;color:var(--ink2);max-width:1050px;}
+.intro b{color:var(--ink);}
+.ctl{display:flex;gap:.9rem;flex-wrap:wrap;align-items:flex-end;margin-top:.7rem;}
+.ctl label{display:flex;flex-direction:column;gap:.2rem;font-size:.75rem;color:var(--ink2);}
+.ctl label.chk{flex-direction:row;align-items:center;gap:.35rem;}
+.ctl input,.ctl select{font-family:var(--mono);font-size:.8rem;padding:.3rem .4rem;border:1px solid var(--bdr);border-radius:6px;background:var(--bg);}
+.ctl input[type=number]{width:78px;}
+fieldset{border:1px solid var(--bdr);border-radius:8px;padding:.4rem .6rem .55rem;display:flex;gap:.7rem;align-items:flex-end;flex-wrap:wrap;}
+legend{font-family:var(--mono);font-size:.7rem;color:var(--ink2);padding:0 .3rem;}
+button{font-family:var(--mono);font-size:.76rem;padding:.5rem .9rem;border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;border-radius:6px;}
+button:hover{background:transparent;color:var(--ink);}
+button.ghost{background:transparent;color:var(--ink);}
+button.ghost:hover{background:var(--ink);color:var(--bg);}
+.info{font-family:var(--mono);font-size:.74rem;line-height:1.7;color:var(--ink2);}
+.info b{color:var(--ink);}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.72rem;}
+th,td{border:1px solid var(--bdr);padding:.3rem .4rem;text-align:right;white-space:nowrap;}
+th{background:var(--bg);text-align:center;}
+td.l{text-align:left;}
+.tw{overflow-x:auto;}
+.seq{border-top:1px solid var(--bdr);padding:.7rem 0 .8rem;}
+.seq:first-child{border-top:none;}
+.ph{font-family:var(--mono);font-size:.74rem;color:var(--ink2);line-height:1.6;margin-bottom:.35rem;}
+.ph b{color:var(--ink);}
+.row{display:grid;grid-template-columns:330px minmax(0,1fr);gap:.6rem;align-items:center;margin:.3rem 0;}
+.lab{font-family:var(--mono);font-size:.68rem;color:var(--ink2);line-height:1.4;}
+.lab b{color:var(--ink);}
+.tag{display:inline-block;font-weight:700;padding:0 .35rem;border-radius:4px;margin-right:.3rem;color:#fff;}
+.tag.def{background:var(--ink);} .tag.cur{background:var(--red);} .tag.low{background:var(--blue);} .tag.eq{background:var(--green);}
+.bad{color:var(--red);font-weight:600;}
+.okc{color:var(--green);}
+.strip{display:grid;gap:2px;}
+.c{height:20px;border-radius:4px;border:1.5px solid #b8b3a5;background:#fff;font-family:var(--mono);font-size:10px;font-weight:700;color:#7a5600;display:flex;align-items:center;justify-content:center;}
+.c.o{background:var(--or);border-color:var(--or2);}
+.c.w{background:var(--gold);border-color:#b8860b;}
+.c.win{box-shadow:inset 0 -3px 0 #7a5cc8;}
+.c.offer{outline:2px solid var(--blue);outline-offset:0;}
+.c.empty{border:none;background:transparent;}
+.legend{font-size:.72rem;color:var(--ink2);display:flex;gap:.9rem;flex-wrap:wrap;margin:.2rem 0 .4rem;}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:.3rem;border:1.5px solid #b8b3a5;}
+@media(max-width:800px){ .row{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="box">
+    <h1>WT_N deck alternatives lab</h1>
+    <p class="intro">For each sequence drawn with <b>WT_N's own generator</b> (copied verbatim from <code>index.html</code>), the <b>assigned deck</b> and its alternatives under three rules:
+      <b style="color:var(--red)">current</b> — as the study now: same chance per box and decay shape, initial density × 0.45–0.70, 2–5 cards longer, no window minimum, no bounds on the alternative, kept if fewer orange cards and at least max(6, 40% of E) more expected cards (else the worst found);
+      <b style="color:var(--blue)">lower p_inside</b> — a main-rule sequence (same chance per box, winning cards, length and window; density × the range below; its own decay fit; the window minimum; the 4.7–26 bounds), kept if it has fewer orange cards and at least the margin below in extra expected cards, so its p_inside is lower only through the lower density;
+      <b style="color:var(--green)">equivalent</b> — a new draw of the same sequence (same chance per box, winning cards, length, window, initial density and debt share; main rules).
+      <b>E</b> = expected main cards from the start to the last winning card; <b>p_inside</b> = chance that all the winning cards fall within the window, on its orange cards as drawn; <b>p_end</b> = chance of finding them all before the last card; <b>rules</b> lists the main-sequence rules a deck breaks.</p>
+    <div class="ctl">
+      <label>Sequences<input type="number" id="n-seq" value="8" min="1" max="500"></label>
+      <label>Band<select id="band"><option value="-1" selected>each 1–5 in turn</option><option value="0">1</option><option value="1">2</option><option value="2">3</option><option value="3">4</option><option value="4">5</option></select></label>
+      <label>Winning cards<select id="nw"><option value="0" selected>as WT_N (5 / 20 / 75%)</option><option value="1">1</option><option value="2">2</option><option value="3">3</option></select></label>
+      <label>Regime<select id="regime"><option value="0" selected>0 (each sequence 1 or 2)</option><option value="1">1</option><option value="2">2</option></select></label>
+      <label>Alternatives per rule<input type="number" id="n-alt" value="2" min="1" max="6"></label>
+      <fieldset><legend>rules</legend>
+        <label class="chk"><input type="checkbox" id="m-cur" checked>current</label>
+        <label class="chk"><input type="checkbox" id="m-low" checked>lower p_inside</label>
+        <label class="chk"><input type="checkbox" id="m-eq" checked>equivalent</label>
+      </fieldset>
+      <fieldset><legend>lower p_inside</legend>
+        <label>density × from<input type="number" id="low-lo" value="0.45" step="0.05" min="0.1" max="1"></label>
+        <label>to<input type="number" id="low-hi" value="0.70" step="0.05" min="0.1" max="1"></label>
+        <label>extra E ≥ cards<input type="number" id="low-abs" value="0" step="0.5" min="0"></label>
+        <label>and ≥ share of E<input type="number" id="low-rel" value="0" step="0.05" min="0"></label>
+        <label>tries<input type="number" id="low-tries" value="40" min="1" max="500"></label>
+      </fieldset>
+      <label class="chk"><input type="checkbox" id="show-win">show winning cards and offer</label>
+      <button onclick="generate()">Generate</button>
+      <button class="ghost" onclick="downloadCSV()">Download CSV</button>
+    </div>
+    <div id="status" class="info" style="margin-top:.6rem;">—</div>
+  </div>
+  <div class="box" id="sum-box" style="display:none;">
+    <h2>Summary by rule</h2>
+    <div class="tw"><div id="sum-table"></div></div>
+  </div>
+  <div class="box" id="list-box" style="display:none;">
+    <h2>Sequences</h2>
+    <div class="legend"><span><i style="background:#fff"></i>white</span><span><i style="background:var(--or);border-color:var(--or2)"></i>orange</span><span><i style="background:var(--gold);border-color:#b8860b"></i>winning card (this draw)</span><span><i style="outline:2px solid var(--blue)"></i>card at the offer</span><span><i style="box-shadow:inset 0 -3px 0 #7a5cc8"></i>calibration window</span></div>
+    <div id="list"></div>
+  </div>
+</div>
+<script>
+// ── WT_N's generator (verbatim from WT_N/index.html; refresh with WT_N/tools/sync_wtn_code.js) ──
+const WTN = (function(){
+/*__WTN_BEGIN__*/
+const CFG = {
+  numTasks:   5,
+  // 3×3 grid (was 5×5) — nine cells, so each task is quicker: 9 × 500ms =
+  // 4.5s reveal + 2.5s countdown = ~7s per grid (was ~15s).
+  gridR:      3,
+  gridC:      3,
+  revealMs:   500, // per-cell reveal interval — 9 cells × 500ms = 4.5s reveal phase
+  submitSecs: 2.5, // 4.5s reveal + 2.5s = ~7s total per grid — see showSubmit()/trainShowCountdown_()
+  // ── ONE SEQUENCE PER SECTION (WT_F) ──────────────────────────────
+  // No more looping hands: each section's main sequence is a single window
+  // of `length` cards, all shown on screen from the start. Every card is
+  // independently marked live (orange, can be the winning card) or safe
+  // (white); the LAST card is always orange. `pInside` (disclosed) is the
+  // chance the winning card is somewhere in the window; if it is, it's
+  // uniform over the orange cards. If the window runs out without a
+  // winning card, the participant is moved onto the alternative
+  // automatically (reward kept) — see autoSwitchOrDefer_().
+  // Window length ~ Uniform[winLo, winHi].
+  winLo:      30,   // WT_N: main sequence of 30–35 cards (worse decks up to 40); see lengthLo/Hi
+  winHi:      35,
+  // ── WT_N ──
+  lengthLo: 30, lengthHi: 35,    // cards per sequence, uniform, drawn first
+  calibWBase: 2, calibWStep: 2, calibWSpan: 4, // calibration window W ~ U(2 + 2n, 6 + 2n) cards (n = winning cards)
+  d0By: {1: [0.40, 0.60], 2: [0.55, 0.65], 3: [0.55, 0.65]}, // initial density (chance the first card is orange) by winning cards, drawn per sequence; then the fitted decay (fitDecay_; none with 1)
+  decayMaxLonger: 1.5,           // the decay may lengthen the fair alternative at the offer by at most this factor (vs no decay)
+  decayDMin: 0.03,               // lowest density of any card
+  drawDebtKLo: 0.75, drawDebtKHi: 1, // share of the orange-card 'debt' carried to the next card, drawn per sequence (drawWithDebt_)
+  decayMaxStep: 0.12,            // no card more than 12% less likely to be orange than the one before (no cliffs)
+  decayFitOffer: 1,              // offer position (cards completed) the decay is fitted for (the offer comes at 0–3)
+  altNoiseShare: 0.15,           // the alternative = its fair value × (1 ± U(0, 15%))
+  altMin: 5,                     // and at least 5 cards
+  maxOffers: 1,                  // ONE offer per sequence (no re-offers)
+  altMaxFactor: 2,               // the alternative is at most 2 × the cards left at the offer
+  // WT_N: reaching the last card without all the winning cards moves the participant onto the alternative (as WT_F)
+  deckTriesMax: 40,              // worse-deck candidates tried before taking the worst found
+  minWindowBy: {1: 1, 2: 4, 3: 7}, // orange cards guaranteed in the calibration window, by number of winning cards (so the top band can be reached)
+  // ── WT_M ──
+  lengthM:    30,   // WT_M only (unused in WT_N: lengthLo/Hi)
+  d1Lo: 0.40, d1Hi: 0.60,        // WT_M only (WT_N: d0By)
+  decayLo: 0.75, decayHi: 0.90,  // WT_M only (WT_N: fitDecay_)
+  minOrangePerSection: 0,        // WT_N: no minimum after the calibration window
+  nWinnersLo: 1, nWinnersHi: 3,  // WT_M only (WT_N: nWinnersW)
+  nWinnersW: [0.05, 0.20, 0.75], // WT_N: 1 / 2 / 3 winning cards in 5 / 20 / 75% of the sequences (truncated versions show only the winning cards still missing, mostly one: over both versions, about 39 / 22 / 38% of the sequences played show 1 / 2 / 3 boxes)
+  minOrangeWindowBy: {1: 3, 2: 4, 3: 6}, // WT_M only (WT_N: at least n orange cards in the calibration window)
+  hMaxBy: {1: 0.95, 2: 0.50, 3: 0.33},   // cap on h so that (missing) × h ≤ 1
+  giftShowP: 0,     // WT_N: no boxes already filled at the start (WT_M: 0.5)
+  firstOfferMax: 3, // WT_M only (WT_N: offerLo/Hi, see drawOffersM_)
+  offerLo: 1, offerHi: 10, // WT_N: the offer after 1–10 cards completed (before the last winning card)
+  offerPosPow: 2,   // WT_N: P(offer after k cards) ∝ k² (mostly late)
+  altFairLo: 4.7, altFairHi: 26, // WT_N: offers only with the fair alternative within its 5th–95th percentiles (simulated, before the cut)
+  regimeW: {0: 0.25, 1: 0.25, 2: 0.25, 3: 0.25}, // WT_N: share of participants per placement regime. Regime 3 is off (&noreg3=1) for the pilots and the first 1,000 participants, and added for the rest only if regimes 1 and 2 differ (prereg §34): then a quarter each
+  offerGapMax: 7,   // later offers: within this many cards after the previous winning card
+  altWhiteFloor: false, // the WT_K/WT_L "longer than the longest white run" floor on the alternative (off)
+  deckD1Lo: 0.45, deckD1Hi: 0.70, // worse decks: first-window density × this
+  deckWorseAbsM: 6, deckWorseRelM: 0.4, // worse decks: at least max(6, 40% of E) more expected cards than the assigned one
+  calibCards: 10,   // WT_L: q is calibrated on the first 10 cards (the offer comes by 3/4 of them)
+  bodyCards:  20,   // WT_L: used only by the old Beta families (unused): they spanned cards 1–20
+  qFreq:      'realized', // WT_L: how q is calibrated — 'realized' (on the first calibCards' actual orange cards: three winning cards fall there in p_inside% of the cases, sequence by sequence), 'window' (their expected share) or 'seq' (whole sequence); see drawSeqL_
+  hazard: 'split',      // WT_L: 'split' — each missing winning card has chance h (shown in its box) of being on the orange card in play; 'const' — every orange card w.p. q. See hazR_
+  hMax: 0.33,           // WT_L 'split': h at most 33% (3 missing → a card is a winner w.p. ≤ 99%)
+  minOrangeWindow: 6,   // WT_L: orange cards guaranteed (at random positions) in the first calibCards cards, so h can reach the top band; the tail always gets nWinners
+  maxWhiteRunCap: 8, // WT_L: if set, no run of white cards longer than this (a random card of a longer run is turned orange until none is left); null = off
+  altNoiseScale: 1,     // WT_L 'noise' alternative: half-width of the variation, in units of the gap to the nearest scenario (see drawAltTrue_)
+  // Each non-final card's live/safe mark is an independent draw, orange with
+  // this probability — NOT tied to pInside, which governs only whether the
+  // winning card is in the window at all. See drawLiveMask_().
+  liveMarkP:  0.4,
+  // End probability: [min,max] cut into 5 equal-width bands; each section
+  // draws from its own band (no band repeated), uniformly, rounded to the
+  // nearest 5% — see P_QUINTILES_.
+  pInsideMin:  0.10,
+  pInsideMax:  0.90,
+  // WT_M: the five p_inside bands, explicit (each respondent gets one sequence per band;
+  // within a band the value is uniform over its list).
+  pBandValues: [[0.25, 0.30, 0.35], [0.40, 0.45], [0.50], [0.55, 0.60], [0.65, 0.70, 0.75]], // WT_N: the extremes (10–20%, 80–90%) dropped
+  // Offer position: Beta(a,a) over the window (a>1 → centred, offers at the
+  // very start or end rarer), discretised into one slice per card — see
+  // drawPause_(). Truncated at the ending when the ending is drawn first.
+  pauseBetaA: 1,   // Beta(1,1) = uniform over the positions where the offer can be placed (validPause_)
+  // ── WT_J: two windows, two peaks (see drawTwoMass_) ──
+  orangeShareLo: 0.50, // share of all cards that are orange (WT_L: 50%; WT_K: 35–50%)
+  orangeShareHi: 0.50,
+  nWinners: 3,         // winning cards needed; the sequence ends at the third
+  altScenIMax: 2,      // WT_L 'scenI': the alternative is at most twice the cards left
+  altPythScale: 1.12,  // WT_L: hypotenuse = cards left × this, calibrated so that switching beats the geometric-mean cost of staying in about half of the offers
+  altRule: 'noise',    // WT_L: 'noise' (expected cards in the actual scenario ± a random variation, used), 'scen' (WT_K's scenarios) or 'pyth' (WT_F's right triangle); see drawAltTrue_
+  pauseDistDraws: 400, // WT_L: draws used to compute the regime-1 offer distribution for regimes 2 and 3
+  deckOrangeLo: 0.30,  // WT_L: orange share of the worse decks (of all their cards, guaranteed ones included)
+  deckOrangeHi: 0.40,
+  // WT_L: shape of the orange cards along the sequence (see drawShape_): one
+  // family per sequence, mixed with a flat floor so no stretch is ever empty
+  // or crowded.
+  shapeFamilies: ['uniform'], // WT_L: uniform only ('mass1'/'mass2'/'mass3' available in drawShape_, unused)
+  massShare: 0.40,     // share of the orange weight carried by the mass points (the rest is the uniform base)
+  massSdLo: 2,         // spread of each mass point, in cards: U(2, 4)
+  massSdHi: 4,
+  shapeFloor: 0.30,    // every card keeps at least 30% of the average orange chance
+  shapeMaxRatio: 2.5,  // shapes peaking above 2.5× their average are redrawn
+  offerHalfShare: 0.75, // WT_L: offer uniform from the start to 3/4 of the calibration window (calibCards)
+  // WT_K: weights of the scenarios 0 / 1 / 2 winning cards found, given the
+  // number actually found (row); calibrated for switching better in ~50% of offers.
+  altScenW: { 0: [0.50, 0.50, 0], 1: [0.25, 0.50, 0.25], 2: [0, 0.50, 0.50] }, // WT_L: 50% the actual number found, the rest the nearest scenario(s)
+  deckCounts: [1, 2, 3], // WT_K: decks shown before each sequence, drawn per sequence
+  deckWorseAbs: 4,     // a non-default deck needs at least 4 more expected cards
+  deckWorseRel: 1.25,  //   and 25% more than the default
+  deckLenAddMax: 5,    // a worse deck may be up to 5 cards longer, so no deck exceeds winHi + 5 = 40 cards
+  maxDensity: 0.6,     // per-card density cap in a window (see drawTwoMass_)
+  minPeak: 2,          // at least 2 orange cards in each window
+  adjPenalty: 0.35,    // weight of a card next to an orange card (see placeBell_): breaks up solid orange blocks
+  cardPMax: 0.75,      // no card more than 75% likely to be orange
+  bump1: 0,            // WT_J: per-card density 1-bump at a window's edges, 1+bump at its centre, first window (see drawTwoMass_)
+  bump2: 0,            //   and second window (0 = uniform: each section has one density, set by pInside)
+  offerLoShare: 0,     // earliest offer: before the first card (sunk time must vary from zero)
+  peakSd: 0.20,        // spread (unused since the binomial windows) of the orange cards around each window's middle, as a share of its length
+  gapLo: 0, gapHi: 0,  // no white cards forced between the two windows: the dead zone comes only from their sparse edges
+  offerShare: 0.35,    // latest offer at 35% of the whole sequence, and before the left section's last orange card (pauseCap_)
+  altSd: 0.15,         // alternative = E[cards left] × (1 + e), e ~ N(0, altSd) truncated to ±altSpread
+  altSpread: 0.30,
+  altShortP: 0.50,     // chance the alternative is drawn shorter than E (WT_K: with three winning cards a shorter one almost always fits)
+  // Rewards: each respondent gets a total pool ~ Uniform{1.00, 1.05, …, 1.50},
+  // split at random across the 5 sequences, each getting at least rewardMin,
+  // in steps of rewardStep — see drawRewardSplit_(). Independent of the
+  // sequences' own draws, so a reward never leaks anything about them.
+  rewardPoolLo: 1.00,
+  rewardPoolHi: 1.50,
+  rewardMin:    0.10,
+  rewardStep:   0.05,
+};
+const rnd  = (a,b) => Math.floor(Math.random()*(b-a+1))+a;
+const pick = a => a[Math.floor(Math.random()*a.length)];
+const shuf = a => { const r=[...a]; for(let i=r.length-1;i>0;i--){const j=rnd(0,i);[r[i],r[j]]=[r[j],r[i]];} return r; };
+
+function pickWeighted_(w){
+  const tot = w.reduce((a,b)=>a+b,0);
+  let r = Math.random()*tot;
+  for(let i=0;i<w.length;i++){ r -= w[i]; if(r < 0) return i; }
+  return w.length-1;
+}
+const _pauseW = {};
+function pauseWeights_(L){
+  if(_pauseW[L]) return _pauseW[L];
+  const a = CFG.pauseBetaA, SUB = 50, w = [];
+  for(let k=0;k<L;k++){
+    let s=0;
+    for(let j=0;j<SUB;j++){ const x=(k+(j+0.5)/SUB)/L; s += Math.pow(x,a-1)*Math.pow(1-x,a-1); }
+    w.push(s);
+  }
+  return (_pauseW[L] = w);
+}
+// `ok(k)` (optional) restricts the support further (see validPause_).
+function drawPause_(L, maxPause, ok){
+  const w = pauseWeights_(L).slice(0, Math.max(0, maxPause)+1).map((x,k)=> (!ok || ok(k)) ? x : 0);
+  return w.some(x=>x>0) ? pickWeighted_(w) : 0;
+}
+
+// ── QUINTILE-STRATIFIED PROBABILITY ─────────────────────────────────
+// [pInsideMin,pInsideMax] = [10%,90%] is cut into 5 bands of EQUAL WIDTH
+// (16 points each: 10–26, 26–42, 42–58, 58–74, 74–90).
+// SESSION.pQuintileOrder (shuffled once at consent) assigns one band to each
+// section — drawn without replacement, so every respondent sees exactly one
+// section from each band, in random order. Within its band pInside is drawn
+// uniformly and rounded to the nearest 5%.
+//
+// Rounding is done so that bands never overlap: each 5% value belongs to the
+// band containing it (10–25, 30–40, 45–55, 60–70, 75–90), and the draw is
+// uniform over those values — the same as a uniform draw over the band's
+// share of the line followed by rounding, with no value reachable from two
+// bands.
+const P_GRID_ = (function(){
+  const g=[]; for(let v=CFG.pInsideMin; v<=CFG.pInsideMax+1e-9; v+=0.05) g.push(Math.round(v*20)/20);
+  return g;
+})();
+// WT_M: the five bands are set explicitly (CFG.pBandValues) instead of cut
+// into equal widths. WT_N: 25–35, 40–45, 50, 55–60, 65–75 (5% steps).
+const P_QUINTILES_ = (function(){
+  return CFG.pBandValues.map(values => ({ lo: values[0], hi: values[values.length-1], values: values.slice() }));
+})();
+// Draw pInside from band `qIdx` (0-4): uniform over its 5% values.
+function drawPInsideFromQuintile_(qIdx){
+  return pick(P_QUINTILES_[qIdx].values);
+}
+
+// The sequence's live/safe pattern: every card but the last is
+// independently, randomly marked live (w.p. CFG.liveMarkP) or safe (mixed,
+// not blocks); the last card is ALWAYS live, so the window always closes on
+// a card that could have been the winning one.
+function drawLiveMask_(length){
+  const live = Array.from({length}, ()=> Math.random() < CFG.liveMarkP);
+  live[length-1] = true;
+  return live;
+}
+function liveTaskNumbersOf_(live){
+  const out=[]; for(let k=0;k<live.length;k++) if(live[k]) out.push(k+1); // 1-indexed card numbers
+  return out;
+}
+
+// ── Participant-perspective benchmarks ──
+// Participants know nothing about the regimes or the pairing, so every
+// benchmark uses the beliefs of the model they are told about: each winning
+// card still missing has the same chance h (shown in each empty box of the
+// tracker) of being on the orange card in play, at most one per card, so with
+// r missing an orange card is a winning card w.p. r·h, independently card by
+// card. The regime is never used.
+//
+// ── WT_M ──
+// One sequence of CFG.lengthM cards (worse decks longer). Orange cards are
+// dense at the start and thin out: the first 10 cards are orange w.p. d1
+// (U(CFG.d1Lo, d1Hi)), cards 11–20 w.p. d1·f, 21–30 w.p. d1·f², and so on,
+// with the decay f ~ U(CFG.decayLo, decayHi) per sequence; at least
+// CFG.minOrangeWindowBy[n] orange cards in the first 10 (random positions).
+// The number of winning cards n is 1, 2 or 3 (uniform). h is calibrated on the
+// first 10 cards' actual orange cards so that all n winning cards fall there in
+// p_band% of the cases. With n < 3 the tracker shows either n boxes or 3 boxes
+// with 3 − n already filled (CFG.giftShowP). The sequence ends on the n-th
+// winning card or on its last card (the reward is earned either way).
+// Offers: the first between card 0 and CFG.firstOfferMax; then one after each
+// winning card, between it and the next (at most CFG.offerGapMax cards after
+// it), following the regimes; each re-sets the alternative, which stays
+// available in between. Every sequence is a "seed" that is played in full by
+// one participant and truncated at its first shown offer by another (paired).
+function nW_(win){ return win && win.nW != null ? win.nW : CFG.nWinners; }
+function winnersFound_(win, lp){
+  return (win.winners || []).filter(m => m <= lp).slice(0, nW_(win)).length;
+}
+function comb_(n, k){ if(k < 0 || k > n) return 0; let c = 1; for(let i = 1; i <= k; i++) c = c * (n - k + i) / i; return c; }
+function pAtLeast_(n, r, q){
+  let below = 0; for(let i = 0; i < r && i <= n; i++) below += comb_(n, i) * Math.pow(q, i) * Math.pow(1 - q, n - i);
+  return Math.max(0, 1 - below);
+}
+// With r winning cards missing, an orange card holds one w.p. r·h.
+function hazR_(h, r){ return Math.min(1, r * h); }
+// P(all r missing winning cards found within n orange cards in a row).
+function pFoundWithin_(n, h, r){
+  let st = new Array(r + 1).fill(0); st[r] = 1;
+  for(let i = 0; i < n; i++){
+    const nx = new Array(r + 1).fill(0); nx[0] = st[0];
+    for(let k = 1; k <= r; k++){ const p = hazR_(h, k); nx[k] += st[k] * (1 - p); nx[k-1] += st[k] * p; }
+    st = nx;
+  }
+  return st[0];
+}
+// h with P(all r within W orange cards) = p, capped so that r·h ≤ 1.
+function hForP_(W, p, r){
+  let lo = 0, hi = CFG.hMaxBy[r];
+  for(let i = 0; i < 50; i++){ const m = (lo + hi) / 2; if(pFoundWithin_(W, m, r) < p) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+// End-card distribution from lp with r missing (default: those actually missing).
+function endDist_(win, lp, rIf){
+  const ahead = win.liveTaskNumbers.filter(m => m > lp), q = win.q;
+  const r = rIf != null ? rIf : nW_(win) - winnersFound_(win, lp);
+  if(r <= 0) return { d: [], pNo: 0 };
+  let st = new Array(r + 1).fill(0); st[r] = 1; const d = [];
+  for(const m of ahead){
+    const nx = new Array(r + 1).fill(0);
+    for(let k = 1; k <= r; k++){ if(!st[k]) continue; const p = hazR_(q, k); nx[k] += st[k] * (1 - p); if(k === 1) d.push({ card: m, p: st[k] * p }); else nx[k-1] += st[k] * p; }
+    st = nx;
+  }
+  return { d, pNo: Math.max(0, st.reduce((s, v) => s + v, 0)) };
+}
+// Expected MAIN-sequence cards still to play from lp (to the last winning card, or to the end).
+function eRemaining_(win, lp){
+  const { d, pNo } = endDist_(win, lp);
+  return d.reduce((s, x) => s + x.p * (x.card - lp), 0) + pNo * (win.length - lp);
+}
+function eRemainingIf_(win, lp, r){
+  const { d, pNo } = endDist_(win, lp, r);
+  return d.reduce((s, x) => s + x.p * (x.card - lp), 0) + pNo * (win.length - lp);
+}
+function pAhead_(win, lp){
+  if(nW_(win) - winnersFound_(win, lp) <= 0) return 0;
+  return 1 - endDist_(win, lp).pNo;
+}
+// WT_N: reaching the last card without all the winning cards means doing the
+// alternative, so staying costs the main cards plus, if not completed, the alternative.
+function stayCost_(win, lp, altDur){ return eRemaining_(win, lp) + (1 - pAhead_(win, lp)) * (altDur || 0); }
+function stayCostGeo_(win, lp, altDur){
+  const { d, pNo } = endDist_(win, lp);
+  let el = d.reduce((s, x) => s + x.p * Math.log(x.card - lp), 0);
+  if(pNo > 0) el += pNo * Math.log((win.length - lp) + (altDur || 0)); // WT_N: then the alternative
+  return Math.exp(el);
+}
+function maxWhiteRun_(win){
+  let r = 0, best = 0;
+  for(const v of win.live){ r = v ? 0 : r + 1; best = Math.max(best, r); }
+  return best;
+}
+// Fewest cards to the end if staying from `pause`: the r-th orange card ahead.
+function bestCase_(win, pause, rIf){
+  const ahead = win.liveTaskNumbers.filter(m => m > pause), r = rIf != null ? rIf : nW_(win) - winnersFound_(win, pause);
+  return r > 0 && ahead.length >= r ? ahead[r-1] - pause : 0;
+}
+function lastWinner_(win){ const n = nW_(win), w = win.winners || []; return w.length >= n ? w[n - 1] : null; }
+
+// ── WT_N: the deck ──
+// The density (chance a card is orange) decays from the first card along a
+// Pareto-type curve towards a floor:
+//   d_t = d0 · (ρ + (1 − ρ) · (1 + t/τ)^(−α)),   d0 ~ U(CFG.d0By[n]),
+// with (ρ, τ, α) fitted on each sequence so that the FAIR ALTERNATIVE for those
+// still playing — if it were offered at any card — stays as close as possible
+// to the one at the offer. For those still playing at card t (counting the
+// winning cards they may have found by then, future cards at their density),
+// staying costs E[main cards left] + P(not all found) × A, the alternative
+// being owed at the end; the fair alternative is the A equal to that cost,
+// A*(t) = Ē_t / P̄_t (fairCurve_). The fit minimises the survivor-weighted
+// distance of A*(t) from A*(offer), subject to A*(offer) ≤ CFG.decayMaxLonger ×
+// its value with no decay (a lower density later makes staying dearer at the
+// offer too) and to no card dropping more than CFG.decayMaxStep below the one before. With 1 winning card the best decay is none; with 2–3 the fair
+// alternative must dip a little on the first cards (no one can finish there),
+// and the decay wins it back later (simulated in WT_N/deck_lab.html).
+// The calibration window (the first W cards, W ~ U(CFG.calibWBase +
+// CFG.calibWStep·n, … + CFG.calibWSpan)) holds at least CFG.minWindowBy[n]
+// orange cards; h is calibrated on its orange cards as drawn, and the decay is
+// then refitted with the window as drawn (the cards after it redrawn).
+// P(orange count) for cards with chances ds.
+function countDist_(ds){ let d = [1]; for(const x of ds){ const nx = new Array(d.length + 1).fill(0); d.forEach((v, k) => { nx[k] += v * (1 - x); nx[k + 1] += v * x; }); d = nx; } return d; }
+// h with P(all r within the window) = p, in expectation over the window's densities.
+function hForPExp_(wDens, p, r){
+  const dist = countDist_(wDens), f = h => dist.reduce((s, w, k) => s + w * pFoundWithin_(k, h, r), 0);
+  let lo = 0, hi = CFG.hMaxBy[r]; if(f(hi) < p) return hi;
+  for(let i = 0; i < 40; i++){ const m = (lo + hi) / 2; if(f(m) < p) lo = m; else hi = m; }
+  return (lo + hi) / 2;
+}
+// Fair alternative for those still playing at each card from o (A) and their share (S),
+// given each card's chance of being orange xs (0/1 for cards already drawn and known).
+function fairCurve_(n, h, xs, o){
+  const L = xs.length, E = [], P = [];
+  for(let t = 0; t <= L; t++){ E.push(new Float64Array(n + 1)); P.push(new Float64Array(n + 1)); P[t][0] = 1; }
+  for(let t = L - 1; t >= o; t--) for(let r = 1; r <= n; r++){ const p = hazR_(h, r) * xs[t]; E[t][r] = 1 + p * E[t+1][r-1] + (1 - p) * E[t+1][r]; P[t][r] = p * P[t+1][r-1] + (1 - p) * P[t+1][r]; }
+  let st = new Float64Array(n + 1); st[n] = 1; const A = [], S = [];
+  for(let t = o; t < L; t++){
+    let e = 0, p = 0, s = 0; for(let r = 1; r <= n; r++){ e += st[r] * E[t][r]; p += st[r] * P[t][r]; s += st[r]; }
+    A.push(p > 1e-12 ? e / p : 1e9); S.push(s);
+    const nx = new Float64Array(n + 1); nx[0] = st[0]; for(let r = 1; r <= n; r++){ const q = hazR_(h, r) * xs[t]; nx[r] += st[r] * (1 - q); nx[r-1] += st[r] * q; } st = nx;
+  }
+  return { A, S };
+}
+// Survivor-weighted RMS and largest distance of A*(t) from A*(offer), in cards.
+function fairDrift_(c){ let a = 0, w = 0, mx = 0; for(let k = 1; k < c.A.length; k++){ const g = c.A[k] - c.A[0]; a += c.S[k] * g * g; w += c.S[k]; mx = Math.max(mx, Math.abs(g)); } return { rms: w ? Math.sqrt(a / w) : 0, mx }; }
+// Largest relative drop in density from one card to the next.
+function maxDrop_(ds){ let m = 0; for(let t = 1; t < ds.length; t++) m = Math.max(m, 1 - ds[t] / ds[t - 1]); return m; }
+function decayCurve_(d0, q, L){ return Array.from({ length: L }, (_, t) => Math.max(CFG.decayDMin, d0 * (q.rho + (1 - q.rho) * Math.pow(1 + t / q.tau, -q.a)))); }
+const DECAY_GRID_ = (() => { const g = [{ rho: 1, tau: 1, a: 0 }]; for(let i = 1; i <= 9; i++) for(const tau of [1, 2, 4, 8, 16]) for(const a of [0.5, 1, 1.5, 2, 3]) g.push({ rho: i / 10, tau, a }); return g; })();
+// The best decay for this sequence: `known` = cards already drawn (t < known.length).
+function fitDecay_(n, h, d0, o, L, known){
+  const xsOf = ds => ds.map((d, t) => t === L - 1 ? 1 : known && t < known.length ? (known[t] ? 1 : 0) : d);
+  const cap = fairCurve_(n, h, xsOf(decayCurve_(d0, { rho: 1, tau: 1, a: 0 }, L)), o).A[0] * CFG.decayMaxLonger;
+  const evalQ = q => { const ds = decayCurve_(d0, q, L), c = fairCurve_(n, h, xsOf(ds), o); return { q, ds, dv: fairDrift_(c), ok: c.A[0] <= cap + 1e-9 && maxDrop_(ds) <= CFG.decayMaxStep + 1e-9 }; };
+  let best = null;
+  for(const q of DECAY_GRID_){ const v = evalQ(q); if(v.ok && (!best || v.dv.rms < best.dv.rms)) best = v; }
+  let sR = 0.05, sT = 0.5, sA = 0.25; // local refinement
+  for(let it = 0; it < 3; it++){
+    for(const dq of [[sR,0,0],[-sR,0,0],[0,sT,0],[0,-sT,0],[0,0,sA],[0,0,-sA]]){
+      const q = { rho: Math.min(1, Math.max(0.05, best.q.rho + dq[0])), tau: Math.max(0.5, best.q.tau * (1 + dq[1])), a: Math.max(0, best.q.a + dq[2]) };
+      const v = evalQ(q); if(v.ok && v.dv.rms < best.dv.rms) best = v;
+    }
+    sR /= 2; sT /= 2; sA /= 2;
+  }
+  return best;
+}
+// WT_N: the last card is always orange (reaching it without all the winning
+// cards means doing the alternative, so it must be able to hold one); the fit
+// counts it as certainly orange, so the expectations stay balanced.
+// WT_N: the cards are drawn one by one with a carried 'debt': card t is orange w.p.
+// d_t + k × (orange cards expected so far − drawn so far), within [2%, 97%], with k drawn per
+// sequence in [CFG.drawDebtKLo, drawDebtKHi] — runs of white (or orange) cards still happen at
+// random but are made up for on the following cards, so the deck follows its density curve.
+// From card `from` on, the debt starting at 0.
+function drawWithDebt_(ds, from, out, k){
+  out = out || new Array(ds.length).fill(false);
+  let debt = 0;
+  for(let t = from || 0; t < ds.length; t++){
+    const p = Math.min(0.97, Math.max(0.02, ds[t] + k * debt));
+    out[t] = Math.random() < p;
+    debt += ds[t] - (out[t] ? 1 : 0);
+  }
+  return out;
+}
+// At least minW orange cards (random positions) among the first W.
+function fillWindow_(live, W, minW){
+  const win = [...Array(W).keys()], have = win.filter(t => live[t]).length;
+  if(have < minW) shuf(win.filter(t => !live[t])).slice(0, minW - have).forEach(t => live[t] = true);
+}
+// Winning cards from position `from` (cards completed) with r missing, card by card.
+function drawWinnersFrom_(nums, from, h, r){
+  const w = []; for(const m of nums){ if(m <= from) continue; if(r === 0) break; if(Math.random() < hazR_(h, r)){ w.push(m); r--; } } return w;
+}
+// WT_N: the ONE offer, after pos cards completed, pos between CFG.offerLo (1:
+// with 0 the two versions of a pair would be the same) and CFG.offerHi (10),
+// P(pos = k) ∝ k^CFG.offerPosPow (mostly late: fewer low-cost pauses, the
+// pairs already give the zero-cost side). Always before the LAST winning card;
+// the winning cards found by then stay found.
+//   regime 1: the winning cards are drawn first, then pos from that
+//             distribution capped at last − 1 (if the last one comes early);
+//   regime 2: pos drawn first from regime 1's distribution on the same sequence,
+//             then the winning cards, redrawn until the last one comes after pos
+//             (or the sequence ends without all of them);
+//   regime 3: pos drawn from regime 1's distribution on the same sequence, the
+//             winning cards independently, NO redraw: if the last winning card
+//             comes at or before pos the offer is never made (wasted) and the
+//             sequence ends there (simulated: 25% of the offers).
+// Not shown either when the ending is certain (fewer orange cards ahead than
+// winning cards missing).
+function drawOfferPos_(maxPos){
+  const hi = Math.min(CFG.offerHi, maxPos); if(hi < CFG.offerLo) return null;
+  const w = []; for(let k = CFG.offerLo; k <= hi; k++) w.push(Math.pow(k, CFG.offerPosPow));
+  return CFG.offerLo + pickWeighted_(w);
+}
+function drawOffersM_(win, subRegime){
+  const n = win.nW, L = win.length, nums = win.liveTaskNumbers, h = win.q;
+  const lastOf = w => w.length === n ? w[n - 1] : null;
+  let winners, pos, wasted = false;
+  if(subRegime === 1){
+    winners = drawWinnersFrom_(nums, 0, h, n); const last = lastOf(winners);
+    pos = drawOfferPos_((last != null ? last : L) - 1);
+    if(pos == null){ pos = 0; wasted = true; } // the last winning card on card 1: no room for an offer (redrawn by designSeed_)
+  } else {
+    // regimes 2 and 3: from regime 1's distribution on this same sequence (CFG.pauseDistDraws regime-1 draws),
+    // so that they differ from regime 1 only in how the offer relates to the winning cards
+    if(subRegime === 2 || subRegime === 3){ const d = []; for(let k = 0; k < CFG.pauseDistDraws; k++){ const last = lastOf(drawWinnersFrom_(nums, 0, h, n)); const p = drawOfferPos_((last != null ? last : L) - 1); if(p != null) d.push(p); } pos = d.length ? pick(d) : drawOfferPos_(L - 1); }
+    else pos = drawOfferPos_(L - 1);
+    if(subRegime === 2){ for(let k = 0; ; k++){ winners = drawWinnersFrom_(nums, 0, h, n); const last = lastOf(winners); if(last == null || last > pos || k > 500) break; } }
+    else { winners = drawWinnersFrom_(nums, 0, h, n); const last = lastOf(winners); if(last != null && last <= pos) wasted = true; }
+  }
+  const found = winners.filter(m => m <= pos).length, r = n - found;
+  const tmp = { length: L, live: win.live, liveTaskNumbers: nums, q: h, nW: n, winners: winners.filter(m => m <= pos) };
+  const ahead = nums.filter(m => m > pos).length;
+  let shown = !wasted && r > 0 && pos < L && ahead >= r;
+  const alt = shown ? altForOffer_(tmp, pos, r) : {};
+  // WT_N: only offers whose fair alternative is within [CFG.altFairLo, altFairHi] (the 5th–95th
+  // percentiles of the fair value): outside it the sequence is redrawn (regimes 1–2, designSeed_)
+  // or, in regime 3 (never redrawn), played without an offer.
+  const outOfBounds = shown && !win.noBounds && (alt.eStay < CFG.altFairLo || alt.eStay > CFG.altFairHi); // not for worse decks (win.noBounds): longer by construction
+  if(outOfBounds) shown = false;
+  const offer = Object.assign({ k: 1, pos, missing: r, found, wasted, certain: !wasted && r > 0 && ahead < r, outOfBounds, shown }, shown ? alt : {});
+  return { winners, offers: [offer] };
+}
+// The alternative at an offer: the fair alternative on the sequence as drawn
+// (the alternative is owed at the end if not all the winning cards are found,
+// so A solves A = E + (1 − p)·A, i.e. A = E / p; E = expected main cards, p =
+// chance of finding all the missing ones) × (1 ± U(0, CFG.altNoiseShare));
+// rounded; at least the best case + 1 and CFG.altMin, at most CFG.altMaxFactor × the cards left.
+function altForOffer_(win, pos, r){
+  const p = 1 - endDist_(win, pos, r).pNo, eMain = eRemainingIf_(win, pos, r);
+  const a = p > 0.05 ? eMain / p : CFG.altMaxFactor * (win.length - pos);
+  const hw = CFG.altNoiseShare * a;
+  const left = win.length - pos, hi = Math.max(1, Math.round(CFG.altMaxFactor * left));
+  const lo = Math.min(hi, Math.max(bestCase_(win, pos, r) + 1, CFG.altMin || 1, CFG.altWhiteFloor ? maxWhiteRun_(win) + 1 : 1));
+  const alt = Math.min(hi, Math.max(lo, Math.round(a + (2 * Math.random() - 1) * hw)));
+  return { alt, eStay: a, eMain, halfWidth: hw, altLo: lo, altHi: hi };
+}
+// A full design ("seed"): deck, h, n, gift display, winners and the offer.
+// WT_N: length ~ U(CFG.lengthLo, lengthHi) drawn first; density decaying from
+// the first card (fitDecay_, see "WT_N: the deck"); h calibrated on the
+// calibration window's orange cards as drawn; ONE offer. Worse decks pass the
+// assigned deck's h and decay shape (opts.q, opts.shape): nothing is refitted.
+function designSeed_(qIdx, regime, opts){
+  opts = opts || {};
+  const redrawWhy = { out_of_bounds: 0, certain: 0, no_room: 0 }; // WT_N: why earlier draws of this sequence were rejected
+  for(let tries = 0; ; tries++){
+    const n = opts.nW != null ? opts.nW : 1 + pickWeighted_(CFG.nWinnersW);
+    const length = opts.length != null ? opts.length : rnd(CFG.lengthLo, CFG.lengthHi);
+    const d0 = opts.d1 != null ? opts.d1 : CFG.d0By[n][0] + Math.random() * (CFG.d0By[n][1] - CFG.d0By[n][0]);
+    const W = Math.min(length, opts.calibW != null ? opts.calibW : rnd(CFG.calibWBase + CFG.calibWStep * n, CFG.calibWBase + CFG.calibWStep * n + CFG.calibWSpan));
+    const minW = opts.minWindow != null ? opts.minWindow : CFG.minWindowBy[n];
+    const pBand = drawPInsideFromQuintile_(qIdx);
+    const debtK = opts.debtK != null ? opts.debtK : CFG.drawDebtKLo + Math.random() * (CFG.drawDebtKHi - CFG.drawDebtKLo); // per sequence
+    const r2 = x => Math.min(CFG.hMaxBy[n], Math.max(0.01, Math.round(x * 100) / 100));
+    let h = opts.q, shape = opts.shape || null, ds, drift = null;
+    if(shape){ ds = decayCurve_(d0, shape, length); }
+    else {
+      // 1) fitted with h from the expected window, h re-set on the fitted window densities, refitted
+      if(h == null) h = r2(hForPExp_(new Array(W).fill(d0), pBand, n));
+      let f = fitDecay_(n, h, d0, CFG.decayFitOffer, length, null);
+      if(opts.q == null){ h = r2(hForPExp_(f.ds.slice(0, W), pBand, n)); f = fitDecay_(n, h, d0, CFG.decayFitOffer, length, null); }
+      ds = f.ds; shape = f.q;
+    }
+    // 2) the cards, at least minW orange in the window
+    const live = drawWithDebt_(ds, 0, null, debtK);
+    live[length - 1] = true;
+    fillWindow_(live, W, minW);
+    const K = live.slice(0, W).filter(v => v).length;
+    // 3) h on the window as drawn; the decay refitted with the window as drawn, the cards after it redrawn
+    if(!opts.shape){
+      if(opts.q == null && CFG.qFreq === 'realized') h = r2(hForP_(K, pBand, n));
+      const f = fitDecay_(n, h, d0, CFG.decayFitOffer, length, live.slice(0, W));
+      ds = f.ds; shape = f.q; drift = f.dv;
+      drawWithDebt_(ds, W, live, debtK);
+      live[length - 1] = true;
+    }
+    const nums = []; live.forEach((v, k) => { if(v) nums.push(k + 1); });
+    const subRegime = opts.subRegime != null ? opts.subRegime : (regime === 0 ? pick([1, 2]) : regime);
+    const win = { length, live, liveTaskNumbers: nums, q: h, nW: n, noBounds: !!opts.noBounds };
+    const plan = drawOffersM_(win, subRegime);
+    if(subRegime !== 3 && !plan.offers.some(o => o.shown) && tries < 50){ // regimes 1–2: the offer must be shown (not certain, within bounds); regime 3: never redrawn
+      const o0 = plan.offers[0] || {}; redrawWhy[o0.outOfBounds ? 'out_of_bounds' : o0.certain ? 'certain' : 'no_room']++;
+      continue;
+    }
+    const gift = n < 3 && (opts.gift != null ? opts.gift : Math.random() < CFG.giftShowP);
+    return { qIdx, pBand, nW: n, length, live: live.map(v => v ? 1 : 0).join(''), q: h, d1: d0,
+             densities: ds.map((x, t) => t === length - 1 ? 1 : Math.round(x * 1000) / 1000), shape: { rho: Math.round(shape.rho * 1000) / 1000, tau: Math.round(shape.tau * 100) / 100, a: Math.round(shape.a * 1000) / 1000 },
+             drift: drift ? Math.round(drift.rms * 100) / 100 : null, calibW: W, W1: K, debtK: Math.round(debtK * 1000) / 1000, redraws: tries, redrawWhy,
+             subRegime, gift, winners: plan.winners, offers: plan.offers };
+  }
+}
+// The deck a participant plays from a seed: 'full', or 'trunc' — cut at the
+// SHOWN offer (t0 cards): the cards before it are removed, and so are the
+// winning cards found before it (WT_N: the tracker shows only the ones still
+// missing, none already found); the offer moves to 0.
+function deckFromSeed_(seed, version){
+  const full = [...seed.live].map(c => c === '1');
+  const first = seed.offers.find(o => o.shown);
+  const t0 = version === 'trunc' && first ? first.pos : 0;
+  const live = full.slice(t0), length = live.length;
+  const nums = []; live.forEach((v, k) => { if(v) nums.push(k + 1); });
+  const before = seed.winners.filter(m => m <= t0).length;
+  const nW = seed.nW - before;
+  const winners = seed.winners.filter(m => m > t0).map(m => m - t0);
+  const offers = seed.offers.filter(o => o.pos >= t0).map(o => Object.assign({}, o, { pos: o.pos - t0 }));
+  const nBoxes = version === 'trunc' ? nW : (seed.gift ? 3 : seed.nW), prefilled = version === 'trunc' ? 0 : (seed.gift ? 3 - seed.nW : 0);
+  return { length, live, liveTaskNumbers: nums, q: seed.q, nW, winners, offers, nBoxes, prefilled, truncOffset: t0 };
+}
+// Everything the rest of the page expects from a task (benchmarks at the first
+// shown offer, the old single-offer fields kept for the exports).
+function taskFromDeck_(seed, dk, extra){
+  const win = { length: dk.length, live: dk.live, liveTaskNumbers: dk.nums || dk.liveTaskNumbers, q: dk.q, nW: dk.nW, winners: dk.winners };
+  const first = dk.offers.find(o => o.shown) || null;
+  const pause = first ? first.pos : dk.length;
+  const altDuration = first ? first.alt : null;
+  const livePattern = dk.live.map(v => v ? 'L' : 'S').join('');
+  const liveTotal = win.liveTaskNumbers.length, activePassed = win.liveTaskNumbers.filter(m => m <= pause).length;
+  const end = lastWinner_(win);
+  const eStart = eRemaining_(Object.assign({}, win, { winners: [] }), 0);
+  // WT_N: p_inside on the sequence's own calibration window (the first calibW cards of the FULL
+  // sequence, seed.W1 of them orange), the same for both versions of a pair
+  const W1 = seed.W1 != null ? seed.W1 : win.liveTaskNumbers.filter(m => m <= CFG.calibCards).length;
+  return Object.assign({
+    subRegime: seed.subRegime, length: dk.length, live: dk.live, liveTaskNumbers: win.liveTaskNumbers,
+    q: dk.q, nW: dk.nW, nBoxes: dk.nBoxes, prefilled: dk.prefilled, gift: seed.gift ? 1 : 0, nWinnersSeq: seed.nW,
+    d1: seed.d1, densities: seed.densities, calibW: seed.calibW, debtK: seed.debtK, truncOffset: dk.truncOffset,
+    designRedraws: seed.redraws, designRedrawWhy: seed.redrawWhy ? Object.keys(seed.redrawWhy).map(k => k + ':' + seed.redrawWhy[k]).join(',') : null,
+    pBand: seed.pBand, pInside: pFoundWithin_(W1, seed.q, seed.nW), pAll: pFoundWithin_(W1, seed.q, seed.nW), pAllSeq: pFoundWithin_(liveTotal, dk.q, dk.nW),
+    half: seed.calibW != null ? seed.calibW : CFG.calibCards, nFirstHalf: W1, orangeShare: liveTotal / dk.length, shapeFamily: 'pareto', shapeParams: seed.shape ? 'rho=' + seed.shape.rho + ',tau=' + seed.shape.tau + ',alpha=' + seed.shape.a + ',drift=' + seed.drift + ',W=' + seed.calibW : 'W=' + seed.calibW,
+    pQuintileIdx: seed.qIdx, pQuintileLo: P_QUINTILES_[seed.qIdx].lo, pQuintileHi: P_QUINTILES_[seed.qIdx].hi,
+    winners: dk.winners, ends: end != null, endPos: end, nReq: end != null ? end : dk.length,
+    offerPlan: dk.offers, pause, offerWasted: !first,
+    altGlobalEnd: first ? pause + altDuration : null, altDuration, altWindowLo: first ? first.altLo : null, altWindowHi: first ? first.altHi : null,
+    altScenario: first ? first.found : null, altEScenario: first ? first.eStay : null,
+    activePassedAtPause: activePassed, inactivePassedAtPause: pause - activePassed,
+    activeLeftAtPause: liveTotal - activePassed, inactiveLeftAtPause: (dk.length - liveTotal) - (pause - activePassed),
+    leftPattern: livePattern.slice(0, pause), rightPattern: livePattern.slice(pause),
+    pAheadAtPause: pAhead_(win, pause), eRemAtPause: eRemaining_(win, pause),
+    stayCostAtPause: eRemaining_(win, pause), eRemAtStart: eStart, eStart,
+    winnersFoundAtPause: winnersFound_(win, pause),
+  }, extra || {});
+}
+// Per-respondent rewards (drawn once at consent), as WT_L.
+function drawRewardSplit_(){
+  const unit = CFG.rewardStep, n = CFG.numTasks;
+  const poolUnits = rnd(Math.round(CFG.rewardPoolLo/unit), Math.round(CFG.rewardPoolHi/unit));
+  const units = Array(n).fill(Math.round(CFG.rewardMin/unit));
+  let left = poolUnits - units.reduce((a,b)=>a+b,0);
+  while(left-- > 0) units[rnd(0,n-1)]++;
+  const toMoney = u => Math.round(u*unit*100)/100;
+  return { pool: toMoney(poolUnits), split: units.map(toMoney) };
+}
+// The decks shown before a sequence: the assigned one (the seed's version) and,
+// with 2 or 3 decks, worse ones made relative to it. WT_N: only in the FULL
+// version — the choice is part of the sequence's past, like the cards completed;
+// the truncated version starts at the offer and always shows its one deck. Every
+// deck carries its design (seedDesign). Worse decks are never pooled: same h and number of
+// winning cards and decay shape, sparser (initial density × CFG.deckD1Lo–Hi) and longer
+// (2 … CFG.deckLenAddMax cards more), kept only if MUCH worse — fewer orange
+// cards and at least max(CFG.deckWorseAbsM, CFG.deckWorseRelM × E) more expected cards.
+function buildDeckChoiceM_(seed, version, regime){
+  const def = taskFromDeck_(seed, deckFromSeed_(seed, version));
+  def.seedDesign = seed;
+  const n = version === 'trunc' ? 1 : pick(CFG.deckCounts), decks = [def];
+  let tries = 0, best = null;
+  const margin = Math.max(CFG.deckWorseAbsM, CFG.deckWorseRelM * def.eStart);
+  const worse = d => d.liveTaskNumbers.length < def.liveTaskNumbers.length && d.eStart >= def.eStart + margin;
+  while(decks.length < n){
+    tries++;
+    const s = designSeed_(seed.qIdx, regime, { nW: def.nW, q: def.q, gift: false, subRegime: seed.subRegime,
+      length: Math.min(CFG.lengthHi + CFG.deckLenAddMax, def.length + rnd(2, CFG.deckLenAddMax)),
+      d1: seed.d1 * (CFG.deckD1Lo + Math.random() * (CFG.deckD1Hi - CFG.deckD1Lo)), calibW: seed.calibW, minWindow: def.nW,
+      shape: seed.shape || { rho: 1, tau: 1, a: 0 }, debtK: seed.debtK, noBounds: true }); // a worse deck may be chosen (then played unpaired): its offer must be shown even if its alternative is long
+    s.gift = seed.gift && def.nW === seed.nW; // same tracker look as the assigned deck
+    const d = taskFromDeck_(s, Object.assign(deckFromSeed_(s, 'full'), { nBoxes: def.nBoxes, prefilled: def.prefilled }), { isWorseDeck: true });
+    d.seedDesign = s;
+    if(worse(d) || tries > CFG.deckTriesMax){ decks.push(worse(d) ? d : (best && best.eStart > d.eStart ? best : d)); tries = 0; best = null; }
+    else if(!best || d.eStart > best.eStart) best = d;
+  }
+  const order = shuf(decks.map((_, i) => i));
+  return { decks: order.map(i => decks[i]), defaultPos: order.indexOf(0) };
+}
+// ── Pairing plan ──
+// SESSION.seedPlan[i] = { seed_id, version: 'full'|'trunc', role: 'pair'|'new'|'unpaired', seed }.
+// Built once per respondent (prepareSeedPlan_, before the first sequence).
+// Versions: two full, two truncated and one at random, shuffled over the five
+// sequences. For each sequence (band, version) the backend is asked for an open
+// version of someone else's sequence (never the same partner twice, from any study
+// except the test modes); if there is none, a new sequence is drawn, played in the
+// version asked for, and pooled so that someone else plays the other one. A new
+// sequence with no shown offer (regime 3) cannot be truncated: it is played in full,
+// unpooled. Test modes (STUDY_ID pilot / studentpilot) never pool. Clearing mode
+// (?clear=1, for a last batch): every sequence takes an open version of either kind
+// if there is one, and nothing new is pooled.
+function newSeedId_(){ return 'S' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+async function prepareSeedPlan_(){
+  if(SESSION.seedPlan && SESSION.seedPlan.length === CFG.numTasks) return;
+  const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
+  const bands = Array.from({length: CFG.numTasks}, (_, i) => (SESSION.pQuintileOrder || [0,1,2,3,4])[i % 5]);
+  const versions = _clearMode ? bands.map(() => 'any') : shuf(['full', 'full', 'trunc', 'trunc', Math.random() < 0.5 ? 'full' : 'trunc']);
+  const pooled = backendConfigured_() && _demoMode < 2 && !_isAnyPilot;
+  let claimed = [];
+  if(pooled){
+    try{
+      const res = await fetchWithTimeout_(BACKEND_URL, { method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+        body: JSON.stringify({ action:'seedClaim', pid:_prolificID, study_id:_studyID, slots: bands.map((b, i) => ({ band: b, version: versions[i] })) }) }, 8000);
+      const js = await res.json(); if(js && Array.isArray(js.seeds)) claimed = js.seeds;
+    }catch(e){ claimed = []; }
+  }
+  const plan = [], fresh = [];
+  bands.forEach((b, i) => {
+    const c = claimed[i];
+    if(c && c.design && c.band === b){ plan.push({ seed_id: c.seed_id, version: c.version, role: 'pair', seed: c.design }); return; }
+    const seed = designSeed_(b, regime), pairable = seed.offers.some(o => o.shown) && pooled && !_clearMode;
+    const version = pairable ? versions[i] : 'full';
+    const id = newSeedId_();
+    // a new full version is pooled when its deck is chosen (applyDeckChoice_), and only if it is the assigned deck
+    plan.push({ seed_id: id, version, role: pairable ? 'new' : 'unpaired', seed, pendingAdd: pairable && version === 'full' });
+    if(pairable && version === 'trunc') fresh.push({ seed_id: id, band: b, version, design: seed });
+  });
+  SESSION.seedPlan = plan;
+  if(fresh.length) seedPost_({ action:'seedAdd', pid:_prolificID, study_id:_studyID, seeds: fresh });
+}
+// Fire-and-forget seed bookkeeping (add / release / done).
+function seedPost_(payload){
+  if(!backendConfigured_() || _demoMode >= 2) return;
+  postToBackend_(payload, 3).catch(()=>{});
+}
+function generateTasks(){
+  const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
+  if(!SESSION.seedPlan || SESSION.seedPlan.length !== CFG.numTasks){ // offline fallback: all new, unpooled
+    SESSION.seedPlan = Array.from({length: CFG.numTasks}, (_, i) => { const b = (SESSION.pQuintileOrder || [0,1,2,3,4])[i % 5];
+      return { seed_id: newSeedId_(), version: 'full', role: 'unpaired', seed: designSeed_(b, regime) }; });
+  }
+  return Array.from({length:CFG.numTasks},(_,i)=>{
+    const p = SESSION.seedPlan[i];
+    const choice = buildDeckChoiceM_(p.seed, p.version, regime);
+    if(!SESSION.rewardSplit){ const r = drawRewardSplit_(); SESSION.rewardPool = r.pool; SESSION.rewardSplit = r.split; }
+    const pay = SESSION.rewardSplit[i];
+    return Object.assign({ index:i, regime, pay, seedId: p.seed_id, seedVersion: p.version, seedRole: p.role }, choice.decks[choice.defaultPos], {
+             deckOptions: choice.decks, nDecks: choice.decks.length, deckDefaultPos: choice.defaultPos,
+             deckChosenPos: null,
+             offerLog: [], curOffer: null, nextOfferIdx: 0,
+             penaltyAtPause:null,
+             altRevealed:false, autoSwitched:false, autoSwitchAtTime:null,
+             completed:null, switched:null, forfeited:null, earnings:0,
+             offerAtTask:null, offerAtTime:null, offerFiredAt:null, pauseSecs:null,
+             deliberationSecs:null, autoRefused:false, offerChoice:null,
+             switchTaken:false, switchSource:null, switchTakenAtTask:null, switchTakenAtTime:null,
+             switchPressedAtTask:null, switchPressedAtTime:null, switchOffer:null,
+             dialogOpens:0, dialogCancels:0, altStartedAt:null,
+             forfeitTaken:false, forfeitTakenAtTask:null, forfeitTakenAtTime:null, forfeitPhase:null,
+             startAt:null, grids:[] });
+  });
+}
+// Swap the deck chosen on the briefing screen into the task (display position k).
+// WT_N: a new full version is pooled only if the assigned deck is chosen; with a
+// worse deck the sequence is played unpaired and nothing is pooled (no one else is
+// made to play a worse deck). When the sequence already exists (closing a pair), a
+// deck other than the assigned one breaks the pairing: the version goes back to the
+// pool (released) and the sequence is played unpaired.
+function applyDeckChoice_(task, k){
+  if(!task || !task.deckOptions) return;
+  task.deckChosenPos = k;
+  const keep = { seedId: task.seedId, seedVersion: task.seedVersion, seedRole: task.seedRole };
+  Object.assign(task, task.deckOptions[k], keep);
+  const p = (SESSION.seedPlan || [])[task.index];
+  if(task.seedRole === 'new' && task.seedVersion === 'full' && p && p.pendingAdd){
+    p.pendingAdd = false;
+    if(k === task.deckDefaultPos && p.seed && (p.seed.offers || []).some(o => o.shown)){
+      seedPost_({ action:'seedAdd', pid:_prolificID, study_id:_studyID, seeds: [{ seed_id: task.seedId, band: p.seed.qIdx, version: 'full', design: p.seed }] });
+    } else task.seedRole = 'unpaired';
+    return;
+  }
+  if(k !== task.deckDefaultPos){
+    if(task.seedRole === 'pair' || task.seedRole === 'new') seedPost_({ action:'seedRelease', pid:_prolificID, seed_id: task.seedId, version: task.seedVersion });
+    task.seedRole = 'released';
+  }
+}
+
+
+/*__WTN_END__*/
+  return { CFG, rnd, designSeed_, deckFromSeed_, taskFromDeck_, pFoundWithin_, fairCurve_, fairDrift_ };
+})();
+const el = id => document.getElementById(id);
+const Q = (a, q) => { a = a.filter(x => Number.isFinite(x)); if(!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
+const f1 = x => Number.isFinite(x) ? (Math.round(x * 10) / 10).toString() : '—';
+const pc = x => Number.isFinite(x) ? Math.round(100 * x) + '%' : '—';
+const MODES = { def: 'assigned', cur: 'current', low: 'lower p_inside', eq: 'equivalent' };
+let SEQS = [], RUN = 0;
+
+// One deck's description, with the main-sequence rules it breaks.
+function deckStats(s){
+  const C = WTN.CFG, d = WTN.taskFromDeck_(s, WTN.deckFromSeed_(s, 'full')), o = s.offers.find(x => x.shown) || null;
+  const xs = [...s.live].map(c => c === '1' ? 1 : 0), orange = xs.reduce((a, v) => a + v, 0);
+  const drift = o ? WTN.fairDrift_(WTN.fairCurve_(s.nW - o.found, s.q, xs, o.pos)).rms : NaN;
+  const rules = [];
+  if(s.length < C.lengthLo || s.length > C.lengthHi) rules.push('length');
+  if(s.W1 < C.minWindowBy[s.nW]) rules.push('window');
+  if(!xs[xs.length - 1]) rules.push('last card');
+  if(!o) rules.push('no offer');
+  else if(o.eStay < C.altFairLo || o.eStay > C.altFairHi) rules.push('alt bounds');
+  return { s, xs, len: s.length, orange, W: s.calibW, W1: s.W1, minW: C.minWindowBy[s.nW], d1: s.d1, h: s.q, nW: s.nW,
+    pin: WTN.pFoundWithin_(s.W1, s.q, s.nW), pEnd: WTN.pFoundWithin_(orange, s.q, s.nW), E: d.eStart,
+    shown: !!o, pos: o ? o.pos : NaN, found: o ? o.found : NaN, alt: o ? o.alt : NaN, fair: o ? o.eStay : NaN, drift, rules };
+}
+// The alternatives of a sequence under one rule.
+function alternatives(seed, mode, k, P){
+  const C = WTN.CFG, base = deckStats(seed), out = [];
+  for(let j = 0; j < k; j++){
+    const t0 = performance.now(); let got = null, best = null, tries = 0;
+    if(mode === 'cur'){
+      const margin = Math.max(C.deckWorseAbsM, C.deckWorseRelM * base.E);
+      for(; !got; ){
+        tries++;
+        const s = WTN.designSeed_(seed.qIdx, seed.subRegime, { nW: seed.nW, q: seed.q, gift: false, subRegime: seed.subRegime,
+          length: Math.min(C.lengthHi + C.deckLenAddMax, seed.length + WTN.rnd(2, C.deckLenAddMax)),
+          d1: seed.d1 * (C.deckD1Lo + Math.random() * (C.deckD1Hi - C.deckD1Lo)), calibW: seed.calibW, minWindow: seed.nW,
+          shape: seed.shape || { rho: 1, tau: 1, a: 0 }, debtK: seed.debtK, noBounds: true });
+        const st = deckStats(s), worse = st.orange < base.orange && st.E >= base.E + margin;
+        if(worse) got = st; else if(tries > C.deckTriesMax) got = best && best.E > st.E ? best : st;
+        else if(!best || st.E > best.E) best = st;
+        if(got) got.found_ok = worse;
+      }
+    } else if(mode === 'low'){
+      const margin = Math.max(P.lowAbs, P.lowRel * base.E);
+      for(; tries < P.lowTries && !got; ){
+        tries++;
+        const s = WTN.designSeed_(seed.qIdx, seed.subRegime, { nW: seed.nW, q: seed.q, gift: false, subRegime: seed.subRegime, length: seed.length,
+          d1: seed.d1 * (P.lowLo + Math.random() * (P.lowHi - P.lowLo)), calibW: seed.calibW, debtK: seed.debtK });
+        const st = deckStats(s);
+        if(st.shown && st.orange < base.orange && st.E > base.E && st.E >= base.E + margin){ got = st; got.found_ok = true; }
+      }
+    } else {
+      tries = 1;
+      got = deckStats(WTN.designSeed_(seed.qIdx, seed.subRegime, { nW: seed.nW, q: seed.q, gift: false, subRegime: seed.subRegime, length: seed.length,
+        d1: seed.d1, calibW: seed.calibW, debtK: seed.debtK }));
+      got.found_ok = true;
+    }
+    const ms = performance.now() - t0;
+    out.push(got ? Object.assign(got, { mode, tries, ms, dE: got.E - base.E, dPin: got.pin - base.pin, dOr: got.orange - base.orange }) : { mode, tries, ms, missing: true });
+  }
+  return out;
+}
+function params(){
+  return { N: Math.max(1, Math.min(500, parseInt(el('n-seq').value) || 8)), band: +el('band').value, nw: +el('nw').value, regime: +el('regime').value,
+    k: Math.max(1, Math.min(6, parseInt(el('n-alt').value) || 2)),
+    modes: ['cur', 'low', 'eq'].filter(m => el('m-' + m).checked),
+    lowLo: +el('low-lo').value || 0.45, lowHi: +el('low-hi').value || 0.7, lowAbs: +el('low-abs').value || 0, lowRel: +el('low-rel').value || 0,
+    lowTries: Math.max(1, parseInt(el('low-tries').value) || 40) };
+}
+function generate(){
+  const P = params(), run = ++RUN; SEQS = []; let i = 0; const t0 = performance.now();
+  el('status').textContent = 'Generating…';
+  const step = () => {
+    if(run !== RUN) return;
+    const until = performance.now() + 80;
+    while(i < P.N && performance.now() < until){
+      const qIdx = P.band >= 0 ? P.band : i % 5, seed = WTN.designSeed_(qIdx, P.regime, P.nw ? { nW: P.nw } : {});
+      const alts = {}; P.modes.forEach(m => alts[m] = alternatives(seed, m, P.k, P));
+      SEQS.push({ id: i + 1, seed, base: deckStats(seed), alts }); i++;
+    }
+    el('status').textContent = 'Generating… ' + i + ' / ' + P.N;
+    if(i < P.N) setTimeout(step, 0);
+    else { el('status').innerHTML = '<b>' + P.N + '</b> sequences, ' + P.k + ' alternatives per rule, in ' + Math.round((performance.now() - t0) / 100) / 10 + ' s.'; render(P); }
+  };
+  setTimeout(step, 0);
+}
+function strip(st, cols, showWin){
+  const s = st.s, cells = st.xs.map((v, t) => { const k = t + 1, w = showWin && s.winners.includes(k);
+    return `<div class="c ${w ? 'w' : v ? 'o' : ''} ${t < st.W ? 'win' : ''} ${showWin && st.shown && st.pos === t ? 'offer' : ''}" title="card ${k}: ${Math.round(s.densities[t] * 100)}% orange">${w ? '★' : ''}</div>`; });
+  for(let k = st.xs.length; k < cols; k++) cells.push('<div class="c empty"></div>');
+  return `<div class="strip" style="grid-template-columns:repeat(${cols}, minmax(0, 1fr))">${cells.join('')}</div>`;
+}
+function label(st, mode){
+  const tag = `<span class="tag ${mode}">${MODES[mode]}</span>`;
+  if(st.missing) return tag + `<span class="bad">none found in ${st.tries} tries</span>`;
+  const rules = st.rules.length ? `<span class="bad">breaks: ${st.rules.join(', ')}</span>` : '<span class="okc">main rules ok</span>';
+  const delta = mode === 'def' ? '' : ` · <b>ΔE ${st.dE >= 0 ? '+' : ''}${f1(st.dE)}</b> · Δp_inside ${st.dPin >= 0 ? '+' : ''}${Math.round(100 * st.dPin)} pts${st.found_ok === false ? ' · <span class="bad">not worse (fallback)</span>' : ''}`;
+  return tag + `${st.len} cards · <b>${st.orange}</b> orange · d1 ${Math.round(100 * st.d1)}% · window ${st.W} (${st.W1} orange)<br>E <b>${f1(st.E)}</b> · p_inside <b>${pc(st.pin)}</b> · p_end ${pc(st.pEnd)} · alt <b>${st.shown ? st.alt : '—'}</b> (fair ${f1(st.fair)}) · drift ${f1(st.drift)}${delta}<br>${rules}${mode === 'def' ? '' : ` · ${st.tries} tr · ${Math.round(st.ms)} ms`}`;
+}
+function render(P){
+  const showWin = el('show-win').checked;
+  const all = SEQS.flatMap(q => [q.base].concat(...Object.values(q.alts)).filter(st => !st.missing));
+  const cols = Math.max(...all.map(st => st.len));
+  el('list').innerHTML = SEQS.map(q => {
+    const s = q.seed;
+    let h = `<div class="seq"><div class="ph">sequence <b>${q.id}</b> · winning cards <b>${s.nW}</b> · band <b>${s.qIdx + 1}</b> (target p_inside ${pc(s.pBand)}) · chance per box <b>${pc(s.q)}</b> · regime ${s.subRegime}</div>`;
+    h += `<div class="row"><div class="lab">${label(q.base, 'def')}</div>${strip(q.base, cols, showWin)}</div>`;
+    P.modes.forEach(m => q.alts[m].forEach(st => { h += `<div class="row"><div class="lab">${label(st, m)}</div>${st.missing ? '<div></div>' : strip(st, cols, showWin)}</div>`; }));
+    return h + '</div>';
+  }).join('');
+  // summary
+  const rows = [['def', SEQS.map(q => q.base)]].concat(P.modes.map(m => [m, SEQS.flatMap(q => q.alts[m])]));
+  el('sum-table').innerHTML = '<table><tr><th>rule</th><th>decks</th><th>found</th><th>worse (fewer orange, more E)</th><th>breaks main rules</th><th>length [min–max]</th><th>orange (median)</th><th>E (median)</th><th>ΔE median [10–90%]</th><th>p_inside (median)</th><th>Δp_inside median</th><th>fair alt median [p95, max]</th><th>alt max</th><th>drift (median)</th><th>ms per deck (median / max)</th></tr>' +
+    rows.map(([m, R]) => { const G = R.filter(st => !st.missing), v = g => G.map(g);
+      const worse = m === 'def' ? '—' : pc(G.filter(st => st.orange < SEQS.find(q => q.alts[m] && q.alts[m].includes(st)).base.orange && st.dE > 0).length / Math.max(1, G.length));
+      return `<tr><td class="l"><span class="tag ${m}">${MODES[m]}</span></td><td>${R.length}</td><td>${m === 'def' ? '—' : pc(G.length / Math.max(1, R.length))}</td><td>${worse}</td>` +
+        `<td>${pc(G.filter(st => st.rules.length).length / Math.max(1, G.length))}${G.some(st => st.rules.length) ? ' <span class="info">(' + ['length', 'window', 'last card', 'no offer', 'alt bounds'].map(r => r + ' ' + G.filter(st => st.rules.includes(r)).length).filter(x => !/ 0$/.test(x)).join(', ') + ')</span>' : ''}</td>` +
+        `<td>${Q(v(st => st.len), 0)}–${Q(v(st => st.len), 1)}</td><td>${Q(v(st => st.orange), .5)}</td><td>${f1(Q(v(st => st.E), .5))}</td>` +
+        `<td>${m === 'def' ? '—' : f1(Q(v(st => st.dE), .5)) + ' [' + f1(Q(v(st => st.dE), .1)) + '–' + f1(Q(v(st => st.dE), .9)) + ']'}</td>` +
+        `<td>${pc(Q(v(st => st.pin), .5))}</td><td>${m === 'def' ? '—' : Math.round(100 * Q(v(st => st.dPin), .5)) + ' pts'}</td>` +
+        `<td>${f1(Q(v(st => st.fair), .5))} [${f1(Q(v(st => st.fair), .95))}, ${f1(Q(v(st => st.fair), 1))}]</td><td>${Q(v(st => st.alt), 1)}</td><td>${f1(Q(v(st => st.drift), .5))}</td>` +
+        `<td>${m === 'def' ? '—' : Math.round(Q(v(st => st.ms), .5)) + ' / ' + Math.round(Q(R.map(st => st.ms), 1))}</td></tr>`; }).join('') + '</table>';
+  el('list-box').style.display = ''; el('sum-box').style.display = '';
+}
+function downloadCSV(){
+  if(!SEQS.length) return;
+  const rows = [];
+  SEQS.forEach(q => [['def', [q.base]]].concat(Object.entries(q.alts)).forEach(([m, L]) => L.forEach((st, j) => {
+    if(st.missing){ rows.push({ sequence: q.id, rule: MODES[m], alt_index: j + 1, found: 0, tries: st.tries }); return; }
+    const s = st.s;
+    rows.push({ sequence: q.id, rule: MODES[m], alt_index: m === 'def' ? 0 : j + 1, found: 1, tries: st.tries || '', worse_ok: st.found_ok === false ? 0 : 1,
+      n_winners: s.nW, band: s.qIdx + 1, p_band: s.pBand, h: s.q, length: st.len, orange: st.orange, d1: +st.d1.toFixed(3), calib_w: st.W, calib_orange: st.W1,
+      p_inside: +st.pin.toFixed(4), p_end: +st.pEnd.toFixed(4), e_start: +st.E.toFixed(3), d_e: st.dE != null ? +st.dE.toFixed(3) : '', d_p_inside: st.dPin != null ? +st.dPin.toFixed(4) : '',
+      offer_pos: st.shown ? st.pos : '', alt: st.shown ? st.alt : '', fair_alt: st.shown ? +st.fair.toFixed(3) : '', drift: Number.isFinite(st.drift) ? +st.drift.toFixed(3) : '',
+      breaks: st.rules.join('|'), ms: st.ms != null ? Math.round(st.ms) : '', live: s.live, winners: s.winners.join('|'), densities: s.densities.join('|') });
+  })));
+  const k = [...new Set(rows.flatMap(r => Object.keys(r)))], qv = v => v == null ? '' : /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  const csv = k.join(',') + '\n' + rows.map(r => k.map(x => qv(r[x])).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'wtn_deck_alternatives_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.csv';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+generate();
+</script>
+</body>
+</html>
