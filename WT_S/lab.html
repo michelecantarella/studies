@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WT_S pairs lab</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+/* As WT_Q/lab.html, plus the figure (a pair drawn for the paper, downloadable as SVG) */
+:root{ --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54; --bdr:#d8d4c8; --red:#c84b2f; --blue:#2f6fc8; --or:#f3a53a; --or2:#c98416; --gold:#f2c230; --grn:#2a7a4b; --key:#cfae63; --keyd:#6b4c16;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif; }
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);font-size:14px;padding:1rem 16px 3rem;}
+.wrap{max-width:1400px;margin:0 auto;}
+h1{font-family:var(--mono);font-size:1.1rem;margin-bottom:.3rem;}
+h2{font-family:var(--mono);font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin:0 0 .5rem;}
+.box{background:var(--sur);border:1px solid var(--bdr);border-radius:12px;padding:.9rem 1rem;margin-bottom:1rem;}
+.intro{font-size:.84rem;line-height:1.55;color:var(--ink2);max-width:1000px;}
+.intro b{color:var(--ink);}
+.ctl{display:flex;gap:.9rem;flex-wrap:wrap;align-items:flex-end;margin-top:.7rem;}
+.ctl label{display:flex;flex-direction:column;gap:.2rem;font-size:.75rem;color:var(--ink2);}
+.ctl label.ck{flex-direction:row;align-items:center;gap:.35rem;}
+.ctl input,.ctl select{font-family:var(--mono);font-size:.8rem;padding:.3rem .4rem;border:1px solid var(--bdr);border-radius:6px;background:var(--bg);}
+.ctl input[type=number]{width:80px;}
+button{font-family:var(--mono);font-size:.76rem;padding:.5rem .9rem;border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;border-radius:6px;}
+button:hover{background:transparent;color:var(--ink);}
+button.ghost{background:transparent;color:var(--ink);}
+button.ghost:hover{background:var(--ink);color:var(--bg);}
+button.mini{font-size:.66rem;padding:.12rem .45rem;margin-left:.4rem;}
+.info{font-family:var(--mono);font-size:.74rem;line-height:1.7;color:var(--ink2);}
+.info b{color:var(--ink);}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1rem;}
+svg{display:block;width:100%;height:auto;}
+.axis{font-family:var(--mono);font-size:10px;fill:var(--ink2);}
+table{border-collapse:collapse;width:100%;font-family:var(--mono);font-size:.72rem;}
+th,td{border:1px solid var(--bdr);padding:.3rem .4rem;text-align:right;white-space:nowrap;}
+th{background:var(--bg);text-align:center;}
+.tw{overflow-x:auto;}
+.fig{overflow-x:auto;margin-top:.7rem;border:1px dashed var(--bdr);border-radius:8px;background:#fff;padding:.5rem;}
+.fig svg{width:auto;max-width:none;}
+#g-sw svg{max-width:760px;}
+.pair{border-top:1px solid var(--bdr);padding:.7rem 0 .8rem;}
+.pair:first-child{border-top:none;}
+.ph{font-family:var(--mono);font-size:.74rem;color:var(--ink2);line-height:1.6;margin-bottom:.35rem;}
+.ph b{color:var(--ink);}
+.row{display:grid;grid-template-columns:165px minmax(0,1fr);gap:.6rem;align-items:center;margin:.25rem 0;}
+.lab{font-family:var(--mono);font-size:.7rem;color:var(--ink2);line-height:1.35;}
+.lab b{color:var(--ink);}
+.strip{display:grid;gap:2px;}
+.c{height:22px;border-radius:4px;border:1.5px solid #b8b3a5;background:#fff;position:relative;font-family:var(--mono);font-size:10px;font-weight:700;color:#7a5600;display:flex;align-items:center;justify-content:center;}
+.c.o{background:var(--or);border-color:var(--or2);}
+.c.w{background:var(--gold);border-color:#b8860b;}
+.c.done{box-shadow:inset 0 -4px 0 var(--key);}
+.c.offer{box-shadow:0 0 0 2px var(--blue);}
+.c.done.offer{box-shadow:inset 0 -4px 0 var(--key),0 0 0 2px var(--blue);}
+.c.empty{border:none;background:transparent;}
+.c.sw{background:#f6c9bd;border-color:var(--red);color:var(--red);}
+.c.st{background:#e4efe0;border-color:#8bb07c;color:var(--grn);}
+.legend{font-size:.72rem;color:var(--ink2);display:flex;gap:.9rem;flex-wrap:wrap;margin:.4rem 0 .3rem;}
+.legend i{display:inline-block;width:12px;height:12px;border-radius:3px;vertical-align:-2px;margin-right:.3rem;border:1.5px solid #b8b3a5;}
+.muted{color:#a09a8c;}
+@media(max-width:700px){ .row{grid-template-columns:1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="box">
+    <h1>WT_S pairs lab</h1>
+    <p class="intro">Generates WT_S pairs with <b>WT_S's own generator</b> (copied from <code>index.html</code> by <code>tools/sync_wts_code.js</code>, the same code the task uses; the decks are WT_Q's): the deck drawn so that the effort expected stays the same at the offer and after each empty orange card (density with debt, as WT_P); the last card always orange; <b>one winning card</b>, equally likely on any orange card. Every card of the main deck is <b>locked</b> and needs a <b>key</b> (white cards too, in order); a key is one card of work in the keys deck. <b>Full</b>: before the offer only keys are made, <b>x</b> of them (2, 4, 6, 8 or 10, at random): the sunk effort. <b>Truncated</b>: a <b>new deck</b>, no keys, the same alternative offered <b>at the start</b>. The x keys look like a discount but are not one: the first x/2 slots of the full deck are two cards each (a buffer white card, then the slot's card), so the keys cover x cards of which x/2 are extra white cards. Unlocking a covered pair costs 2 cards of work (1 + 1), as a key and a new card do in the truncated deck, which is the slots alone. Every orange card costs the same to reach in both versions: the same effort expected at the offer and after each empty orange card, the same alternative, the same best move.<br>
+    After the offer there is one way of staying: the cards in order, with a key each; when none is left, a key card first (the game does it by itself). Each pair's <b>keys at the offer</b> can be changed (blue box): the buffer white cards move in front of the new covered slots and both versions are recomputed.<br>
+    The truncated rows are drawn under the full ones, with a gap under each buffer white card: each new card sits under the covered card it stands for. Under each deck: <b>staying</b> = from the offer, the effort expected to the winning card never switching (each key and each card counts 1), on the card that step works (a covered pair, white then orange or white, is one step: one number, on its second card): <b>red</b> when switching is the best move before that step, <b>green</b> otherwise. Hover any cell for the details. <b>Figure</b>: one pair drawn for the paper (keys, main deck, truncated deck, alternative, the work to reach each card), downloadable as SVG.</p>
+    <div class="ctl">
+      <label>Pairs<input type="number" id="n-pairs" value="40" min="1" max="1000"></label>
+      <label>Seed<input type="number" id="seed" value="1"></label>
+      <label>Length<select id="len"><option value="0" selected>as WT_S (16–30)</option><option value="18">18</option><option value="22">22</option><option value="26">26</option></select></label>
+      <label>Keys at the offer<select id="px"><option value="0" selected>as WT_S (2–10)</option><option value="2">2</option><option value="4">4</option><option value="6">6</option><option value="8">8</option><option value="10">10</option></select></label>
+      <button onclick="generate()">Generate</button>
+      <button class="ghost" onclick="downloadCSV()">Download CSV</button>
+    </div>
+    <div id="status" class="info" style="margin-top:.6rem;">—</div>
+  </div>
+  <div class="box" id="fig-box" style="display:none;">
+    <h2>Figure</h2>
+    <p class="intro">One pair as the participant meets it: the keys made before the offer, the main deck (the cards the keys cover marked underneath), the truncated deck with each new card under the covered card it stands for, the alternative. Under each deck: the cards of work each card costs from the offer (1 with a key in hand, 2 for a key and the card) and the work from the offer to reach it: equal in both versions at every orange card. Pick a pair here or with <b>figure</b> in the list.</p>
+    <div class="ctl">
+      <label>Pair<input type="number" id="fig-pair" value="1" min="1" onchange="drawFigure()"></label>
+      <label class="ck"><input type="checkbox" id="fig-trunc" checked onchange="drawFigure()">truncated deck</label>
+      <label class="ck"><input type="checkbox" id="fig-alt" checked onchange="drawFigure()">alternative</label>
+      <label class="ck"><input type="checkbox" id="fig-cost" checked onchange="drawFigure()">work per card</label>
+      <label class="ck"><input type="checkbox" id="fig-cum" checked onchange="drawFigure()">work from the offer</label>
+      <label class="ck"><input type="checkbox" id="fig-win" onchange="drawFigure()">winning card</label>
+      <label class="ck"><input type="checkbox" id="fig-num" onchange="drawFigure()">card numbers</label>
+      <button class="ghost" onclick="downloadSVG()">Download SVG</button>
+    </div>
+    <div class="fig" id="fig"></div>
+  </div>
+  <div class="box" id="sum-box" style="display:none;">
+    <h2>Summary</h2>
+    <div id="g-sw"></div>
+    <div class="grid2" style="margin-top:.6rem;"><div id="h-pos"></div><div id="h-alt"></div></div>
+    <div class="tw" style="margin-top:.6rem;"><div id="sum-table"></div></div>
+  </div>
+  <div class="box" id="list-box" style="display:none;">
+    <h2>Pairs</h2>
+    <div class="legend"><span><i style="background:#fff"></i>white</span><span><i style="background:var(--or);border-color:var(--or2)"></i>orange</span><span><i style="background:var(--gold);border-color:#b8860b"></i>winning card</span><span><i style="box-shadow:inset 0 -4px 0 var(--key)"></i>covered by the keys made before the offer (sunk)</span><span><i style="box-shadow:0 0 0 2px var(--blue)"></i>last card covered by the keys</span><span><i style="background:#e4efe0;border-color:#8bb07c"></i>staying is the best move</span><span><i style="background:#f6c9bd;border-color:var(--red)"></i>switching is the best move</span></div>
+    <div id="list"></div>
+  </div>
+</div>
+<script>
+/*__WTS_BEGIN__*/
+// WT_S generator: the deck, the pause, the alternative, and the benchmarks (best move, cards expected). Lives here (no
+// lab copy: the decks are WT_Q's). Also loads in Node (module.exports).
+//
+// A sequence of L cards, orange or white, the last one orange. It holds ONE winning card, equally likely on any orange
+// card. Every card is locked and is opened (unlocked) with a key: one card of work, in order, white ones too. A key is
+// one card of work too (a key card); keys are unlimited. Before the offer only keys are made: the full version makes x
+// keys (x = 2, 4, 6, 8 or 10), then the offer; the truncated version plays a new deck (truncDeck) with no keys, the offer
+// at the start. From the offer on the participant stays in the state chosen (unlocking cards, making a key first when
+// none is left; or making keys) until choosing another, or switches to the alternative (A cards). The winning card
+// unlocked → reward. With k keys in hand the next k cards cost 1 each, the later ones 2 (a key, then the card): the
+// model below calls the cards covered by a key `locked`.
+// The longest run of white cards is always shorter than the alternative.
+// The deck is drawn as SLOTS of two cards of work from the pause on: the first x/2 slots are two cards each (a buffer
+// white card, then the slot's card: both covered by the x keys), the later ones one card. Its orange density keeps
+// the effort expected to the winning card the same at the pause and after each orange card found empty (flatDeck).
+// Pairs: the full version's x keys come with the x/2 buffer white cards, so they save nothing: the truncated deck is the
+// slots alone (each pair one card, a key then the card), and every orange card costs the same to reach in both versions:
+// the same effort expected at the offer and after each orange card found empty. As WT_Q.
+// A is set at the pause: the cost of staying (the next step, then the best policy with switching allowed at every later
+// step) has power mean M_k; A_k is the value with M_k(A_k) = A_k. Three of them bound the alternative: A_0 (geometric mean),
+// the fair value A_1 (arithmetic: the least, over "check j more orange cards, then switch", of the effort to there / the
+// chance of the winning card by there) and A_2 (quadratic). Half of the designs (switching better) draw A uniformly in the
+// half of [A_0, A_1] nearer A_1, the other half (switching worse) in the half of [A_1, A_2] nearer A_1; rounded strictly on
+// its side of A_1. If A is above 20, the deck is drawn again.
+(function(root){
+'use strict';
+const QCFG = {
+  lengthLo: 16, lengthHi: 30,          // the cards in the deck
+  flatELo: 10, flatEHi: 17,            // E: the effort expected to the winning card, the same at the pause and after each empty orange card
+  flatFLo: 0.6, flatFHi: 0.95,         // orange cards expected = f · E/2 (E/2: one orange card per slot at the start, the most there can be)
+  debtKLo: 0.75, debtKHi: 1,           // share of the orange-card debt carried to the next slot, drawn per sequence (as WT_P drawWithDebt_)
+  flatTol: 0.15,                       // the effort expected as drawn stay within ±15% of their mean, else the deck is drawn again
+  xVals: [2, 4, 6, 8, 10],             // the keys at the offer (the full version makes them), equally likely (even: the deck's slots)
+  minOrange: 5,
+  redoWhites: true,                    // true: white cards need a key too (every card, in order)
+  whiteRunBelowAlt: true,              // the longest run of white cards is shorter than the alternative, else x (then the deck) is drawn again
+  altGoodShare: 0.5, altPowLo: 0, altPowHi: 2, altBand: 0.5, // the alternative between the geometric (k = 0) and the quadratic (k = 2) fixed points, the fair one (k = 1) in between: in the half of each band nearer the fair value
+  altMin: 5, altFairLo: 4.7, altMax: 20,
+};
+
+function makeRng(seed){ let a = (seed >>> 0) || 1; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+const U = (rng, a, b) => a + rng() * (b - a);
+const I = (rng, a, b) => a + Math.floor(rng() * (b - a + 1));
+const r2 = x => Math.round(x * 100) / 100;
+
+// The slots (2 cards of work each from the pause on), orange or white, the last one orange. With the winning card equally
+// likely on the orange cards left (m), the effort expected stays at E when the next orange card comes E/m cards on: the
+// orange cards left fall as K e^(−c/E) after c cards of work, i.e. a slot is orange with probability (2K/E) e^(−2s/E).
+// Drawn one by one with the debt (as WT_P drawWithDebt_): slot s is orange w.p. its density + debtK · (orange slots
+// expected so far − drawn so far), within 2–97%.
+function flatDeck(rng){
+  const E = U(rng, QCFG.flatELo, QCFG.flatEHi), K = Math.max(3, E / 2 * U(rng, QCFG.flatFLo, QCFG.flatFHi)), debtK = U(rng, QCFG.debtKLo, QCFG.debtKHi);
+  const S = Math.max(4, Math.round(E / 2 * (Math.log(K) + 1))), ds = [], slots = []; let debt = 0;
+  for(let s = 0; s < S - 1; s++){
+    const d = Math.min(1, 2 * K / E * Math.exp(-2 * s / E)), o = rng() < Math.min(0.97, Math.max(0.02, d + debtK * debt));
+    ds.push(d); slots.push(o); debt += d - (o ? 1 : 0);
+  }
+  ds.push(1); slots.push(true);
+  return { E: r2(E), K: r2(K), debtK: r2(debtK), ds: ds.map(r2), slots };
+}
+// The effort expected to the winning card (staying), on the slots: at the start, then after each orange card found empty.
+function expectedPath(slots){
+  const pos = []; slots.forEach((o, i) => { if(o) pos.push(2 * (i + 1)); });
+  return pos.slice(0, -1).reduce((out, p, j) => { out.push(pos.slice(j + 1).reduce((a, q) => a + q - p, 0) / (pos.length - j - 1)); return out; }, [pos.reduce((a, q) => a + q, 0) / pos.length]);
+}
+// The rational steps from n cards locked (1 … n), with the orange cards `opened` already unlocked (all empty):
+// the locked orange cards first (1 card of work each), then the rest in order (orange 2: lock and unlock; white 1).
+// h = the chance the step finds the winning card, given the earlier ones did not (every orange card equally likely).
+// QCFG.redoWhites: white cards are unlocked too (in order, 1 card each), so every card after the pause costs 2.
+function stepsFrom(live, n, opened){
+  const op = new Set(opened || []), st = [], W = !!QCFG.redoWhites;
+  for(let t = 0; t < n; t++) if((live[t] || W) && !op.has(t + 1)) st.push({ card: t + 1, cost: 1, o: live[t], kind: 'unlock' });
+  for(let t = n; t < live.length; t++) st.push({ card: t + 1, cost: live[t] || W ? 2 : 1, o: live[t], kind: 'lock' });
+  let m = st.filter(s => s.o).length;
+  for(const s of st){ s.h = s.o ? 1 / Math.max(1, m) : 0; if(s.o) m--; }
+  return st;
+}
+// Optimal stopping: V[i] = the least expected cost from step i on, switching allowed before each step; sw[i] = switch there.
+function optStop(st, A){
+  const V = new Array(st.length + 1).fill(A), sw = new Array(st.length).fill(false);
+  for(let i = st.length - 1; i >= 0; i--){ const cont = st[i].cost + (1 - st[i].h) * V[i + 1]; sw[i] = cont >= A; V[i] = Math.min(A, cont); }
+  return { V, sw };
+}
+// As WT_P (optStopCost_ / altOptFair_): the power mean M_k of the cost of staying (the next step, then the best policy):
+// the effort expected with the option to switch later. At k = 1, A with M_1(A) = A is the least, over "check j more orange
+// cards, then switch" (j = all: never switching, the effort expected), of the effort to there / the chance of the winning
+// card by there. On a perfectly flat deck all these are the effort expected, so A is the effort expected.
+// The next step runs through any white cards to the next card that can be the winning one (as bestMove), so a locked
+// pair (white, then orange) is one step, as the new card it becomes in the truncated deck.
+// 2026-11-04: the policy is the best one under the same criterion as the mean (minimising E[g(total cost)], g(c) = c^k,
+// ln c at k = 0), not the risk-neutral one for every k: backward induction over the cards, where switching before card i
+// ends at g(spent_i + A) and playing it ends at g(spent_i + cost_i) with chance h_i or goes on. The cards are played in
+// a fixed order, so the cards spent before card i are fixed and the state is the card alone. At k = 1 this is the
+// risk-neutral optimal stopping (optStop), the same fair value as before.
+function stayCost(st, A, k){
+  const geo = k < 1e-9, g = c => geo ? Math.log(Math.max(1, c)) : Math.pow(Math.max(1, c), k), n = st.length, cum = [0];
+  for(let i = 0; i < n; i++) cum.push(cum[i] + st[i].cost);
+  const V = new Array(n + 1); V[n] = g(cum[n] + A);
+  for(let i = n - 1; i >= 0; i--) V[i] = Math.min(g(cum[i] + A), st[i].h * g(cum[i + 1]) + (1 - st[i].h) * V[i + 1]);
+  let i = 0; while(i < n - 1 && st[i].h === 0) i++;                 // staying: through the white cards and the next card that can win
+  const val = st[i].h * g(cum[i + 1]) + (1 - st[i].h) * V[i + 1];
+  return geo ? Math.exp(val) : Math.pow(val, 1 / k);
+}
+function altFixed(st, k){ let lo = 0.5, hi = 200; for(let i = 0; i < 40; i++){ const m = (lo + hi) / 2; if(stayCost(st, m, k) > m) lo = m; else hi = m; } return (lo + hi) / 2; }
+// The alternative before rounding: u × altBand of the way from the fair value to the geometric bound (good: switching better)
+// or to the quadratic one (switching worse), u in [0, 1]: the half of each band nearer the fair value. Returns the three
+// fixed points and the value drawn.
+function altDraw(st, good, u){ const geo = altFixed(st, QCFG.altPowLo), fair = altFixed(st, 1), quad = altFixed(st, QCFG.altPowHi);
+  const w = u * QCFG.altBand; return { geo, fair, quad, M: good ? fair - w * (fair - geo) : fair + w * (quad - fair) }; }
+function drawSequence(rng, opts){
+  opts = opts || {};
+  const redraws = { not_flat: 0, few_orange: 0, length: 0, out_of_bounds: 0 };
+  // which half (switching better: below the fair value / worse: above it): drawn once, kept through the redraws, so that
+  // dropping the alternatives above altMax (mostly in the upper half) does not tilt the sequences towards switching
+  const good = rng() < QCFG.altGoodShare;
+  // the pause too: drawn once, the deck drawn again until it fits (else the length bounds would favour the longer pauses)
+  const xi = opts.x || QCFG.xVals[Math.floor(rng() * QCFG.xVals.length)];
+  for(let tries = 0; tries < 5000; tries++){
+    const deck = flatDeck(rng), slots = deck.slots, path = expectedPath(slots), mean = path.reduce((a, b) => a + b, 0) / path.length;
+    const flatDev = Math.max(...path.map(v => Math.abs(v / mean - 1)));
+    if(flatDev > QCFG.flatTol){ redraws.not_flat++; continue; }
+    const K = slots.filter(Boolean).length;
+    if(K < QCFG.minOrange){ redraws.few_orange++; continue; }
+    const u = rng();
+    // the buffer white cards: one in front of each of the x/2 slots covered by the keys (in front: else an orange card
+    // first in its pair would cost 1 to reach in the full version, 2 in the truncated one)
+    const x = xi, live = [], ds = []; slots.forEach((o, s) => { if(s < x / 2){ live.push(false); ds.push(0); } live.push(o); ds.push(deck.ds[s]); });
+    const L = live.length;
+    if(x / 2 + 2 > slots.length || L < QCFG.lengthLo || L > QCFG.lengthHi || (opts.length && L !== opts.length)){ redraws.length++; continue; }
+    let run = 0, maxRun = 0; for(const v of live){ run = v ? 0 : run + 1; maxRun = Math.max(maxRun, run); }
+    // rounded towards its half, strictly on its side of the fair value: switching is the best move in exactly the half drawn
+    // below it (plain rounding put values just above the fair value below it: 63% instead of 50%)
+    const st = stepsFrom(live, x, []), ad = altDraw(st, good, u), M = ad.M, fair1 = ad.fair;
+    const alt = Math.max(QCFG.altMin, good ? Math.min(Math.floor(M), Math.ceil(fair1) - 1) : Math.max(Math.ceil(M), Math.floor(fair1) + 1));
+    if(M < QCFG.altFairLo || alt > QCFG.altMax || (QCFG.whiteRunBelowAlt && maxRun >= alt)){ redraws.out_of_bounds++; continue; }
+    let j = Math.floor(rng() * K), winner = null; for(let t = 0; t < L; t++) if(live[t] && j-- === 0){ winner = t + 1; break; }
+    const shape ={ E: deck.E, K: deck.K, debtK: deck.debtK, flatMean: r2(mean), flatDev: r2(flatDev) };
+    const out = { L, shape, ds, live, nOrange: K, maxWhiteRun: maxRun, winner, x, u: +u.toFixed(3), good, M: +M.toFixed(2), fair1: +fair1.toFixed(2), geo: +ad.geo.toFixed(2), quad: +ad.quad.toFixed(2), alt,
+      expected: path.map(r2), switchAtX: optStop(st, alt).sw[0], redraws, tries };
+    out.trunc = truncDeck(out);
+    return out;
+  }
+  throw new Error('drawSequence: no sequence after 5000 tries');
+}
+
+// The truncated version (WT_Q's truncDeck): a NEW deck, no keys, offered the same alternative at the start: the slots
+// without the buffer white cards. Each pair covered by the keys (buffer white, then the slot's card: 1 + 1 cards to
+// unlock) becomes one new card (2 cards: a key and the card); the cards after it are kept. Every orange card stays,
+// equally likely, and costs the same to reach: the same effort expected at every orange card.
+function truncDeck(s){
+  const live = []; for(let t = 0; t < s.x; t += 2) live.push(s.live[t + 1]);
+  const L = live.push(...s.live.slice(s.x)), w = s.winner, winner = w <= s.x ? w / 2 : s.x / 2 + (w - s.x);
+  const st = stepsFrom(s.live, s.x, []), tst = stepsFrom(live, 0, []);
+  let run = 0, maxRun = 0; for(const v of live){ run = v ? 0 : run + 1; maxRun = Math.max(maxRun, run); }
+  const cards = []; live.forEach((v, t) => { if(v) cards.push(t + 1); });
+  return { live, L, winner, rounding: 'exact', M: +altDraw(tst, s.good, s.u).M.toFixed(2), fair1: +altFixed(tst, 1).toFixed(2), maxWhiteRun: maxRun, nOrange: cards.length,
+    truncCards: cards, targetM: +altDraw(st, s.good, s.u).M.toFixed(2), targetFair1: +altFixed(st, 1).toFixed(2), exact: true };
+}
+
+// The best move now: n = the cards covered (unlocked, plus the keys in hand, plus the card being unlocked), `opened` the
+// cards unlocked so far (all empty): 'switch', 'unlock' (the next card has a key) or 'lock' (a key is needed first);
+// stay = the least expected cost of not switching now.
+function bestMove(seq, n, opened){
+  const st = stepsFrom(seq.live, n, opened); if(!st.length) return { move: 'switch', stay: Infinity };
+  // White cards tell nothing, so nobody stops right after one (switching just before it is cheaper): staying runs through
+  // the white cards to the next card that can be the winning one, then follows the best policy.
+  const { V } = optStop(st, seq.alt); let i = 0, c = 0;
+  while(i < st.length - 1 && st[i].h === 0){ c += st[i].cost; i++; }
+  const stay = c + st[i].cost + (1 - st[i].h) * V[i + 1];
+  return { move: stay >= seq.alt ? 'switch' : st[0].kind, stay };
+}
+
+const api = { QCFG, makeRng, flatDeck, expectedPath, stepsFrom, optStop, stayCost, altFixed, altDraw, drawSequence, bestMove, truncDeck };
+if(typeof module !== 'undefined' && module.exports) module.exports = api; else root.WTS = api;
+})(typeof window !== 'undefined' ? window : this);
+/*__WTS_END__*/
+</script>
+<script>
+const el = id => document.getElementById(id);
+const mean = a => a.length ? a.reduce((s, x) => s + x, 0) / a.length : NaN;
+const Q = (a, q) => { if(!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.min(s.length - 1, Math.floor(q * s.length))]; };
+const pc = x => isNaN(x) ? '—' : Math.round(100 * x) + '%', f1 = x => x == null || isNaN(x) ? '—' : x.toFixed(1);
+const KIND = { unlock: 'a card with a key in hand (1 card of work)', lock: 'a key, then the card (2 cards of work)' };
+let PAIRS = [], RUN = 0;
+// Expected cards of work to the winning card, never switching (the rational order).
+function commitCost(st){ let alive = 1, c = 0; for(const s of st){ c += alive * s.cost; alive *= 1 - s.h; } return c; }
+function generate(){
+  const N = Math.max(1, Math.min(1000, parseInt(el('n-pairs').value) || 40)), rng = WTS.makeRng(+el('seed').value || 1), run = ++RUN;
+  const opts = {}; if(+el('len').value) opts.length = +el('len').value; if(+el('px').value) opts.x = +el('px').value;
+  PAIRS = []; el('status').textContent = 'Generating…'; let i = 0; const t0 = performance.now();
+  const step = () => {
+    if(run !== RUN) return;
+    const until = performance.now() + 60;
+    while(i < N && performance.now() < until){ PAIRS.push(makePair(i + 1, WTS.drawSequence(rng, opts))); i++; }
+    el('status').textContent = 'Generating… ' + i + ' / ' + N;
+    if(i < N) setTimeout(step, 0); else { el('status').innerHTML = '<b>' + N + '</b> pairs in ' + Math.round((performance.now() - t0) / 100) / 10 + ' s.'; render(); }
+  };
+  setTimeout(step, 0);
+}
+// A pair: at the offer, the alternative (its geometric, fair and quadratic bounds) and the effort expected never switching;
+// then the rational way of staying from the offer until the winning card, with the cost of staying and the best move
+// before each step.
+function makePair(id, s){
+  const st = WTS.stepsFrom(s.live, s.x, []), ad = WTS.altDraw(st, s.good, s.u), at = { mk: ad.M, arith: ad.fair, geo: ad.geo, quad: ad.quad, commit: commitCost(st) };
+  const p = { id, s, at };
+  setPause(p, s.x, s.alt);
+  return p;
+}
+// The offer after x keys (changeable per pair: relayout): the full version staying from the offer, and the truncated deck
+// (WTS.truncDeck: no keys, the same alternative at the start) staying from the start.
+function setPause(p, x, A){
+  const s = p.s; p.x = x;
+  p.A = A;
+  const seq = Object.assign({}, s, { x, alt: p.A });
+  p.tr = x === s.x ? s.trunc : WTS.truncDeck(seq);
+  p.tseq = Object.assign({}, seq, { live: p.tr.live, L: p.tr.L, winner: p.tr.winner, ds: null, x: 0 });
+  p.path = walk(seq, x); p.path0 = walk(p.tseq, 0);
+  const sw = P => P.slice(1).filter(o => o.best === 'switch').length, cost = P => P.reduce((a, o) => a + o.cost, 0);
+  p.swAfter = sw(p.path); p.swAfter0 = sw(p.path0); p.cost = cost(p.path); p.cost0 = cost(p.path0);
+}
+// The rational way of staying with n cards covered by keys, until the winning card: the cost of staying and the best move
+// before each step.
+function walk(seq, n){
+  const path = []; let opened = [];
+  for(let g = 0; g < 80; g++){
+    const c = WTS.stepsFrom(seq.live, n, opened)[0], bm = WTS.bestMove(seq, n, opened);
+    path.push({ j: g, card: c.card, kind: c.kind, cost: c.cost, best: bm.move, stay: bm.stay, eff: commitCost(WTS.stepsFrom(seq.live, n, opened)), win: c.card === seq.winner });
+    if(c.card === seq.winner) break;
+    if(c.kind === 'unlock') opened.push(c.card); else { n++; opened.push(n); }
+  }
+  return path;
+}
+// Another number of keys on the same slots (the truncated deck): the buffer white cards moved in front of the new x/2
+// covered slots, the alternative set there by the generator's rule (the same u of the way to the bound of its half, rounded towards it).
+function relayout(s0, x){
+  const slots = s0.trunc.live, sds = [], live = [], ds = [];
+  for(let t = 0; t < s0.x; t += 2) sds.push(s0.ds[t + 1]); sds.push(...s0.ds.slice(s0.x));
+  slots.forEach((o, i) => { if(i < x / 2){ live.push(false); ds.push(0); } live.push(o); ds.push(sds[i]); });
+  const tw = s0.trunc.winner, winner = tw <= x / 2 ? 2 * tw : tw + x / 2, st = WTS.stepsFrom(live, x, []);
+  const ad = WTS.altDraw(st, s0.good, s0.u), M = ad.M, fair1 = ad.fair;
+  const alt = Math.max(WTS.QCFG.altMin, s0.good ? Math.min(Math.floor(M), Math.ceil(fair1) - 1) : Math.max(Math.ceil(M), Math.floor(fair1) + 1));
+  let run = 0, maxRun = 0; for(const v of live){ run = v ? 0 : run + 1; maxRun = Math.max(maxRun, run); }
+  const s = Object.assign({}, s0, { live, ds, L: live.length, x, winner, M: +M.toFixed(2), fair1: +fair1.toFixed(2), alt, maxWhiteRun: maxRun,
+    switchAtX: WTS.optStop(st, alt).sw[0], x0: s0.x0 != null ? s0.x0 : s0.x, alt0: s0.alt0 != null ? s0.alt0 : s0.alt });
+  s.trunc = WTS.truncDeck(s);
+  return s;
+}
+function changePause(id, v){
+  const i = PAIRS.findIndex(q => q.id === id), s = PAIRS[i].s, x = Math.max(2, Math.min(2 * (s.trunc.L - 2), 2 * Math.round((parseInt(v) || 2) / 2)));
+  const p = PAIRS[i] = makePair(id, relayout(s, x));
+  el('pair-' + id).outerHTML = pairHTML(p, Math.max(...PAIRS.map(q => q.s.L)));
+  if(+el('fig-pair').value === id) drawFigure();
+}
+const pad = (n, cols) => Array.from({ length: Math.max(0, cols - n) }, () => '<div class="c empty"></div>').join('');
+const row = (lab, cells, cols) => `<div class="row"><div class="lab">${lab}</div><div class="strip" style="grid-template-columns:repeat(${cols}, minmax(0, 1fr))">${cells}</div></div>`;
+// The truncated rows are drawn under the full ones: a gap under each buffer white card (shift = the covered pairs), so each
+// new card sits under the covered card it stands for.
+const gaps = (cells, shift) => { for(let i = shift - 1; i >= 0; i--) cells.splice(i, 0, '<div class="c empty" title="no card here: the buffer white card of the full version"></div>'); return cells.join(''); };
+function deckCells(s, keyCls, cols, x, shift){
+  return gaps(s.live.map((v, t) => { const k = t + 1, w = k === s.winner;
+    return `<div class="${['c', w ? 'w' : v ? 'o' : '', t < x ? keyCls : '', k === x ? 'offer' : ''].filter(Boolean).join(' ')}" title="card ${k}${t < x ? ' (covered by a key made before the offer)' : ''}${s.ds ? ': ' + Math.round(s.ds[t] * 100) + '% orange' : ''}">${w ? '★' : ''}</div>`; }), shift || 0) + pad(s.L + (shift || 0), cols);
+}
+// The rational way of staying works the cards left to right, one step per card. The number: the effort expected to the
+// winning card never switching (each key and each card 1), before the step. A covered pair (buffer white, then the slot's
+// card) is one step, as the new card it becomes in the truncated deck: one number, on the slot's card.
+function stayCells(p, cols, path, from, deck, shift){
+  const s = deck || p.s, byCard = {}; path.forEach(o => { byCard[o.card] = o; });
+  return gaps(s.live.map((v, t) => { const k = t + 1, pair = !deck && k <= s.x;
+    if(pair && k % 2) return '<div class="c empty" title="card ' + k + ': the buffer white card of a covered pair, one step with the next card"></div>';
+    const o = byCard[pair ? k - 1 : k];
+    if(!o) return '<div class="c empty"></div>';
+    return `<div class="c ${o.best === 'switch' ? 'sw' : 'st'}" title="step ${o.j + 1} from ${from}: ${pair ? 'cards ' + (k - 1) + '–' + k + ' with a key each (2 cards of work)' : 'card ' + o.card + ': ' + KIND[o.kind]}${o.win ? ', the winning card' : ''} | before it, effort expected never switching ${f1(o.eff)}; staying (switching allowed later) costs ${f1(o.stay)} vs alternative ${p.A}: ${o.best === 'switch' ? 'switch' : 'stay'}">${f1(o.eff)}</div>`; }), shift || 0) + pad(s.L + (shift || 0), cols);
+}
+function pairHTML(p, cols){
+  const s = p.s, at = p.at, drawn = s.x0 == null || s.x0 === s.x, mv = P => P[0].best === 'switch' ? 'switch' : 'stay';
+  let h = `<div class="pair" id="pair-${p.id}"><div class="ph">pair <b>${p.id}</b><button class="ghost mini" onclick="showFigure(${p.id})">figure</button> · <b>${s.L}</b> cards, <b>${s.nOrange}</b> orange (effort expected ${s.shape.flatMean} at the offer and after each empty orange card, within ±${pc(s.shape.flatDev)}; debt ${s.shape.debtK}) · winning card <b>${s.winner}</b> · alternative between geometric ${f1(at.geo)} and quadratic ${f1(at.quad)}, fair ${f1(at.arith)} (switching ${s.good ? 'better' : 'slightly worse'}) · `;
+  h += `keys at the offer <input type="number" min="2" max="${s.L - 3}" step="2" value="${p.x}" style="width:3.4rem;font-family:var(--mono);font-size:.74rem;padding:.05rem .2rem;border:1px solid var(--blue);border-radius:4px;" onchange="changePause(${p.id}, this.value)"> ${drawn ? '(as drawn)' : `<span style="color:var(--blue)">(drawn: ${s.x0}, alternative ${s.alt0})</span>`}<br>`;
+  h += `<b>full</b> · alternative <b>${p.A}</b> (generator there ${f1(at.mk)}, arithmetic ${f1(at.arith)})${s.winner <= p.x ? ' · winning card among the cards covered by the keys' : ''} · staying at the offer ${f1(p.path[0].stay)} → <b>${mv(p.path)}</b> · if staying: ${p.cost} cards of work to the winning card (expected never switching ${f1(at.commit)}), switching the best move before <b>${p.swAfter}</b> of the ${Math.max(0, p.path.length - 1)} later steps<br>`;
+  const tr = p.tr, same = mv(p.path) === mv(p.path0);
+  h += `<b>truncated</b> · new deck of <b>${tr.L}</b> cards, <b>${tr.nOrange}</b> orange (<b>exact</b>: each covered pair, white then orange or white, = one new card; the cards after it kept), winning card <b>${tr.winner}</b> · the same alternative <b>${p.A}</b> at the start, no keys · generator there <b>${f1(tr.M)}</b> vs full <b>${f1(tr.targetM)}</b> (arithmetic ${f1(tr.fair1)} vs ${f1(tr.targetFair1)}) · staying at the start ${f1(p.path0[0].stay)} vs ${f1(p.path[0].stay)} → <b>${mv(p.path0)}</b>${same ? '' : ' <span style="color:var(--red)">(full: ' + mv(p.path) + ')</span>'} · if staying: ${p.cost0} cards of work to the winning card, switching the best move before <b>${p.swAfter0}</b> of the ${Math.max(0, p.path0.length - 1)} later steps</div>`;
+  h += row(`<b>full</b> · ${p.x} keys`, deckCells(s, 'done', cols, p.x), cols);
+  h += row(`staying<br><span class="muted">effort expected, from the offer</span>`, stayCells(p, cols, p.path, 'the offer'), cols);
+  h += row(`<b>truncated</b> · no keys<br><span class="muted">new deck, offer at the start</span>`, deckCells(p.tseq, '', cols, 0, p.x / 2), cols);
+  h += row(`staying<br><span class="muted">effort expected, from the start</span>`, stayCells(p, cols, p.path0, 'the start', p.tseq, p.x / 2), cols);
+  return h + '</div>';
+}
+function render(){
+  const cols = Math.max(...PAIRS.map(p => p.s.L));
+  el('list').innerHTML = PAIRS.map(p => pairHTML(p, cols)).join('');
+  el('list-box').style.display = ''; el('sum-box').style.display = ''; el('fig-box').style.display = '';
+  el('fig-pair').max = PAIRS.length; drawFigure();
+  el('g-sw').innerHTML = swCurve();
+  const hist = (vals, title, maxX) => { const mx = maxX != null ? maxX : Math.max(1, ...vals), bins = new Array(mx + 1).fill(0); vals.forEach(v => bins[Math.min(mx, v)]++); return bars(bins, title); };
+  el('h-pos').innerHTML = hist(PAIRS.map(p => p.s.x), 'Keys at the offer (sunk effort of the full version)');
+  el('h-alt').innerHTML = hist(PAIRS.map(p => p.s.alt), 'Alternative offered (cards)', 20);
+  const rows = [['all', PAIRS], ['switching better (below fair)', PAIRS.filter(p => p.s.good)], ['slightly worse (above fair)', PAIRS.filter(p => !p.s.good)]];
+  el('sum-table').innerHTML = '<table><tr><th>pairs</th><th>n</th><th>keys at the offer<br>median [10–90%]</th><th>winning card<br>covered by the keys</th><th>alternative<br>median [10–90%]</th><th>arithmetic<br>median</th><th>never switching<br>mean cards of work</th><th>switch best<br>at the offer</th><th>stayers: switch best<br>at least once</th><th>stayers: share<br>of later steps</th><th>truncated: switch best<br>at the start</th><th>truncated stayers: switch<br>best at least once</th><th>same best move<br>at the offer</th><th>truncated − full<br>alternative (median)</th></tr>' +
+    rows.map(([lab, R]) => { const x = R.map(p => p.s.x), alt = R.map(p => p.s.alt), stay = R.filter(p => !p.s.switchAtX);
+      return `<tr><td style="text-align:left">${lab}</td><td>${R.length}</td><td>${Q(x, .5)} [${Q(x, .1)}–${Q(x, .9)}]</td><td>${pc(mean(R.map(p => p.s.winner <= p.s.x ? 1 : 0)))}</td><td>${Q(alt, .5)} [${Q(alt, .1)}–${Q(alt, .9)}]</td><td>${f1(Q(R.map(p => p.at.arith), .5))}</td><td>${f1(mean(R.map(p => p.at.commit)))}</td><td>${pc(mean(R.map(p => p.s.switchAtX ? 1 : 0)))}</td><td>${pc(mean(stay.map(p => p.swAfter > 0 ? 1 : 0)))}</td><td>${pc(mean(stay.map(p => p.path.length > 1 ? p.swAfter / (p.path.length - 1) : 0)))}</td><td>${pc(mean(R.map(p => p.path0[0].best === 'switch' ? 1 : 0)))}</td><td>${pc(mean(R.filter(p => p.path0[0].best !== 'switch').map(p => p.swAfter0 > 0 ? 1 : 0)))}</td><td>${pc(mean(R.map(p => (p.path0[0].best === 'switch') === (p.path[0].best === 'switch') ? 1 : 0)))}</td><td>${f1(Q(R.map(p => p.tr.M - p.tr.targetM), .5))}</td></tr>`; }).join('') + '</table>';
+}
+
+// ── FIGURE: one pair drawn for the paper ──
+// Columns: the x key cards, the offer, then the main deck's cards; the truncated deck's card j sits under the full deck's
+// card it stands for (a covered pair's second card); the alternative starts at the offer. Under each deck, optionally:
+// the cards of work each card costs from the offer, and the work from the offer to reach it (the same in both versions on
+// every card the truncated deck keeps). Plain colours and one font, for print.
+const FIG = { cw: 22, ch: 28, gap: 4, lw: 150, top: 34, rowGap: 14, numH: 14 };
+function showFigure(id){ el('fig-pair').value = id; drawFigure(); el('fig-box').scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+function figureSVG(p, o){
+  const s = p.s, x = p.x, tr = p.tr, A = p.A, F = FIG, st = F.cw + F.gap;
+  const K0 = F.lw, D0 = K0 + x * st + 22, offX = D0 - 11, cols = Math.max(s.L, A);
+  const W = D0 + cols * st + 12;
+  const C = { ink: '#1a1a18', ink2: '#5a5a54', bdr: '#b8b3a5', white: '#ffffff', or: '#f3a53a', or2: '#c98416', win: '#f2c230', win2: '#b8860b', key: '#cfae63', key2: '#6b4c16', alt: '#5a8fd6', alt2: '#1e4f96', blue: '#2f6fc8' };
+  const card = (cx, y, fill, stroke, txt, tc) => `<rect x="${cx}" y="${y}" width="${F.cw}" height="${F.ch}" rx="4" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>` + (txt ? `<text x="${cx + F.cw / 2}" y="${y + F.ch / 2 + 4}" text-anchor="middle" font-size="11" font-weight="700" fill="${tc || C.ink}">${txt}</text>` : '');
+  const num = (cx, y, v, w) => `<text x="${cx + F.cw / 2}" y="${y}" text-anchor="middle" font-size="10" ${w ? 'font-weight="700" ' : ''}fill="${w ? C.ink : C.ink2}">${v}</text>`;
+  const label = (y, t, sub) => `<text x="0" y="${y}" font-size="11.5" font-weight="700" fill="${C.ink}">${t}</text>` + (sub ? `<text x="0" y="${y + 13}" font-size="9.5" fill="${C.ink2}">${sub}</text>` : '');
+  const deckCard = (v, k, winner) => o.win && k === winner ? [C.win, C.win2, '★', '#7a5600'] : v ? [C.or, C.or2, o.num ? k : '', C.ink] : [C.white, C.bdr, o.num ? k : '', C.ink2];
+  let y = F.top, h = '';
+  // the full version: the keys, then the deck; the covered cards marked underneath
+  h += label(y + 12, 'Full version', x + ' keys before the offer');
+  for(let i = 0; i < x; i++) h += card(K0 + i * st, y, C.key, C.key2, '');
+  let cum = 0; const cumAt = {};
+  s.live.forEach((v, t) => { const [f, sk, tx, tc] = deckCard(v, t + 1, s.winner); h += card(D0 + t * st, y, f, sk, tx, tc); });
+  let yy = y + F.ch;
+  for(let t = 0; t < x; t++) h += `<rect x="${D0 + t * st}" y="${yy + 3}" width="${F.cw}" height="3.5" rx="1" fill="${C.key}" stroke="${C.key2}" stroke-width=".6"/>`; // covered by a key
+  yy += 10;
+  if(o.cost){ s.live.forEach((v, t) => { h += num(D0 + t * st, yy + 10, t < x ? 1 : 2); }); h += `<text x="0" y="${yy + 10}" font-size="9.5" fill="${C.ink2}">work per card</text>`; yy += F.numH; }
+  if(o.cum){ s.live.forEach((v, t) => { cum += t < x ? 1 : 2; cumAt[t] = cum; h += num(D0 + t * st, yy + 10, cum, v); }); h += `<text x="0" y="${yy + 10}" font-size="9.5" fill="${C.ink2}">work from the offer</text>`; yy += F.numH; }
+  y = yy + F.rowGap;
+  // the truncated version: a new deck, no keys; card j under the full deck's card it stands for
+  if(o.trunc){
+    h += label(y + 12, 'Truncated version', 'no keys, offer at the start');
+    const at = j => j < x / 2 ? 2 * j + 1 : x + (j - x / 2);
+    tr.live.forEach((v, j) => { const [f, sk, tx, tc] = deckCard(v, j + 1, tr.winner); h += card(D0 + at(j) * st, y, f, sk, tx, tc); });
+    yy = y + F.ch + 6;
+    let c2 = 0;
+    if(o.cost){ tr.live.forEach((v, j) => { h += num(D0 + at(j) * st, yy + 10, 2); }); h += `<text x="0" y="${yy + 10}" font-size="9.5" fill="${C.ink2}">work per card</text>`; yy += F.numH; }
+    if(o.cum){ tr.live.forEach((v, j) => { c2 += 2; h += num(D0 + at(j) * st, yy + 10, c2, v); }); h += `<text x="0" y="${yy + 10}" font-size="9.5" fill="${C.ink2}">work from the offer</text>`; yy += F.numH; }
+    y = yy + F.rowGap;
+  }
+  // the alternative, from the offer
+  if(o.alt){
+    h += label(y + 12, 'Alternative', A + ' cards, no keys');
+    for(let i = 0; i < A; i++) h += card(D0 + i * st, y, C.alt, C.alt2, o.num ? i + 1 : '', '#fff');
+    y += F.ch + F.rowGap;
+  }
+  const H = y + 4;
+  // the offer: a dashed line through every row
+  h = `<line x1="${offX}" x2="${offX}" y1="${F.top - 14}" y2="${H - 8}" stroke="${C.blue}" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${offX}" y="${F.top - 18}" text-anchor="middle" font-size="10" font-weight="700" fill="${C.blue}">offer</text>` + h;
+  const leg = [[C.key, C.key2, 'key'], [C.white, C.bdr, 'white card'], [C.or, C.or2, 'orange card']].concat(o.win ? [[C.win, C.win2, 'winning card']] : []).concat(o.alt ? [[C.alt, C.alt2, 'alternative card']] : []);
+  let lx = 0, lg = '';
+  leg.forEach(([f, sk, t]) => { lg += `<rect x="${lx}" y="${H}" width="11" height="13" rx="2" fill="${f}" stroke="${sk}" stroke-width="1.2"/><text x="${lx + 15}" y="${H + 10}" font-size="9.5" fill="${C.ink2}">${t}</text>`; lx += 30 + 6 * t.length; });
+  lg += `<rect x="${lx}" y="${H + 5}" width="14" height="3.5" rx="1" fill="${C.key}" stroke="${C.key2}" stroke-width=".6"/><text x="${lx + 18}" y="${H + 10}" font-size="9.5" fill="${C.ink2}">covered by a key made before the offer</text>`;
+  const HH = H + 22;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${HH}" viewBox="0 0 ${W} ${HH}" font-family="'IBM Plex Mono', 'Courier New', monospace"><rect x="0" y="0" width="${W}" height="${HH}" fill="#fff"/>${h}${lg}</svg>`;
+}
+function figOpts(){ return { trunc: el('fig-trunc').checked, alt: el('fig-alt').checked, cost: el('fig-cost').checked, cum: el('fig-cum').checked, win: el('fig-win').checked, num: el('fig-num').checked }; }
+function drawFigure(){
+  const id = Math.max(1, Math.min(PAIRS.length, parseInt(el('fig-pair').value) || 1)), p = PAIRS.find(q => q.id === id);
+  if(!p) return; el('fig-pair').value = id;
+  el('fig').innerHTML = figureSVG(p, figOpts());
+}
+function downloadSVG(){
+  const id = +el('fig-pair').value, p = PAIRS.find(q => q.id === id); if(!p) return;
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([figureSVG(p, figOpts())], { type: 'image/svg+xml' }));
+  a.download = 'wts_pair_' + id + '_seed' + (+el('seed').value || 1) + '.svg';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+// Line chart helper: series = [{ v: [...], c: color, d: dashed, band: [lo[], hi[]] }]
+function lineChart(title, xs, series, yMax, xLab, tipOf){
+  const W = 420, H = 180, l = 28, r = 8, t = 34, b = 30, X = j => l + j / Math.max(1, xs.length - 1) * (W - l - r), Y = v => H - b - (H - t - b) * v / yMax;
+  let s = `<svg viewBox="0 0 ${W} ${H}"><text class="axis" x="${l}" y="11" style="font-weight:600">${title}</text>`;
+  let lx = l; series.filter(se => se.name).forEach(se => { s += `<line x1="${lx}" x2="${lx + 14}" y1="21" y2="21" stroke="${se.c}" stroke-width="2" ${se.d ? 'stroke-dasharray="4 3"' : ''}/><text class="axis" x="${lx + 18}" y="24">${se.name}</text>`; lx += 30 + 6.6 * se.name.length; });
+  [0, yMax / 2, yMax].forEach(v => { s += `<line x1="${l}" x2="${W - r}" y1="${Y(v)}" y2="${Y(v)}" stroke="#e2ddd0"/><text class="axis" x="${l - 4}" y="${Y(v) + 3}" text-anchor="end">${Math.round(v * 100) / 100}</text>`; });
+  series.forEach(se => {
+    if(se.band) s += `<polygon points="${se.band[1].map((v, j) => X(j) + ',' + Y(v)).concat(se.band[0].map((v, j) => X(j) + ',' + Y(v)).reverse()).join(' ')}" fill="${se.c}" fill-opacity=".14"/>`;
+    s += `<polyline points="${se.v.map((v, j) => X(j) + ',' + Y(v)).join(' ')}" fill="none" stroke="${se.c}" stroke-width="1.8" ${se.d ? 'stroke-dasharray="4 3"' : ''}/>`; });
+  xs.forEach((x, j) => { s += `<rect x="${X(j) - 6}" y="${t}" width="12" height="${H - t - b}" fill="transparent"><title>${tipOf(j)}</title></rect>`; if(xs.length < 14 || j % 2 === 0) s += `<text class="axis" x="${X(j)}" y="${H - b + 12}" text-anchor="middle">${x}</text>`; });
+  return s + `<text class="axis" x="${(l + W - r) / 2}" y="${H - 4}" text-anchor="middle">${xLab}</text></svg>`;
+}
+function swCurve(){
+  const xs = [], S = [], Nn = [];
+  for(let j = 0; j <= 20; j++){ const go = PAIRS.filter(p => p.path.length > j && (j === 0 || !p.s.switchAtX)); if(go.length < 5) break;
+    xs.push(j); S.push(mean(go.map(p => p.path[j].best === 'switch' ? 1 : 0))); Nn.push(go.length); }
+  return lineChart('When switching is the best move', xs,
+    [{ v: S, c: '#c84b2f', name: 'share of pairs (after 0: those who stayed)' }], 1, 'steps after the offer', j => `step ${xs[j]}: switching best in ${pc(S[j])} of ${Nn[j]} pairs still going`);
+}
+function bars(bins, title){
+  const W = 420, H = 130, l = 26, r = 6, t = 16, b = 20, mx = Math.max(1, ...bins), bw = (W - l - r) / bins.length;
+  let s = `<svg viewBox="0 0 ${W} ${H}"><text class="axis" x="${l}" y="11">${title}</text>`;
+  bins.forEach((v, k) => { const hh = (H - t - b) * v / mx; s += `<rect x="${l + k * bw + 1}" y="${H - b - hh}" width="${Math.max(1, bw - 2)}" height="${hh}" fill="#2f6fc8" opacity=".85"><title>${k}: ${v}</title></rect>`; });
+  const stepX = Math.max(1, Math.ceil(bins.length / 12));
+  for(let k = 0; k < bins.length; k += stepX) s += `<text class="axis" x="${l + k * bw + bw / 2}" y="${H - 6}" text-anchor="middle">${k}</text>`;
+  s += `<text class="axis" x="${l - 4}" y="${t + 8}" text-anchor="end">${mx}</text></svg>`;
+  return s;
+}
+function downloadCSV(){
+  if(!PAIRS.length) return;
+  const rows = PAIRS.map(p => { const s = p.s, a = p.at; return { pair: p.id, length: s.L, n_orange: s.nOrange, flat_E: s.shape.E, flat_K: s.shape.K, debt_k: s.shape.debtK, flat_mean: s.shape.flatMean, flat_dev: s.shape.flatDev, expected: s.expected.join('|'), max_white_run: s.maxWhiteRun,
+    winner: s.winner, keys_at_offer: s.x, winner_covered: s.winner <= s.x ? 1 : 0, alt_u: s.u, switch_better: s.good ? 1 : 0, alt_m: s.M, alt_geo: +a.geo.toFixed(3), fair_arith: +a.arith.toFixed(3), alt_quad: +a.quad.toFixed(3), alt: s.alt,
+    commit_cost: +a.commit.toFixed(3), switch_best_at_offer: s.switchAtX ? 1 : 0, steps_after: Math.max(0, p.path.length - 1), steps_switch_best: p.swAfter,
+    stay_by_step: p.path.map(o => o.stay.toFixed(2)).join('|'), live: s.live.map(v => v ? 1 : 0).join(''), densities: s.ds.join('|'),
+    trunc_length: p.tr.L, trunc_live: p.tr.live.map(v => v ? 1 : 0).join(''), trunc_winner: p.tr.winner }; });
+  const k = Object.keys(rows[0]), q = v => /[",\n]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+  const csv = k.join(',') + '\n' + rows.map(r => k.map(x => q(r[x])).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' })); a.download = 'wts_pairs_' + new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.csv';
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+generate();
+</script>
+</body>
+</html>

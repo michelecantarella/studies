@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WT_S keys mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ── WT_Q/index.html stylesheet, copied as is ── */
+:root {
+  --bg:#f5f2eb; --sur:#fff; --ink:#1a1a18; --ink2:#5a5a54;
+  --red:#c84b2f; --blue:#2f6fc8; --grn:#2a7a4b;
+  --warn:#d4860a; --bdr:#d8d4c8;
+  --mono:'IBM Plex Mono',monospace; --sans:'IBM Plex Sans',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:100vh;}
+
+/* ── BOOT OVERLAY ─────────────────────────────────────────────── */
+#boot-overlay{
+  position:fixed;inset:0;z-index:9999;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+}
+#boot-overlay .boot-spin{
+  width:36px;height:36px;border:3px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* ── PANEL CARDS (task screen) ───────────────────────────────────
+   Chunky, rounded, slightly-raised tiles. Each is its own self-contained
+   unit of information so nothing on the task screen needs a legend to be
+   read. `.panel.is-button` variants are the ones that are also clickable;
+   the rest are pure readouts and deliberately give no hover affordance. */
+.panel{
+  background:var(--sur);border:2.5px solid var(--ink);border-radius:14px;
+  box-shadow:0 4px 0 rgba(26,26,24,.16);
+  padding:.85rem .9rem;text-align:center;position:relative;
+  transition:transform .12s, box-shadow .12s, background .2s, border-color .2s, color .2s;
+}
+.panel-cap{
+  font-family:var(--mono);font-size:.56rem;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink2);margin-bottom:.3rem;line-height:1.2;
+}
+.panel-val{font-family:var(--mono);font-weight:600;line-height:1;color:var(--ink);}
+.panel-sub{font-family:var(--mono);font-size:.58rem;color:var(--ink2);margin-top:.3rem;line-height:1.3;}
+.panel-lg .panel-val{font-size:2.1rem;}
+.panel-md .panel-val{font-size:1.5rem;}
+.panel-sm{padding:.6rem .7rem;}
+.panel-sm .panel-val{font-size:1.05rem;}
+
+/* Clickable panels: real button affordance, pressed state on click. */
+.panel.is-button{cursor:pointer;}
+.panel.is-button:hover:not(:disabled):not(.is-locked){transform:translateY(-2px);box-shadow:0 6px 0 rgba(26,26,24,.18);}
+.panel.is-button:active:not(:disabled):not(.is-locked){transform:translateY(2px);box-shadow:0 1px 0 rgba(26,26,24,.18);}
+.panel.is-locked{opacity:.45;cursor:not-allowed;box-shadow:0 4px 0 rgba(26,26,24,.08);}
+
+/* Alternative-sequence panel: grey and "Locked" (no length shown) until the
+   alternative is offered; from then on filled blue with its length, and a
+   real button (.is-button) that switches, after a confirm, for the rest of
+   the main sequence — see paintPanels_()/openAltSwitch_(). */
+.panel-alt-locked{background:#eceae3;border-color:#b8b4a8;}
+.panel-alt-locked .panel-val,.panel-alt-locked .panel-cap,.panel-alt-locked .panel-sub{color:#8e8a80;}
+.panel-alt-open{background:var(--blue);border-color:#1e4f96;box-shadow:0 4px 0 #17406f;}
+.panel-alt-open .panel-val,.panel-alt-open .panel-cap,.panel-alt-open .panel-sub{color:#fff;}
+.panel-alt-open .panel-cap{opacity:.88;}
+/* WT_N: Cards completed, Cards left and Alternative cards are the same box in
+   every state — fixed height, a number only, and a fixed-height bottom line
+   holding either plain text or the "Press to …" label — so nothing changes
+   size when the offer starts or ends. During the offer pause Cards left is
+   the (orange) Resume button; the Alternative is the (blue) Switch button. */
+#panel-done,#panel-tasksleft,#panel-alt{height:7rem;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+#panel-done .panel-sub,#panel-tasksleft .panel-sub,#panel-alt .panel-sub{height:1.45rem;margin-top:.4rem;display:flex;align-items:center;justify-content:center;}
+.panel-act{display:inline-block;padding:.25rem .6rem;border-radius:999px;background:#fff;
+  font-family:var(--mono);font-size:.6rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;line-height:1.2;}
+.panel-alt-open .panel-act{color:var(--blue);}
+#panel-alt.panel-alt-open.is-button:hover{background:#2560b0;box-shadow:0 6px 0 #17406f;}
+#panel-alt.panel-alt-open.is-button:hover .panel-act{background:#17406f;color:#fff;}
+.panel-resume{background:#f3a53a;border-color:#c98416;box-shadow:0 4px 0 #a86a0d;}
+.panel-resume .panel-cap,.panel-resume .panel-val{color:#5a3400;}
+.panel-resume .panel-act{color:#a35f00;}
+/* Reminder when the offer banner closes: the alternative is still there. */
+.panel-alt-open.alt-flash{animation:altFlash .8s ease-in-out 3;}
+@keyframes altFlash{
+  0%,100%{box-shadow:0 4px 0 #17406f; transform:none;}
+  50%{box-shadow:0 4px 0 #17406f, 0 0 0 6px rgba(47,111,200,.45); transform:scale(1.04);}
+}
+/* Same pulse for the Give up button (No-winning-card choice). */
+.panel-forfeit.attn-flash{animation:attnFlash .8s ease-in-out 3;}
+@keyframes attnFlash{
+  0%,100%{transform:none;}
+  50%{box-shadow:0 4px 0 rgba(26,26,24,.16), 0 0 0 6px rgba(200,75,47,.35); border-color:var(--red); transform:scale(1.04);}
+}
+
+/* Reward / penalty accents. */
+.panel-reward .panel-val{color:var(--grn);}
+.panel-penalty .panel-val{color:var(--red);}
+
+/* Forfeit tile. */
+.panel-forfeit{border-color:var(--red);background:#fbe9e5;}
+.panel-forfeit .panel-val{font-size:.8rem;color:var(--red);}
+.panel-forfeit:hover{background:var(--red);}
+.panel-forfeit:hover .panel-val{color:#fff;}
+
+/* ── TASK CARD (centre) ──────────────────────────────────────────
+   White while the sequence cannot end yet; turns amber the moment the
+   sequence enters the zone where each task carries a real chance of
+   being the last one, with the probability stated across the top. */
+.taskcard{
+  background:var(--sur);border:2.5px solid var(--ink);border-radius:18px;
+  box-shadow:0 5px 0 rgba(26,26,24,.16);
+  padding:1rem 1.1rem 1.2rem;transition:background .35s, border-color .35s;
+  position:relative; /* anchors the no-activity overlay */
+}
+/* "No activity" overlay — sits ON TOP of the whole card + deck, translucent
+   so the cards show through, rather than being rendered as a card itself. */
+.noact-overlay{
+  position:absolute;inset:0;z-index:60;border-radius:18px;
+  background:rgba(245,242,235,.92);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.9rem;
+  font-family:var(--mono);text-align:center;
+}
+.noact-cap{font-size:.8rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
+.noact-title{font-size:1.15rem;font-weight:700;color:var(--ink);}
+.taskcard.is-live{background:#fdf0dc;border-color:#c98416;}
+/* Top row of the card: the end-probability pill (left, prominent) and the
+   status banner (fills the rest). */
+/* Chance the sequence contains the winning card — big number on top of the card. */
+/* Wrapped in the same orange as the live cards — a pill/badge, not bare text. */
+.prob-top{display:none !important;} /* WT_J: no probability on screen, the bar is gone */
+.seq-strip{--n:25;display:grid;grid-auto-flow:column;grid-auto-columns:min(28px,calc((100% - (var(--n) - 1) * 3px) / var(--n)));justify-content:center;gap:3px;margin:.1rem auto 1rem;max-width:100%;} /* one card size whatever the length: the size a 25-card deck fits in (--n = 25, or the cards when more), at most 28px; centred */
+.ss-c{height:22px;border-radius:4px;border:1.5px solid #b8b3a5;background:var(--sur);}
+.ss-c.o{background:#f3a53a;border-color:#c98416;}
+.ss-c.a{background:#5a8fd6;border-color:#1e4f96;}
+.ss-c.done{background:#ece9e1;border-color:#d4d0c4;}
+.ss-c.done.o{background:#ecd9bd;border-color:#cdb488;}
+.ss-c.done.a{background:#cfdcef;border-color:#9fb6da;}
+.ss-c.cur{box-shadow:0 0 0 2px var(--ink);}
+@media (max-width:640px){ .seq-strip{gap:2px;margin-bottom:.6rem;grid-auto-columns:min(18px,calc((100% - (var(--n) - 1) * 2px) / var(--n)));} .ss-c{height:14px;border-width:1px;border-radius:3px;} }
+/* WT_K: winning-card tracker (replaces the sequence strip) */
+.win-tracker{display:flex;align-items:center;justify-content:center;gap:.6rem;margin:.1rem auto .9rem;font-family:var(--mono);}
+.wt-lbl{font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);margin-right:.2rem;}
+.wt-slot{width:48px;height:44px;border-radius:7px;border:2px dashed #c9c3b3;background:transparent;display:flex;align-items:center;justify-content:center;font-size:1.3rem;color:transparent;}
+.wt-slot .wt-h{font-size:.78rem;font-weight:700;color:#b06a00;}
+.wt-slot.found{border:2px solid #b8860b;background:#f2c230;color:#7a5600;box-shadow:0 3px 0 rgba(122,86,0,.25);}
+.wt-slot.found.new{animation:wtPop .7s ease;}
+/* WT_O: the next winning card to find (holds the chance), the alternative card once found, 4–5 slots in the same width */
+.wt-slot.next{border:2.5px solid #c98416;background:#fdf0dc;}
+.wt-slot.found.alt{border:2px solid #1e4f96;background:#5a8fd6;color:#fff;font-size:.72rem;font-weight:700;box-shadow:0 3px 0 rgba(30,79,150,.25);}
+.win-tracker.n4{gap:.4rem;} .win-tracker.n4 .wt-slot{width:40px;height:40px;}
+.win-tracker.n5{gap:.3rem;} .win-tracker.n5 .wt-slot{width:34px;height:38px;font-size:1.05rem;} .win-tracker.n5 .wt-slot .wt-h{font-size:.68rem;}
+@keyframes wtPop{0%{transform:scale(.4);}60%{transform:scale(1.25);}100%{transform:scale(1);}}
+.win-tracker.is-alt{opacity:.45;}
+/* WT_L: the per-card chance, big, in the orange card's banner */
+.q-big{font-size:1.5rem;font-weight:700;margin-left:.45rem;vertical-align:middle;line-height:1;}
+.q-big.q-small{font-size:1.15rem;}
+@media (max-width:640px){ .q-big{font-size:1.2rem;} .q-big.q-small{font-size:1rem;} }
+@media (max-width:640px){ .wt-slot{width:38px;height:32px;font-size:1rem;} .wt-slot .wt-h{font-size:.68rem;} .win-tracker{gap:.4rem;margin-bottom:.6rem;} }
+/* WT_K: deck choice on the briefing screen */
+.deck-choice{margin:1rem 0 .4rem;}
+.deck-choice-h{font-family:var(--mono);font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink2);margin-bottom:.6rem;}
+.deck-tile{border:2px solid var(--bdr);border-radius:12px;padding:.7rem .8rem;margin-bottom:.6rem;cursor:pointer;background:var(--sur);transition:border-color .2s, box-shadow .2s;}
+.deck-tile.single{cursor:default;}
+.deck-tile:not(.single):hover{border-color:var(--ink2);box-shadow:0 3px 0 rgba(26,26,24,.14);background:#fbf8f1;}
+.deck-tile.sel{border-color:var(--ink);box-shadow:0 3px 0 rgba(26,26,24,.18);}
+.deck-tile-name{font-family:var(--mono);font-size:.72rem;color:var(--ink2);margin-bottom:.4rem;}
+.deck-strip{display:grid;gap:2px;} /* one column per card of the LONGEST possible deck (deckMaxLen_): the longest fills the bar, shorter ones visibly end sooner */
+.deck-strip .ss-c{height:auto;aspect-ratio:1/1.15;min-height:8px;}
+@media (max-width:640px){
+  .wrap{padding:1rem .75rem 2rem;}
+  .card{padding:1.3rem 1.1rem;}
+  .deck-tile{padding:.6rem .6rem;}
+  .slider-row{flex-wrap:wrap;gap:.3rem .5rem !important;}
+  .slider-row input[type=range]{order:-1;flex:1 1 calc(100% - 2rem) !important;}
+  .slider-row .sl-lbl{width:auto !important;flex:1 1 40% !important;text-align:left !important;}
+  .slider-row .sl-lbl.r{text-align:right !important;}
+}
+.prob-top-pill{
+  display:inline-block;background:#f3a53a;color:#5a3400;border-radius:12px;padding:.5rem 1.1rem;
+}
+.prob-top-label{
+  font-family:var(--mono);font-size:.6rem;letter-spacing:.1em;text-transform:uppercase;
+  color:#5a3400;opacity:.85;margin-bottom:.1rem;line-height:1.2;
+}
+.prob-top-num{
+  font-family:var(--mono);font-weight:600;font-size:2.1rem;line-height:1;color:#5a3400;
+}
+/* Card-status banner — at the BOTTOM of the card, full width. */
+.taskcard-banner{
+  font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.02em;
+  text-align:center;padding:.45rem .6rem;border-radius:10px;line-height:1.35;
+  background:#eceae3;color:var(--ink2);transition:background .35s, color .35s;
+  min-height:2.1rem;display:flex;align-items:center;justify-content:center;
+  margin:.4rem -.35rem -.35rem;
+}
+.taskcard.is-live .taskcard-banner{background:#f6c98a;color:#6b3d05;}
+.taskcard.is-alt  .taskcard-banner{background:#dbe8fb;color:#1e4f96;}
+/* The target line and the offer banner occupy EXACTLY the same vertical
+   box (box-sizing + identical height + margin), so swapping one for the
+   other when the offer appears never shifts the card below it. */
+.taskcard-target, .taskcard-offer{
+  box-sizing:border-box;height:2.8rem;min-height:2.8rem;margin-bottom:.55rem;
+  display:flex;align-items:center;justify-content:center;
+}
+.taskcard-target{
+  font-family:var(--mono);font-size:1.05rem;font-weight:600;text-align:center;
+  color:var(--ink);gap:.4rem;
+}
+.taskcard-offer{
+  display:none;border:2px solid var(--blue);background:#e8f1ff;border-radius:10px;
+  padding:.3rem .8rem;text-align:center;
+  font-family:var(--mono);font-size:.9rem;font-weight:600;color:var(--blue);
+}
+/* With its countdown line: as tall as the target line plus the Submitting slot below it (measured: 4.7rem, 4.1rem on a phone;
+   showOfferScreen hides the slot), so the card keeps its height when the offer appears. */
+.taskcard-offer.is-expanded{height:4.7rem;min-height:4.7rem;flex-direction:column;gap:.35rem;padding:.35rem .8rem;}
+.offer-ask-line{margin:0;font-size:.8rem;}
+.offer-btn-row{display:flex;gap:.6rem;justify-content:center;flex-wrap:wrap;}
+.offer-btn-row .btn{font-size:.7rem;padding:.55rem 1rem;}
+
+/* ── HAND CARD-STACK (deck) ──────────────────────────────────────
+   The whole sequence is a stack of cards. The card being played is the front
+   card (the real grid), kept centred; the rest of the sequence sits BEHIND it,
+   each card the same size but offset to the right so only its edge peeks out
+   (white = safe, orange = can end). Completed cards fan out greyed to the
+   left. renderDeck_() creates the .deck-card elements. */
+#st-grid-wrap{text-align:center;}
+.hand-stack{position:relative;display:inline-block;margin:.7rem 0;isolation:isolate;} /* own stacking context: behind-cards past the 19th (negative z-index) stay drawn instead of falling behind the task card */
+/* Front card = the grid, sits on top and opaque so it hides the overlapped
+   parts of the cards behind it. inline-block so the stack (and the
+   absolutely-positioned behind-cards) size to exactly the grid card. */
+#st-grid-outer{display:inline-block;position:relative;z-index:20;margin:0;}
+/* The front card (the grid) takes the look of the card TYPE it represents:
+   white with a grey border on a safe card, orange on a card the sequence can
+   end on — matching the behind-cards exactly. */
+.grid-box{border:2.5px solid #b8b3a5;border-radius:12px;box-shadow:0 4px 0 rgba(26,26,24,.14);transition:background .35s,border-color .35s;}
+.taskcard.is-live .grid-box{background:#f3a53a;border-color:#c98416;}
+/* Switched to the alternative — the task being played is blue too. */
+.taskcard.is-alt{background:#eaf2ff;border-color:#2f6fc8;}
+.taskcard.is-alt .grid-box{background:#5a8fd6;border-color:#1e4f96;}
+/* Behind-cards: same box as the front card, offset via translateX. Safe
+   (white) cards get the same grey border, not black. */
+.deck-card{
+  position:absolute;top:0;left:0;right:0;bottom:0;
+  border:2.5px solid #b8b3a5;border-radius:12px;background:var(--sur);
+  box-shadow:0 4px 0 rgba(26,26,24,.12);
+}
+.deck-card.is-live{background:#f3a53a;border-color:#c98416;}
+/* Completed cards: soft grey with a light (not black) border. A completed
+   card that was ORANGE (a card the sequence could have ended on) keeps a
+   muted grey-orange tint, so it stays clear it was a live card. */
+.deck-card.is-done{background:#ece9e1;border-color:#d4d0c4;box-shadow:0 3px 0 rgba(26,26,24,.05);}
+.deck-card.is-done-live{background:#ecd9bd;border-color:#cdb488;box-shadow:0 3px 0 rgba(26,26,24,.05);}
+.deck-card.is-alt{background:#5a8fd6;border-color:#1e4f96;}
+@keyframes handAdvance{from{transform:translateX(16px);opacity:.5;}to{transform:translateX(0);opacity:1;}}
+.hand-advance #st-grid-outer{animation:handAdvance .3s ease;}
+@keyframes newHandIn{from{transform:translateX(48px) scale(.96);opacity:0;}to{transform:translateX(0) scale(1);opacity:1;}}
+.new-hand #hand-stack{animation:newHandIn .45s ease;}
+@keyframes pillPulse{0%,100%{transform:scale(1);}30%{transform:scale(1.12);}}
+#prob-pill.pulse,#prob-num.pulse{animation:pillPulse .7s ease;display:inline-block;}
+#taskcard-banner.pulse{animation:pillPulse .7s ease;}
+/* Card flash used by the training walkthrough. */
+@keyframes cardFlash{0%,100%{box-shadow:0 4px 0 rgba(26,26,24,.14);}45%{box-shadow:0 0 0 4px #2f6fc8;}}
+.card-flash{animation:cardFlash .6s ease;}
+/* End-of-sequence reveal, drawn like the game's deck: the cards completed
+   in full colour, the cards not played greyed, the winning card in gold with a label, and a
+   brace under each run of completed cards. One CSS grid: row 1 labels above,
+   row 2 cards, row 3 braces, row 4 brace labels — so braces line up exactly. */
+.rv{display:grid;column-gap:3px;row-gap:3px;margin:1.3rem auto .5rem;align-items:end;}
+.rv-c{grid-row:2;aspect-ratio:1/1.12;border-radius:18%;border:1.5px solid #b8b3a5;background:var(--sur);box-shadow:0 2px 0 rgba(26,26,24,.12);}
+.rv-c.live{background:#f3a53a;border-color:#c98416;}
+.rv-c.alt{background:#5a8fd6;border-color:#1e4f96;}
+.rv-c.faded{background:#ece9e1;border-color:#d4d0c4;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.faded-live{background:#ecd9bd;border-color:#cdb488;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.faded-alt{background:#cfdcef;border-color:#9fb6da;box-shadow:0 2px 0 rgba(26,26,24,.05);}
+.rv-c.win{background:#f2c230;border-color:#b8860b;}
+.rv-top{grid-row:1;justify-self:center;text-align:center;font-family:var(--mono);font-size:.7rem;font-weight:600;color:#9a7300;white-space:nowrap;line-height:1.25;}
+.rv-top.rv-alt{color:#1e4f96;font-size:.58rem;} /* WT_O: the alternative card */
+.rv-c.win.altwin{background:#5a8fd6 !important;border-color:#1e4f96 !important;}
+.rv-brace{grid-row:3;height:8px;margin-top:2px;border:2px solid var(--ink2);border-top:none;border-radius:0 0 8px 8px;position:relative;}
+.rv-brace::after{content:'';position:absolute;left:50%;bottom:-7px;width:2px;height:6px;background:var(--ink2);transform:translateX(-50%);}
+.rv-brace-lbl{grid-row:4;justify-self:center;margin-top:6px;font-size:.75rem;color:var(--ink2);white-space:nowrap;}
+
+/* Confetti burst on finishing a sequence (endTask()'s 'completed'/'switched'
+   outcomes) — a canvas-drawn physics burst (see spawnConfetti_) launched
+   from the top edge of the result heading, not a CSS animation. Deliberately
+   NOT clipped to .card: position:fixed + inset:0 covers the whole viewport
+   regardless of where this element sits in the DOM, since none of its
+   ancestors (.card included) use a transform/filter/will-change that would
+   give position:fixed descendants a containing block other than the
+   viewport — so the burst can fly and fall across the full screen, not just
+   inside the small result box it started from. pointer-events:none so it
+   never blocks clicking the Continue button underneath, however high its
+   z-index. */
+.confetti-layer{position:fixed;inset:0;pointer-events:none;z-index:9999;}
+#tc-confetti-canvas{display:block;width:100%;height:100%;}
+
+/* ── TASK SCREEN LAYOUT ─────────────────────────────────────── */
+.st-wrap{
+  max-width:960px;margin:0 auto;padding:1.5rem 1.25rem 2rem;
+  display:flex;flex-direction:column;align-items:center;gap:1.1rem;
+}
+#st-board{
+  display:grid;grid-template-columns:180px minmax(0,1fr) 180px;
+  gap:1.1rem;align-items:start;justify-content:center;width:100%;max-width:900px;margin:0 auto;
+  position:relative;
+}
+.st-col{display:flex;flex-direction:column;gap:.75rem;}
+
+/* ── SCREENS ─────────────────────────────────────────────────── */
+.screen{display:none;padding-top:2rem;min-height:100vh;}
+.screen.active{display:block;}
+.wrap{max-width:700px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+.wrap-wide{max-width:860px;margin:0 auto;padding:2rem 1.5rem 3rem;}
+
+/* ── CARD ────────────────────────────────────────────────────── */
+.card{background:var(--sur);border:1px solid var(--bdr);padding:2rem;position:relative;}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--red);}
+details summary::-webkit-details-marker{display:none;}
+details summary{list-style:none;}
+
+/* ── TYPE ────────────────────────────────────────────────────── */
+.lbl{font-family:var(--mono);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink2);margin-bottom:.4rem;}
+h1{font-family:var(--mono);font-size:1.4rem;font-weight:600;line-height:1.2;margin-bottom:1rem;}
+h2{font-family:var(--mono);font-size:.95rem;font-weight:500;margin:1.2rem 0 .4rem;}
+p{line-height:1.7;color:var(--ink2);margin-bottom:.8rem;font-size:.93rem;}
+p strong{color:var(--ink);}
+ul{padding-left:1.3rem;margin-bottom:.8rem;}
+li{line-height:1.7;color:var(--ink2);font-size:.93rem;}
+li strong{color:var(--ink);}
+
+/* ── BUTTONS ─────────────────────────────────────────────────── */
+.btn{font-family:var(--mono);font-size:.76rem;line-height:1;letter-spacing:.06em;padding:.65rem 1.5rem;
+  border:1.5px solid var(--ink);background:var(--ink);color:var(--bg);cursor:pointer;
+  transition:all .15s;text-transform:uppercase;display:inline-block;}
+.btn:hover:not(:disabled){background:transparent;color:var(--ink);}
+.btn:disabled{opacity:.35;cursor:not-allowed;}
+.btn-outline{background:transparent;color:var(--ink);}
+.btn-outline:hover:not(:disabled){background:var(--ink);color:var(--bg);}
+.btn-red{border-color:var(--red);background:var(--red);color:#fff;}
+.btn-red:hover:not(:disabled){background:transparent;color:var(--red);}
+.btn-blue{border-color:var(--blue);background:var(--blue);color:#fff;}
+.btn-blue:hover:not(:disabled){background:transparent;color:var(--blue);}
+.btn-row{display:flex;gap:.6rem;flex-wrap:wrap;margin-top:1.2rem;}
+
+/* ── NOTICE ──────────────────────────────────────────────────── */
+.notice{font-family:var(--mono);font-size:.73rem;padding:.6rem .9rem;
+  background:var(--bg);border-left:3px solid var(--warn);color:var(--ink2);margin:.8rem 0;}
+
+/* ── FORM ────────────────────────────────────────────────────── */
+.frow{margin-bottom:1rem;}
+.frow label{font-family:var(--mono);font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:.3rem;color:var(--ink2);}
+.frow select,.frow input[type=text],.frow input[type=number]{
+  font-family:var(--sans);font-size:.93rem;
+  padding:.42rem .7rem;border:1.5px solid var(--bdr);background:var(--bg);color:var(--ink);width:100%;}
+.frow select:focus,.frow input:focus{outline:none;border-color:var(--ink);}
+
+/* ── INSTRUCTION CANVAS ──────────────────────────────────────── */
+canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(--sur);}
+
+/* ── TASK SCREEN ─────────────────────────────────────────────── */
+.grid-outer{display:flex;justify-content:center;margin:.8rem 0;}
+.grid-box{padding:10px;background:var(--sur);display:inline-block;}
+.grow-el{display:flex;gap:5px;margin-bottom:5px;}
+.grow-el:last-child{margin-bottom:0;}
+.ecell{width:44px;height:44px;display:flex;align-items:center;justify-content:center;
+  font-size:1.35rem;border:1px solid var(--bdr);background:var(--sur);border-radius:3px;
+  cursor:default;transition:background .08s;line-height:1;user-select:none;}
+.ecell.ph{color:#ccc;font-size:.9rem;}
+.ecell.live{cursor:pointer;}
+.ecell.live:hover{border-color:var(--ink);}
+.ecell.selected{background:var(--blue);border-color:var(--blue);color:#fff;}
+
+/* ── GRACE ───────────────────────────────────────────────────── */
+/* Reward / chance-of-winning panels on the briefing screen: two equal
+   halves, same height, each revealed with a short fade-in. */
+.grace-boxes{display:flex;gap:.75rem;margin-bottom:.9rem;}
+.grace-box{flex:1 1 0;min-width:0;visibility:hidden;}
+.grace-box.is-shown{visibility:visible;animation:graceBoxIn .35s ease;}
+@keyframes graceBoxIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+#screen-grace .grace-inner{min-height:calc(100vh - 80px);display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:.7rem;text-align:center;}
+
+/* ── TRAINING GREY-OUT ───────────────────────────────────────── */
+/* Applied to every part of the real #screen-subtask not currently being
+   explained; a step lights up exactly what it's introducing by adding
+   .train-lit alongside (see trainLight_()). */
+.train-dim{filter:grayscale(1) opacity(.4);pointer-events:none;}
+.train-dim.train-lit{filter:none;opacity:1;}
+
+/* ── END-OF-TRAINING COMPREHENSION CHECK ────────────────────────
+   Sliding 2/3-panel carousel with a dot progress indicator, one question
+   visible at a time — see trainScreen17_/trainCompAnswer_. Blue theme to
+   match the rest of this app's tip/offer boxes (train-tip, taskcard-offer),
+   not copied from any other study's palette. */
+.compcheck-viewport{overflow:hidden;}
+.compcheck-track{display:flex;transition:transform .35s ease;}
+.compcheck-panel{flex:0 0 100%;min-width:100%;box-sizing:border-box;}
+.compcheck-q{font-size:.88rem;font-weight:600;margin-bottom:.6rem;line-height:1.4;color:var(--ink);text-align:center;}
+.compcheck-dots{display:flex;gap:6px;justify-content:center;margin-top:.8rem;}
+.compcheck-dot{width:8px;height:8px;border-radius:50%;background:#c3d6ef;transition:background .2s;}
+.compcheck-dot.active{background:var(--blue);}
+.compcheck-err{color:#c84b2f;font-size:.78rem;margin-top:.6rem;min-height:1rem;text-align:center;}
+.radio-list{display:flex;flex-direction:column;gap:.5rem;}
+.radio-option{font-size:.85rem;line-height:1.4;text-align:left;cursor:pointer;
+  padding:.6rem .8rem;border:1px solid var(--bdr);border-radius:8px;
+  background:var(--sur);color:var(--ink);transition:border-color .15s,background .15s;}
+.radio-option:hover{border-color:var(--blue);}
+
+/* ── OFFER BOX ───────────────────────────────────────────────── */
+.offer-box{border:1.5px solid var(--blue);padding:1.1rem 1.4rem;margin:1rem 0;position:relative;}
+
+/* ── STATS STRIP ─────────────────────────────────────────────── */
+.stats-strip{display:flex;border:1px solid var(--bdr);margin-bottom:1rem;}
+.sc{flex:1;padding:.45rem .65rem;border-right:1px solid var(--bdr);}
+.sc:last-child{border-right:none;}
+.sv{font-family:var(--mono);font-size:.95rem;font-weight:600;}
+.sl{font-family:var(--mono);font-size:.58rem;letter-spacing:.1em;text-transform:uppercase;color:var(--ink2);}
+
+/* ── RESULTS TABLE ───────────────────────────────────────────── */
+table{width:100%;border-collapse:collapse;font-size:.85rem;margin:.7rem 0;}
+th,td{padding:.4rem .6rem;border:1px solid var(--bdr);text-align:left;}
+#st-stat-table td{border:none;}
+th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;background:var(--bg);}
+.tfoot-row td{font-weight:500;background:var(--bg);}
+
+/* ── SAVE STATUS ─────────────────────────────────────────────── */
+.save-row{display:flex;align-items:center;gap:10px;padding:.7rem 0;}
+.save-spin{width:16px;height:16px;border:2px solid var(--bdr);border-top-color:var(--ink);
+  border-radius:50%;animation:spin .8s linear infinite;flex-shrink:0;}
+
+@keyframes switchFlash{
+  0%,100%{opacity:1;}20%{opacity:.1;}40%{opacity:1;}60%{opacity:.1;}80%{opacity:1;}
+}
+.switch-flash{animation:switchFlash 1.5s ease;}
+
+/* ── MOBILE: TASK SCREEN COMPACTION ──────────────────────────────
+   Placed last in this stylesheet ON PURPOSE: every selector below already
+   exists earlier (panel/taskcard/screen/etc.) with equal specificity, and
+   CSS breaks same-specificity ties by SOURCE ORDER, not by whether a rule
+   sits inside a @media block — an earlier media-query override would
+   otherwise be silently beaten by a later unconditional rule. Being last
+   guarantees these mobile overrides always win when the condition matches.
+   The task screen used to force a long scroll on every phone (three stacked
+   sections — panel row, task card, panel row — each sized as if there were
+   room to spare) before the participant could even see the offer buttons.
+   Everything below shrinks the surrounding chrome (panel padding/fonts,
+   card padding/margins, screen padding) so the same information fits in
+   far less height; the actual game grid (.ecell) is deliberately left
+   untouched — those are real tap targets, not decoration to shrink. Desktop
+   (anything above 820px) is completely unaffected. */
+@media(max-width:820px){
+  .screen{padding-top:.6rem;}
+  .st-wrap{padding:.6rem .75rem 1.5rem;gap:.6rem;}
+  #st-board{grid-template-columns:1fr;max-width:420px;gap:.6rem;}
+  /* align-items:flex-start (not the default stretch) so a short panel
+     (panel-sm) never gets forced up to match its taller row-mate
+     (panel-lg)'s height — each panel is only as tall as its own content. */
+  .st-col{flex-direction:row;gap:.5rem;align-items:flex-start;}
+  .st-col > *{flex:1;}
+  /* Left row: sequence/reward/penalty side by side, Give up on its own
+     full-width row below; right row: the counters + Alternative cards. */
+  #st-col-left, #st-col-right{flex-wrap:wrap;}
+  #st-col-left > #panel-forfeit{flex:1 1 100%;}
+  #panel-done,#panel-tasksleft,#panel-alt{height:5.1rem;min-width:0;}
+  #panel-done .panel-sub,#panel-tasksleft .panel-sub,#panel-alt .panel-sub{height:1.2rem;margin-top:.3rem;}
+  .panel-act{font-size:.5rem;padding:.2rem .45rem;letter-spacing:.05em;}
+  .panel{padding:.5rem .55rem;}
+  .panel-sm{padding:.4rem .5rem;}
+  .panel-cap{font-size:.5rem;margin-bottom:.15rem;}
+  .panel-sub{font-size:.52rem;margin-top:.15rem;}
+  /* panel-lg's 2.1rem value (designed for a spacious desktop side column)
+     is by far the single biggest thing in either panel row on a cramped
+     phone width — knocked down close to panel-md's size instead. */
+  .panel-lg .panel-val{font-size:1.4rem;}
+  .panel-md .panel-val{font-size:1.15rem;}
+  .panel-sm .panel-val{font-size:.92rem;}
+  .taskcard{padding:.7rem .8rem .8rem;}
+  .prob-top{margin:-.1rem 0 .4rem;}
+  .prob-top-pill{padding:.35rem .8rem;}
+  .prob-top-label{font-size:.54rem;}
+  .prob-top-num{font-size:1.6rem;}
+  .hand-stack{margin:.4rem 0;}
+  .taskcard-target, .taskcard-offer{height:2.3rem;min-height:2.3rem;margin-bottom:.35rem;}
+  .taskcard-offer.is-expanded{height:4.1rem;min-height:4.1rem;padding:.3rem .6rem;}
+  .offer-ask-line{font-size:.76rem;}
+  #st-cd-slot{min-height:1.2rem;margin-top:.2rem;}
+  .taskcard-banner{min-height:1.7rem;padding:.35rem .5rem;margin:.3rem -.2rem -.2rem;}
+}
+/* ── WT_Q: locked, unlocked and winning cards in the strip; the card being unlocked keeps the locked look ── */
+.ss-c{position:relative;}
+.ss-c.lk::after{content:'🔒';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;}
+.ss-c.op{background:#e2ded4;border-color:#c9c4b6;}
+.ss-c.op.o{background:#ecd9bd;border-color:#cdb488;}
+/* locked cards: full colour with a padlock (deck: on the edge that peeks out; front card: a badge on its corner) */
+.deck-card.is-locked::after{content:'🔒';position:absolute;top:6px;right:1px;font-size:.6rem;line-height:1;}
+.taskcard.is-unlocking #st-grid-outer::after,.taskcard.fx-unlock #st-grid-outer::after{content:'🔒';position:absolute;top:-10px;right:-10px;width:28px;height:28px;border-radius:50%;background:#fff;border:1.5px solid #b8b3a5;display:flex;align-items:center;justify-content:center;font-size:.8rem;z-index:2;box-shadow:0 2px 0 rgba(26,26,24,.1);}
+/* the change of state, played while the next card starts (no time added): the padlock opens on the card just unlocked,
+   a cross on the card just completed (empty); the winning card has its confetti */
+@keyframes fxOut{0%{transform:scale(.7);opacity:0;}30%{transform:scale(1.45);opacity:1;}70%{transform:scale(1);opacity:1;}100%{transform:scale(1);opacity:0;}}
+@keyframes fxIn{0%{transform:scale(1.9);}100%{transform:scale(1);}}
+.taskcard.fx-unlock #st-grid-outer::after{content:'🔓';animation:fxOut .7s ease forwards;}
+.ss-c.fx-unlock::after{content:'🔓';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;animation:fxOut .7s ease forwards;}
+.ss-c.op.fx-empty::after{animation:fxIn .5s ease;color:#5a5a54;}
+.deck-card.fx-unlock::after{content:'🔓';position:absolute;top:6px;left:1px;font-size:.6rem;line-height:1;animation:fxOut .7s ease forwards;}
+.deck-card.fx-empty::after{content:'✕';position:absolute;top:5px;left:2px;font-size:.7rem;line-height:1;color:#5a5a54;animation:fxOut .7s ease forwards;}
+/* the step, written on the card's banner */
+.step-pill{display:inline-block;font-size:.62rem;letter-spacing:.08em;text-transform:uppercase;border:1px solid currentColor;border-radius:999px;padding:.08rem .5rem;margin-right:.5rem;background:rgba(255,255,255,.55);vertical-align:1px;}
+.ss-c.op::after{content:'✕';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.62rem;color:#8e8a80;}
+.ss-c.win{background:#f2c230;border-color:#b8860b;}
+.ss-c.win::after{content:'★';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.7rem;color:#7a5600;}
+#panel-done.panel-resume.is-button:hover{background:#e8921c;box-shadow:0 6px 0 #a86a0d;}
+#panel-done.panel-resume.is-button:hover .panel-act{background:#5a3400;color:#fff;}
+</style>
+<style>
+/* ── WT_S mockup: what is added to WT_Q's stylesheet (above, copied as is) ── */
+:root{ --key:linear-gradient(145deg,#dcc07e 0%,#b38c3f 55%,#8a6728 100%); --keyd:#6b4c16; --keyl:#f6efe1; } /* the keys: brass */
+/* mockup controls (not part of the experiment) */
+.mk-bar{max-width:960px;margin:0 auto;padding:1rem 1.25rem .2rem;font-family:var(--mono);}
+.mk-bar h1{font-size:.95rem;margin-bottom:.5rem;}
+.mk-row{display:flex;flex-wrap:wrap;gap:.45rem .9rem;align-items:center;margin-bottom:.5rem;font-size:.66rem;color:var(--ink2);text-transform:uppercase;letter-spacing:.08em;}
+.mk-seg{display:inline-flex;border:1.5px solid var(--ink);border-radius:8px;overflow:hidden;}
+.mk-seg button{font-family:var(--mono);font-size:.7rem;padding:.35rem .7rem;border:0;background:transparent;cursor:pointer;color:var(--ink);}
+.mk-seg button+button{border-left:1.5px solid var(--ink);}
+.mk-seg button.on{background:var(--ink);color:var(--bg);}
+.mk-btn{font-family:var(--mono);font-size:.68rem;letter-spacing:.06em;text-transform:uppercase;padding:.4rem .8rem;border:1.5px solid var(--ink);border-radius:8px;background:transparent;cursor:pointer;}
+#mk-log{font-family:var(--mono);font-size:.68rem;color:var(--ink2);margin-top:.35rem;min-height:1.1em;word-break:break-all;}
+.mk-notes{max-width:900px;margin:0 auto;padding:0 1.25rem 3rem;font-size:.82rem;color:var(--ink2);line-height:1.5;}
+.mk-notes h2{font-family:var(--mono);font-size:.78rem;margin:0 0 .3rem;color:var(--ink);}
+.mk-notes li{font-size:.82rem;line-height:1.5;}
+.mk-notes table{font-size:.78rem;margin:.4rem 0 1rem;}
+.mk-notes td{vertical-align:top;}
+
+/* no right column: the three bars take the room */
+#st-board{grid-template-columns:180px minmax(0,1fr);}
+
+/* the cards */
+.grid-box.key{background:var(--key);border-color:var(--keyd);}
+.grid-box.live{background:#f3a53a;border-color:#c98416;}
+.grid-box.alt{background:#5a8fd6;border-color:#1e4f96;}
+.grid-box.win{background:#f2c230;border-color:#b8860b;}
+.hand-stack .grid-outer{display:inline-block;position:relative;z-index:20;margin:0;}
+.grid-outer.lock-badge::after,.grid-outer.fx-unlock::after{content:'🔒';position:absolute;top:-10px;right:-10px;width:28px;height:28px;border-radius:50%;background:#fff;border:1.5px solid #b8b3a5;display:flex;align-items:center;justify-content:center;font-size:.8rem;z-index:2;box-shadow:0 2px 0 rgba(26,26,24,.1);}
+.grid-outer.fx-unlock::after{content:'🔓';animation:fxOut .7s ease forwards;}
+.taskcard-target .tgt{font-size:1.75rem;line-height:1;}
+
+/* the keys in hand: tiles the size of the card tiles, on the same grid, so the three rows line up */
+.ss-c.key{background:var(--key);border-color:var(--keyd);}
+.ss-c.key::after{content:'🔑';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.62rem;}
+.ss-c.key.pop{animation:wtPop .6s ease;}
+.ss-c.key.out{animation:keyOut .55s ease forwards;}
+.ss-c.nokey{border:1.5px dashed #cdb68a;background:transparent;}
+@keyframes keyOut{to{transform:translateY(10px) scale(.5);opacity:0;}}
+
+/* the three bars: a row (the sequence, its count on the right), the deck of the bar being played, and the bar's banner */
+.bars{display:flex;flex-direction:column;gap:.55rem;}
+.bar{background:var(--sur);border:2.5px solid var(--ink);border-radius:16px;box-shadow:0 4px 0 rgba(26,26,24,.16);padding:.45rem .55rem .5rem;transition:background .35s,border-color .35s,transform .12s,box-shadow .12s,opacity .3s,filter .3s;}
+/* the row of a bar: on the left the sequence and, under it, the banner; on the right the count */
+.bar-head{display:flex;align-items:stretch;gap:.6rem;}
+.bar-main{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:center;gap:.35rem;}
+.bar-main .seq-strip{margin:0;min-width:0;min-height:22px;justify-content:start;} /* the three rows start at the same place */
+.bar-body{display:none;text-align:center;}
+.bar.open .bar-body{display:block;}
+.bar .hand-stack{margin:.3rem 0 .2rem;}
+.bar .taskcard-target{height:2.3rem;min-height:2.3rem;margin-bottom:0;}
+.bar.main.is-live{background:#fdf0dc;border-color:#c98416;}
+.bar.main.is-win{background:#fdf6d8;border-color:#b8860b;}
+.bar.keys{background:var(--keyl);border-color:var(--keyd);}
+.bar.alt.locked{background:#f1efe9;border-color:#b8b4a8;}
+.bar.alt.avail,.bar.alt.is-alt{background:#eaf2ff;border-color:#1e4f96;}
+.bar.off{opacity:.45;filter:grayscale(1);}
+/* a bar that can be clicked: the whole bar lifts and gets a ring on hover */
+.bar.pick{cursor:pointer;}
+.bar.pick:hover{transform:translateY(-3px);}
+.bar.main.pick:hover{box-shadow:0 8px 0 #a86a0d,0 0 0 4px rgba(243,165,58,.45);}
+.bar.keys.pick:hover{box-shadow:0 8px 0 rgba(107,76,22,.35),0 0 0 4px rgba(179,140,63,.45);}
+.bar.alt.pick:hover{box-shadow:0 8px 0 #17406f,0 0 0 4px rgba(47,111,200,.4);}
+.bar.pick:active{transform:translateY(1px);}
+
+/* the count, on the right of each bar (a small panel, as WT_Q's right column) */
+.ind{flex:none;width:132px;height:3.9rem;border:2.5px solid var(--ink);border-radius:12px;background:var(--sur);box-shadow:0 3px 0 rgba(26,26,24,.16);padding:.25rem .4rem;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.ind .panel-cap{margin-bottom:.1rem;}
+.ind .panel-val{font-size:1.3rem;}
+.ind .panel-sub{margin-top:.15rem;}
+.ind.key{border-color:var(--keyd);}
+/* the counts are never clickable: all white, with the bar's colour on the border (solid colour = a button) */
+.ind.alt-open{border-color:#1e4f96;}
+.ind.alt-open .panel-val{color:#1e4f96;}
+.ind.alt-locked{background:#eceae3;border-color:#b8b4a8;box-shadow:0 3px 0 rgba(26,26,24,.08);}
+.ind.alt-locked .panel-cap,.ind.alt-locked .panel-val,.ind.alt-locked .panel-sub{color:#8e8a80;}
+
+/* the banner under each bar: what the bar is doing, or what a click on it does */
+.bar-foot{font-family:var(--mono);font-size:.72rem;font-weight:600;letter-spacing:.02em;text-align:center;line-height:1.25;padding:.3rem .6rem;border-radius:10px;min-height:1.85rem;display:flex;align-items:center;justify-content:center;gap:.4rem;background:#eceae3;color:var(--ink2);}
+/* the offer: the three buttons pulse when it comes */
+.bar-foot.act.flash{animation:footPulse .8s ease-in-out 3;}
+@keyframes footPulse{0%,100%{transform:none;}50%{transform:scale(1.03);filter:brightness(1.12);box-shadow:0 0 0 5px rgba(26,26,24,.14);}}
+.below .taskcard-offer.flash{animation:switchFlash 1.5s ease;}
+.bar-foot.live{background:#f6c98a;color:#6b3d05;}
+.bar-foot.win{background:#f2c230;color:#5a4000;}
+.bar-foot.key-on{background:#e9dcbf;color:#5a3f10;}
+.bar-foot.alt-on{background:#dbe8fb;color:#1e4f96;}
+.bar-foot.act{text-transform:uppercase;letter-spacing:.07em;font-size:.68rem;}
+.bar-foot.act-card{background:#f3a53a;color:#5a3400;box-shadow:0 3px 0 #a86a0d;}
+.bar-foot.act-key{background:var(--key);color:#2e1f05;box-shadow:0 3px 0 #4d360d;}
+.bar-foot.act-alt{background:var(--blue);color:#fff;box-shadow:0 3px 0 #17406f;}
+.bar-foot.wait{background:#fbe9e5;color:var(--red);}
+
+/* under the bars: the countdowns, the offer */
+.below{margin-top:.6rem;min-height:4.7rem;}
+.below .taskcard-offer{margin:0;}
+.cd-slot{min-height:1.5rem;}
+.cd-slot .cd{display:none;font-family:var(--mono);font-size:.78rem;color:var(--ink2);text-align:center;}
+@media(max-width:820px){
+  #st-board{grid-template-columns:1fr;}
+  .ind{width:104px;height:3.7rem;}
+  .bar-head{gap:.45rem;}
+  .bar-foot{font-size:.62rem;}
+}
+</style>
+</head>
+<body>
+
+<div class="mk-bar">
+  <h1>WT_S · keys and cards (mockup on WT_Q's screen)</h1>
+  <div class="mk-row">Version <span class="mk-seg" id="seg-ver"></span>
+    <button class="mk-btn" onclick="completeCard()">Complete card</button><button class="mk-btn" id="mk-auto" onclick="toggleAuto()">Auto</button><button class="mk-btn" onclick="reset()">Reset</button></div>
+  <div id="mk-log"></div>
+</div>
+
+<div class="st-wrap">
+  <div id="st-board">
+    <div class="st-col" id="st-col-left">
+      <div class="panel panel-lg" id="panel-seq"><div class="panel-cap">Sequence</div><div class="panel-val">1/5</div></div>
+      <div class="panel panel-sm panel-reward" id="panel-reward"><div class="panel-cap">Reward</div><div class="panel-val">£0.20</div></div>
+      <div class="panel panel-sm panel-penalty" id="panel-penalty"><div class="panel-cap">Penalties</div><div class="panel-val" id="s-penalty">£0.00</div></div>
+      <div class="panel panel-sm panel-forfeit is-button" id="panel-forfeit"><div class="panel-val">Give up sequence</div></div>
+    </div>
+    <div>
+      <div class="bars" id="bars"></div>
+      <div class="below" id="below"></div>
+    </div>
+  </div>
+</div>
+
+<div class="mk-notes">
+  <h2>The phases, and what each bar says</h2>
+  <table>
+    <tr><th>Phase</th><th>Cards</th><th>Keys</th><th>Alternative</th></tr>
+    <tr><td>Before the offer (full)</td><td>🔒 Locked until the offer</td><td><i>open</i> · Making keys: every card you complete gives you a key</td><td>🔒 Locked until the offer</td></tr>
+    <tr><td>The offer (full: after 6 keys; truncated: at the start, with 6 keys)</td><td>Click to unlock cards</td><td>Click to keep making keys (all three bars closed, the three buttons pulse; under them: Cards are available: unlock or switch, and the countdown)</td><td>Click to switch to the alternative</td></tr>
+    <tr><td>Making keys</td><td>Click to unlock cards</td><td><i>open</i> · Making keys: every card you complete gives you a key</td><td>Click to switch…</td></tr>
+    <tr><td>Unlocking</td><td><i>open</i> · This card can / cannot be the winning card</td><td>Click to make keys</td><td>Click to switch…</td></tr>
+    <tr><td>Unlocking, no keys left</td><td><i>open, waiting</i> · No keys left: make keys to unlock this card</td><td>Click to make keys</td><td>Click to switch…</td></tr>
+    <tr><td>A click during a card</td><td colspan="2">the clicked bar: … starts after this card (a click on the other bar cancels it)</td><td></td></tr>
+    <tr><td>Alternative</td><td><i>greyed</i> · You left the main sequence</td><td><i>greyed</i> · You left the main sequence</td><td><i>open</i> · Alternative: complete its cards</td></tr>
+  </table>
+  <ul>
+    <li>Nothing changes state by itself: the game stays in the state you are in (making keys, or unlocking cards) until you click another bar. At the offer it stays on the keys; the countdown running out goes on making keys. Unlocking with no key left waits for you.</li>
+    <li>A key is one card (brass, emoji: objects); a card is one card (emoji: faces, as the alternative). Keys are unlimited. The winning card is card 13.</li>
+  </ul>
+</div>
+
+<script>
+const FACES   = ['😀','😂','😉','😍','😎','🤔','😴','😡','😱','🤢','😇','🤠','🥶','🤡','😭','🥳','😬','🙄','😷','🤓'];
+const OBJECTS = ['🔨','🔧','🔩','💡','🔦','🧲','💎','🧰','📎','📌','🔔','🎁','📦','🧸','⏰','📷','🔭','🧪','🎈','🪑'];
+const LIVE = [0,1,0,0,1,0,1,0,0,1,0,0,1,0,1,0,0,1].map(Boolean), N = LIVE.length, WIN = 13, X = 6, ALT = 11;
+const VERS = { full: ['Full'], trunc: ['Truncated'] };
+let VER = 'full', S, G = null, offerT = null, autoT = null;
+const $ = id => document.getElementById(id);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const shuffle = a => { for(let i = a.length - 1; i > 0; i--){ const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+const money = v => '£' + v.toFixed(2);
+const nextCard = () => { for(let k = 1; k <= N; k++) if(!S.opened.includes(k)) return k; return null; };
+const playing = w => !!(S.play && S.play.what === w);
+
+// ── the flow. S.mode: 'keys' (making keys) or 'cards' (unlocking); it changes only on a click ──
+function reset(){
+  clearInterval(offerT); offerT = null; clearG(); if(autoT) toggleAuto();
+  S = { keys: VER === 'trunc' ? X : 0, made: 0, offerOn: false, offered: false, mode: 'keys', nextMode: null, opened: [], play: null, done: false, switched: false, altDone: 0, pen: 0, cd: 30, fx: {}, log: [] };
+  advance();
+}
+function advance(){
+  if(S.done){ render(); return; }
+  if(S.switched){ if(S.altDone < ALT) start('alt'); else { S.done = true; render(); } return; }
+  if(!S.offered){
+    if(VER === 'full' && S.made < X){ start('key'); return; }   // before the offer: keys only
+    if(!S.offerOn) openOffer();
+    render(); return;
+  }
+  if(S.nextMode){ S.mode = S.nextMode; S.nextMode = null; }
+  if(S.mode === 'keys'){ start('key'); return; }
+  if(S.keys > 0){ unlock(); return; }
+  render();                                                    // unlocking, no key left: wait for a click
+}
+function openOffer(){
+  S.offerOn = true; S.cd = 30; S.fx.flash = true; clearInterval(offerT);
+  offerT = setInterval(() => { S.cd--; const c = $('offer-cd'); if(c) c.textContent = S.cd; if(S.cd <= 0) stay(S.mode, 'timeout'); }, 1000);
+}
+function stay(mode, how){ clearInterval(offerT); offerT = null; S.offerOn = false; S.offered = true; S.mode = mode; S.log.push({ c: 'stay:' + mode + (how ? '(' + how + ')' : '') }); advance(); }
+function unlock(){ S.keys--; S.fx = { keyOut: true, unlock: true }; start('card'); }
+function start(what){
+  if(S.offered && what !== 'alt') S.log.push({ c: what === 'card' ? 'C' : 'K' });
+  S.play = { what, k: what === 'card' ? nextCard() : null }; G = newGrid(what === 'key' ? OBJECTS : FACES); render();
+}
+function finish(){
+  const p = S.play; S.play = null; clearG();
+  if(p.what === 'key'){ S.keys++; if(!S.offered) S.made++; S.fx = { keyIn: true }; }
+  else if(p.what === 'card'){ if(p.k === WIN) S.done = true; else S.opened.push(p.k); }
+  else S.altDone++;
+  advance();
+}
+const modeNow = () => S.nextMode || S.mode;                    // the state asked for (it starts after the card being played)
+const live = () => S.offered && !S.switched && !S.done;
+const waiting = () => live() && !S.play && S.mode === 'cards' && S.keys === 0;
+function choose(m){
+  if(S.offerOn){ stay(m); return; }
+  if(!live() || modeNow() === m) return;
+  S.log.push({ c: '→' + m });
+  if(S.play){ S.nextMode = S.mode === m ? null : m; render(); }   // during a card: after it
+  else { S.mode = m; S.nextMode = null; advance(); }
+}
+const altOn = () => (S.offerOn || S.offered) && !S.switched && !S.done;
+function pressAlt(){ if(!altOn()) return; clearInterval(offerT); offerT = null; S.offerOn = false; S.offered = true; S.switched = true; S.play = null; clearG(); S.log.push({ c: 'switch' }); advance(); }
+
+// ── the emoji grid (3×3, as WT_Q): fills in, click every target, submits a moment after the last one ──
+function newGrid(set){
+  const t = pick(set), others = set.filter(e => e !== t), nT = 2 + Math.floor(Math.random() * 3);
+  const pos = shuffle([...Array(9).keys()]).slice(0, nT);
+  return { target: t, cells: Array.from({ length: 9 }, (_, i) => ({ e: pos.includes(i) ? t : pick(others), t: pos.includes(i), sel: false })), shown: 0, left: nT, rev: null, timers: [], submitting: false };
+}
+function clearG(){ if(G){ clearInterval(G.rev); G.timers.forEach(clearTimeout); } G = null; }
+const cellHTML = (c, i) => i < G.shown ? `<div class="ecell live${c.sel ? ' selected' : ''}" data-i="${i}">${c.e}</div>` : `<div class="ecell ph" data-i="${i}">·</div>`;
+const rows = f => [0, 1, 2].map(r => '<div class="grow-el">' + [0, 1, 2].map(c => f(r * 3 + c)).join('') + '</div>').join('');
+const phRows = () => rows(() => '<div class="ecell ph">·</div>');
+function paintCells(){ document.querySelectorAll('.grid-box.playing .ecell').forEach(n => { const i = +n.dataset.i; n.outerHTML = cellHTML(G.cells[i], i); }); bindCells(); }
+function bindCells(){ document.querySelectorAll('.grid-box.playing .ecell').forEach(n => n.onclick = e => { e.stopPropagation(); clickCell(+n.dataset.i); }); }
+function mountGrid(){
+  if(!G || !document.querySelector('.grid-box.playing')) return;
+  bindCells();
+  if(!G.rev && G.shown < 9) G.rev = setInterval(() => { G.shown++; paintCells(); if(G.shown >= 9) clearInterval(G.rev); }, 70);
+  if(G.submitting) showSubmitting();
+}
+function clickCell(i){
+  if(!G || G.submitting || i >= G.shown) return; const c = G.cells[i]; if(c.sel) return;
+  c.sel = true; if(c.t) G.left--; else { S.pen += 0.01; $('s-penalty').textContent = money(S.pen); }
+  paintCells(); if(G.left === 0) submitSoon();
+}
+function showSubmitting(){ const cd = document.querySelector('#below .cd'); if(cd) cd.style.display = 'block'; }
+function submitSoon(){ if(G.submitting) return; G.submitting = true; showSubmitting(); G.timers.push(setTimeout(finish, 900)); }
+function completeCard(){ if(!G || G.submitting) return; clearInterval(G.rev); G.shown = 9; G.cells.forEach(c => { if(c.t) c.sel = true; }); G.left = 0; paintCells(); submitSoon(); }
+
+// ── the pieces ──
+const front = (cls, isPlaying, badge) => `<div class="grid-outer ${badge || ''}"><div class="grid-box ${cls}${isPlaying ? ' playing' : ''}">${isPlaying ? rows(i => cellHTML(G.cells[i], i)) : phRows()}</div></div>`;
+const deckCard = (cls, d, i) => `<div class="deck-card ${cls}" data-d="${d}" data-i="${i}"></div>`;
+const handWrap = inner => `<div class="st-grid-wrap" style="text-align:center;position:relative;"><div class="hand-stack">${inner}</div></div>`;
+const target = on => `<div class="taskcard-target">${on && G ? `<span>Find and click every</span><span class="tgt">${G.target}</span>` : ''}</div>`;
+const ind = (cls, cap, val, sub) => `<div class="ind ${cls}"><div class="panel-cap">${cap}</div><div class="panel-val">${val}</div><div class="panel-sub">${sub}</div></div>`;
+const foot = ([cls, txt]) => `<div class="bar-foot ${cls}">${txt}</div>`;
+const strip = tiles => `<div class="seq-strip" style="--n:${Math.max(25, N)}">${tiles}</div>`;   // one tile size for the three rows
+
+function mainStrip(){
+  const cur = S.done ? null : nextCard(), showCur = S.offered || S.offerOn;
+  return strip(LIVE.map((v, t) => { const k = t + 1, c = ['ss-c', v ? 'o' : ''];
+    if(S.done && !S.switched && k === WIN) c.push('win'); else if(S.opened.includes(k)) c.push('op'); else if(!(playing('card') && S.play.k === k)) c.push('lk');
+    if(showCur && !S.switched && k === cur) c.push('cur');
+    return `<div class="${c.filter(Boolean).join(' ')}"></div>`; }).join(''));
+}
+function keyStrip(fx){
+  let h = Array.from({ length: S.keys }, (_, i) => `<div class="ss-c key${fx.keyIn && i === S.keys - 1 ? ' pop' : ''}"></div>`).join('');
+  if(fx.keyOut) h += '<div class="ss-c key out"></div>';
+  return strip(h || '<div class="ss-c nokey"></div>');
+}
+const altStrip = () => strip(Array.from({ length: ALT }, (_, k) => `<div class="ss-c a${k < S.altDone ? ' done' : ''}${S.switched && k === S.altDone && !S.done ? ' cur' : ''}"></div>`).join(''));
+// the cards: upcoming to the right (locked), opened to the left (greyed); in front the next card
+function mainStack(fx){
+  const won = S.done && !S.switched, pos = (won ? WIN : nextCard()) - 1, p = playing('card');
+  let h = '';
+  for(let j = pos + 1, i = 1; j < N; j++, i++) h += deckCard((LIVE[j] ? 'is-live ' : '') + 'is-locked', 1, i);
+  for(let j = pos - 1, i = 1; j >= 0; j--, i++) h += deckCard(LIVE[j] ? 'is-done-live' : 'is-done', -1, i);
+  return h + front(won ? 'win' : LIVE[pos] ? 'live' : '', p, won ? '' : p ? (fx.unlock ? 'fx-unlock' : '') : 'lock-badge');
+}
+function altStack(){
+  let h = '';
+  for(let i = 1; i < ALT - S.altDone; i++) h += deckCard('is-alt', 1, i);
+  for(let i = 1; i <= Math.min(S.altDone, ALT); i++) h += deckCard('is-done', -1, i);
+  return h + front('alt', playing('alt'));
+}
+// the open bar: the one being played; when nothing is played, the state you are in; at the offer none (nothing is played)
+const openBar = () => S.offerOn ? null : S.switched ? 'alt' : playing('key') ? 'keys' : playing('card') ? 'main' : (S.done ? 'main' : S.mode === 'cards' ? 'main' : 'keys');
+const cardsClick = () => S.offerOn || (live() && modeNow() !== 'cards');
+const keysClick = () => S.offerOn || (live() && modeNow() !== 'keys');
+
+// the banners: one fixed text for each state
+function cardsFoot(){
+  if(S.switched) return ['', 'You left the main sequence'];
+  if(S.done) return ['win', '★ You found the winning card'];
+  if(!S.offered && !S.offerOn) return ['', '🔒 Locked until the offer'];
+  if(S.nextMode === 'cards') return ['live', 'Unlocking starts after this card'];
+  if(playing('card')) return [LIVE[S.play.k - 1] ? 'live' : '', LIVE[S.play.k - 1] ? 'This card can be the winning card' : 'This card cannot be the winning card'];
+  if(cardsClick()) return ['act act-card', 'Click to unlock cards'];
+  if(waiting()) return ['wait', 'No keys left: make keys to unlock this card'];
+  return ['', ''];
+}
+function keysFoot(){
+  if(S.switched) return ['', 'You left the main sequence'];
+  if(S.done) return ['', ''];
+  if(S.offerOn) return ['act act-key', S.mode === 'keys' ? 'Click to keep making keys' : 'Click to make keys'];
+  if(S.nextMode === 'keys') return ['key-on', 'Making keys starts after this card'];
+  if(playing('key')) return ['key-on', 'Making keys: every card you complete gives you a key'];
+  if(keysClick()) return ['act act-key', 'Click to make keys'];
+  return ['key-on', 'Making keys: every card you complete gives you a key'];
+}
+function altFoot(){
+  if(S.switched) return S.done ? ['win', 'Alternative completed'] : ['alt-on', 'Alternative: complete its cards'];
+  if(S.done) return ['', ''];
+  if(altOn()) return ['act act-alt', 'Click to switch to the alternative'];
+  return ['', '🔒 Locked until the offer'];
+}
+
+function render(){
+  const fx = S.fx, o = openBar(), won = S.done && !S.switched, k0 = playing('card') ? S.play.k : nextCard();
+  S.fx = {};
+  $('s-penalty').textContent = money(S.pen);
+  const unl = S.opened.length + (playing('card') || won ? 1 : 0);
+  const mainLive = o === 'main' && !S.switched && !S.done && LIVE[k0 - 1] && (S.offered || S.offerOn);
+  const cP = cardsClick(), kP = keysClick(), aP = altOn(), shown = S.offerOn || S.offered;
+  const fl = ([c, t]) => [c + (fx.flash && c.includes('act') ? ' flash' : ''), t];
+  const bar = (cls, isPick, fn, row, count, body, ft) => `<div class="bar ${cls}${isPick ? ` pick" onclick="${fn}"` : '"'}><div class="bar-head"><div class="bar-main">${row}${foot(fl(ft))}</div>${count}</div><div class="bar-body">${body}</div></div>`;
+  $('bars').innerHTML =
+    bar(`main${o === 'main' ? ' open' : ''}${mainLive ? ' is-live' : ''}${won ? ' is-win' : ''}${S.switched ? ' off' : ''}`, cP, "choose('cards')",
+      mainStrip(), ind('', 'Cards unlocked', unl + '/' + N, 'in this sequence'),
+      handWrap(mainStack(fx)) + target(playing('card')), cardsFoot()) +
+    bar(`keys${o === 'keys' ? ' open' : ''}${S.switched ? ' off' : ''}`, kP, "choose('keys')",
+      keyStrip(fx), ind('key', 'Keys available', S.keys, 'in hand'),
+      handWrap(front('key', playing('key'))) + target(playing('key')), keysFoot()) +
+    bar(`alt${o === 'alt' ? ' open' : ''}${S.switched ? ' is-alt' : shown && !S.done ? ' avail' : ' locked'}`, aP, 'pressAlt()',
+      shown ? altStrip() : strip(''), (S.switched ? ind('alt-open', 'Alternative cards', ALT - S.altDone, 'left') : shown && !S.done ? ind('alt-open', 'Alternative cards', ALT, 'cards') : ind('alt-locked', 'Alternative cards', shown ? ALT : '?', shown ? 'cards' : 'Locked')),
+      S.switched ? handWrap(altStack()) + target(playing('alt')) : '', altFoot());
+  // under the bars: the offer with its countdown, or the Submitting countdown
+  $('below').innerHTML = S.offerOn
+    ? `<div class="taskcard-offer is-expanded${fx.flash ? ' flash' : ''}" style="display:flex"><div>Cards are available: unlock or switch</div><div><p class="offer-ask-line">The task will resume in <strong id="offer-cd">${S.cd}</strong> seconds</p></div></div>`
+    : '<div class="cd-slot"><div class="cd">Submitting in <strong>1</strong>s</div></div>';
+  layoutFans(); mountGrid();
+  $('mk-log').innerHTML = S.log.length ? 'Logged after the offer (C a card unlocked, K a key made): ' + S.log.map(e => e.c).join(' ') : '';
+}
+
+// the deck fanned as WT_Q (fanLayout_): one spacing for both sides, the fan centred, every card visible
+function layoutFans(){
+  document.querySelectorAll('.hand-stack').forEach(st => {
+    const bar = st.closest('.bar'), fr = st.querySelector('.grid-outer'); if(!fr || !fr.offsetWidth) return;
+    const cards = [...st.querySelectorAll('.deck-card')], nR = cards.filter(c => c.dataset.d === '1').length, nL = cards.length - nR;
+    const side = Math.max(40, Math.floor((bar.clientWidth - fr.offsetWidth) / 2) - 20);
+    const step = cards.length ? Math.min(11, 2 * side / cards.length) : 11;
+    st.style.left = ((nL - nR) * step / 2) + 'px';
+    cards.forEach(c => { c.style.transform = `translateX(${c.dataset.d * c.dataset.i * step}px)`; c.style.zIndex = String(19 - c.dataset.i); });
+  });
+}
+
+// ── mockup controls ──
+function autoStep(){
+  if(S.done){ toggleAuto(); return; }
+  if(S.offerOn){ choose('cards'); return; }
+  if(waiting()){ choose('keys'); return; }
+  if(S.play && G && G.shown >= 9){ if(S.mode === 'keys' && S.keys >= 2 && !S.nextMode) choose('cards'); completeCard(); }
+}
+function toggleAuto(){ if(autoT){ clearInterval(autoT); autoT = null; $('mk-auto').textContent = 'Auto'; return; } autoT = setInterval(autoStep, 600); $('mk-auto').textContent = 'Stop'; }
+$('seg-ver').innerHTML = Object.entries(VERS).map(([k, v]) => `<button data-k="${k}">${v[0]}</button>`).join('');
+$('seg-ver').querySelectorAll('button').forEach(b => b.onclick = () => { VER = b.dataset.k; paintSegs(); reset(); });
+function paintSegs(){ $('seg-ver').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.k === VER)); }
+paintSegs(); reset();
+window.addEventListener('resize', layoutFans);
+</script>
+</body>
+</html>

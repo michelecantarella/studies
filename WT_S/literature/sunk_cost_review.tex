@@ -1,0 +1,107 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{natbib}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\title{Sunk-cost effects in incentivized experiments:\\ effect sizes and implications for WT\_S}
+\author{Michele Cantarella}
+\date{Working notes, November 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+We review how large sunk-cost effects are in experiments where choices are incentivized and, where possible, where the sunk cost is time or effort rather than money. The literature splits sharply: hypothetical vignettes produce moderate to large effects, while incentivized laboratory and online experiments produce small, erratic, null or even reversed effects. For the design of WT\_S this means that the effects we should plan for are a few percentage points on the probability of switching, and that samples in the low thousands are the norm rather than the exception.
+\end{abstract}
+
+\section{The classic field evidence: theatre tickets}
+
+The reference field experiment is \citet{arkes1985}. At the Ohio University Theater, in the 1982--1983 season, the first 60 people buying a season ticket were randomly assigned to one of three prices: the full \$15, or a discount of \$2 (\$13) or \$7 (\$8). Full-price buyers attended more plays than discounted buyers over the following six months: in a commonly reported breakdown, 4.11 plays against 3.32 and 3.29, in the first half of the season only, with no significant difference in the second half. The design is what WT\_S borrows: the sunk cost is randomized and the decision that follows is otherwise identical. The sample, however, is small, and the effect fades over the season, consistent with the attenuation over time reported by \citet{roth2015}. The paper also reports, in hypothetical scenarios, that the effect is not lessened by prior courses in economics.
+
+\section{Hypothetical versus incentivized evidence}
+
+Meta-analyses report a sunk-cost effect of moderate size overall. \citet{roth2015} analyse close to one hundred effect sizes from economic decision-making studies and find that the effect emerges, but that its size and the role of moderators depend on the type of decision; time attenuates the effect in utilization decisions. \citet{wang2007}, pooling twenty experiments, find a large effect, stronger for information-technology projects than for other projects. Most of the underlying studies, however, use hypothetical scenarios.
+
+When decisions carry real stakes, the picture changes. \citet{negrini2022} replicate the classic bias in hypothetical scenarios but, in an incentivized investment task, find the reverse: the larger the initial investment, the \emph{less} likely participants are to continue investing. Participants who show a strong bias in the hypothetical scenarios display the reverse pattern in the incentivized task. Being responsible for the initial investment does not change additional investment, and more waste-averse participants do not react more strongly to sunk costs; the authors account for the reversal with risk aversion, narrow bracketing and loss aversion.
+
+\section{Effort, time and games of search}
+
+The studies closest to WT\_S sink effort or time into a task with an uncertain payoff, and then let participants continue or leave.
+
+\citet{friedman2007} run a computer game in which participants dig for treasure on an island or pay a cost to move to another one, with the cost of reaching the island varied. Across eleven treatment variables (displays, how the treasure value is revealed, the size of the sunk cost) they find a sunk-cost effect that is ``surprisingly small'', insensitive to the proposed psychological drivers, and ``much smaller and more erratic'' than expected.
+
+\citet{beknazar2025} randomize the price of a ticket to a real-effort task online (Prolific) and measure playing time. Varying the sunk cost by \$2 for a 14-minute task, with $N = 1{,}806$, they detect only a small effect: 0.09 standard deviations, or 1.1 minutes. In a companion field experiment on YouTube, varying how long a pre-roll advertisement must be watched before it can be skipped (0, 5 or 10 seconds), the effect on engagement is insignificant overall; the main response is more users leaving before the video starts (5.2 percentage points, 28\% more, in the extended treatment). The authors argue that the usual test, through discounts, may not move participants across a reference point, and present the results as a cautionary tale for policy.
+
+\citet{ronayne2021} let participants earn a lottery through a real-effort task and then offer a switch to a dominant lottery: about 23\% keep the dominated one. The authors attribute only about a third of this to the endowment effect, and find that cognitive reflection predicts susceptibility. The paradigm (keeping an earned item against a dominant alternative) differs from ours, so the figure is not a direct benchmark.
+
+\citet{banerjee2019} find, in a real-effort experiment in which participants choose between leaving with an endowment and staying to perform simple tasks, that the sunk-cost effect persists well after the stay-or-leave decision.
+
+\citet{sweis2018} document sensitivity to time already spent waiting in mice, rats and humans in matched foraging tasks, the closest evidence that sunk \emph{time} matters in a sequential stay-or-leave decision.
+
+\section{Summary of effect sizes}
+
+\begin{table}[h]
+\centering\small
+\begin{tabularx}{\textwidth}{@{}lXl@{}}
+\toprule
+Study & Setting & Effect \\
+\midrule
+\citet{arkes1985} & field, theatre season tickets, $N=60$ & 4.11 vs 3.3 plays, first half of the season only \\
+\citet{roth2015} & meta-analysis, mostly hypothetical & moderate overall, decision-dependent \\
+\citet{wang2007} & meta-analysis, 20 experiments & large; larger for IT projects \\
+\citet{negrini2022} & lab, incentivized investment & reversed (less continuation) \\
+\citet{friedman2007} & lab, search game & small and erratic \\
+\citet{beknazar2025} & online real effort, $N=1{,}806$ & 0.09 SD (1.1 of 14 minutes) \\
+\citet{beknazar2025} & field, YouTube ads & insignificant on engagement \\
+\citet{ronayne2021} & real effort, earned lottery & 23\% keep a dominated option \\
+\citet{banerjee2019} & real effort, stay or leave & persistent effect \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+Three details above should be checked against the full texts before citing: the attendance figures by half-season in \citet{arkes1985} (reported in secondary sources), the exact number of effect sizes and the pooled estimate in \citet{roth2015}, and the breakdown of the 23\% figure in \citet{ronayne2021}.
+
+\section{Implications for WT\_S}
+
+\begin{enumerate}
+\item \textbf{Plan for small effects.} In incentivized settings the sunk-cost effect is a few percentage points at most, and can be null or reversed. An overall effect of the keys of 8--10 percentage points on switching at the offer would already be a substantial finding; its decomposition into a perceived discount and an effort component implies contrasts of 3--6 points.
+\item \textbf{Samples in the low thousands are normal.} The closest online study \citep{beknazar2025} used 1,806 participants to detect a 0.09 SD effect. With a binary outcome near 50\%, detecting a 3-point difference between two arms at 80\% power needs about 4,400 observations per arm; 6 points about 1,100; 10 points about 400.
+\item \textbf{Two-sided tests for the main hypothesis.} Given the reversal in \citet{negrini2022}, the main test of the keys should remain two-sided, even though a one-sided test would add power.
+\item \textbf{The design's advantages.} WT\_S has what these studies lack: repeated decisions per participant, an identical decision across versions of the same design (design fixed effects), and many decision points per round (at the offer and after each orange card found empty). Using every decision point is the main source of power.
+\item \textbf{The mechanism is the contribution.} Prior work tests whether a sunk cost matters. The quartet design (full, part gifted, all gifted, truncated) asks \emph{why}: whether an illusory discount (keys that would be wasted by switching) or the effort that produced it drives persistence, at the same decision.
+\end{enumerate}
+
+\begin{thebibliography}{9}
+\bibitem[Arkes and Blumer(1985)]{arkes1985}
+Arkes, H. R., and C. Blumer. 1985. ``The Psychology of Sunk Cost.'' \emph{Organizational Behavior and Human Decision Processes} 35(1): 124--140.
+
+\bibitem[Banerjee et~al.(2019)]{banerjee2019}
+Banerjee, P., S. Chandrasekhar, and P. Srikant. 2019. ``Persistent Sunk Cost Fallacy in a Real Effort Experiment.'' \emph{Journal of Emerging Market Finance}. \url{https://journals.sagepub.com/doi/10.1177/2321022219851593}
+
+\bibitem[Beknazar-Yuzbashev et~al.(2025)]{beknazar2025}
+Beknazar-Yuzbashev, G., S. Ichiba, and M. Stalinski. 2025. ``To the Depths of the Sunk Cost: Experiments Revisiting the Elusive Effect.'' CAGE Working Paper 746. \url{https://ideas.repec.org/p/cge/wacage/746.html}; registration: \url{https://www.socialscienceregistry.org/trials/9017}
+
+\bibitem[Friedman et~al.(2007)]{friedman2007}
+Friedman, D., K. Pommerenke, R. Lukose, G. Milam, and B. A. Huberman. 2007. ``Searching for the Sunk Cost Fallacy.'' \emph{Experimental Economics} 10(1): 79--104.
+
+\bibitem[Negrini et~al.(2022)]{negrini2022}
+Negrini, M., A. Riedl, and M. Wibral. 2022. ``Sunk Cost in Investment Decisions.'' \emph{Journal of Economic Behavior \& Organization} 200: 1105--1135. \url{https://papers.ssrn.com/abstract=3706308}
+
+\bibitem[Ronayne et~al.(2021)]{ronayne2021}
+Ronayne, D., D. Sgroi, and A. Tuckwell. 2021. ``Evaluating the Sunk Cost Effect.'' \emph{Journal of Economic Behavior \& Organization} 186: 318--327.
+
+\bibitem[Roth et~al.(2015)]{roth2015}
+Roth, S., T. Robbert, and L. Straus. 2015. ``On the Sunk-Cost Effect in Economic Decision-Making: A Meta-Analytic Review.'' \emph{Business Research} 8: 99--138. \url{https://link.springer.com/article/10.1007/s40685-014-0014-8}
+
+\bibitem[Sweis et~al.(2018)]{sweis2018}
+Sweis, B. M., S. V. Abram, B. J. Schmidt, K. D. Seeland, A. W. MacDonald, M. J. Thomas, and A. D. Redish. 2018. ``Sensitivity to `Sunk Costs' in Mice, Rats, and Humans.'' \emph{Science} 361(6398): 178--181.
+
+\bibitem[Wang and Keil(2007)]{wang2007}
+Wang, J., and M. Keil. 2007. ``A Meta-Analysis Comparing the Sunk Cost Effect for IT and Non-IT Projects.'' \emph{Information Resources Management Journal} 20(3): 1--18.
+\end{thebibliography}
+
+\end{document}
