@@ -2383,6 +2383,10 @@ function applyResume_(snap, sameTab){
     S.phase       = snap.seqPhase==='alt' ? 'alt' : 'main';
     S.altStartPos = snap.altStartPos || 0;
     S.penalty     = snap.penalty || 0;
+    // 2026-11-06: reloaded on the briefing (the round not started yet): the briefing again (its deck choice, the bonus
+    // notice), not straight into the round (which left deck_chosen_pos and briefing_ended_at blank)
+    const t = S.tasks[S.taskIdx];
+    if(t && !t.startAt && !(snap.subtaskDone > 0)){ gracePeriod(()=>startTask()); saveProgress(false); return; }
     startTask(snap.subtaskDone || 0);
   } else {
     // New session (or a snapshot too old to trust) — current section
