@@ -251,8 +251,8 @@ body{font-family:var(--sans);background:var(--bg);color:var(--ink);min-height:10
 /* Completed cards: soft grey with a light (not black) border. A completed
    card that was ORANGE (a card the sequence could have ended on) keeps a
    muted grey-orange tint, so it stays clear it was a live card. */
-.deck-card.is-done{background:#ece9e1;border-color:#d4d0c4;box-shadow:0 3px 0 rgba(26,26,24,.05);}
-.deck-card.is-done-live{background:#ecd9bd;border-color:#cdb488;box-shadow:0 3px 0 rgba(26,26,24,.05);}
+.deck-card.is-done{background:#faf8f3;border-color:#d8d4c8;box-shadow:0 3px 0 rgba(26,26,24,.05);}
+.deck-card.is-done-live{background:#f7c27c;border-color:#d99a3a;box-shadow:0 3px 0 rgba(26,26,24,.05);}
 .deck-card.is-alt{background:#5a8fd6;border-color:#1e4f96;}
 @keyframes handAdvance{from{transform:translateX(16px);opacity:.5;}to{transform:translateX(0);opacity:1;}}
 .hand-advance #st-grid-outer{animation:handAdvance .3s ease;}
@@ -380,6 +380,7 @@ canvas.demo{display:block;width:100%;border:1px solid var(--bdr);background:var(
 .grace-box{flex:1 1 0;min-width:0;visibility:hidden;}
 .grace-box.is-shown{visibility:visible;animation:graceBoxIn .35s ease;}
 /* WT_S: the starting keys, one emoji each, wrapping within the panel */
+.gift-key{filter:sepia(1) saturate(1.4) hue-rotate(-5deg) brightness(.85);}
 .grace-keys-row{display:flex;flex-wrap:wrap;justify-content:center;gap:.1rem 0;font-size:.95rem;line-height:1.3;margin-top:.45rem;}
 .grace-keys-none{font-size:1.1rem;color:var(--ink2);}
 @keyframes graceBoxIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
@@ -495,8 +496,9 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 /* ── WT_S: locked, unlocked and winning cards in the strip; the card being unlocked keeps the locked look ── */
 .ss-c{position:relative;}
 .ss-c.lk::after{content:'🔒';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:.6rem;}
-.ss-c.op{background:#e2ded4;border-color:#c9c4b6;}
-.ss-c.op.o{background:#ecd9bd;border-color:#cdb488;}
+/* 2026-11-06: cards done stay readable: white ones near white, orange ones still orange (lighter), each with its ✕ */
+.ss-c.op{background:#faf8f3;border-color:#d8d4c8;}
+.ss-c.op.o{background:#f7c27c;border-color:#d99a3a;}
 /* locked cards: full colour with a padlock (deck: on the edge that peeks out; front card: a badge on its corner) */
 .deck-card.is-locked::after{content:'🔒';position:absolute;top:6px;right:1px;font-size:.6rem;line-height:1;}
 .taskcard.is-unlocking #st-grid-outer::after,.taskcard.fx-unlock #st-grid-outer::after{content:'🔒';position:absolute;top:-10px;right:-10px;width:28px;height:28px;border-radius:50%;background:#fff;border:1.5px solid #b8b3a5;display:flex;align-items:center;justify-content:center;font-size:.8rem;z-index:2;box-shadow:0 2px 0 rgba(26,26,24,.1);}
@@ -535,6 +537,8 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 /* the keys in hand: tiles the size of the card tiles, so the three rows line up */
 .ss-c.key{background:transparent;border-color:transparent;} /* the key alone: no fill, no edge (the border kept transparent, so the tile keeps its size) */
 .ss-c.key::after{content:'🔑';position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:1rem;line-height:1;}
+/* 2026-11-06: the keys gifted at the start 🗝️, in a muted brass (the keys made 🔑 as they are) */
+.ss-c.key.gift::after{content:'🗝️';filter:sepia(1) saturate(1.4) hue-rotate(-5deg) brightness(.85);}
 @media (max-width:640px){ .ss-c.key::after{font-size:.7rem;} }
 .ss-c.key.pop{animation:wtPop .6s ease;}
 .ss-c.key.out{animation:keyOut .55s ease forwards;}
@@ -880,12 +884,12 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
           <div class="bars" id="bars">
             <div class="bar main" id="bar-main" onclick="chooseMode_('cards')">
               <div class="bar-head"><div class="bar-main"><div class="seq-strip" id="strip-main"></div><div class="bar-foot" id="foot-main"></div></div>
-                <div class="ind" id="ind-main"><div class="panel-cap">Cards unlocked</div><div class="panel-val" id="s-unl">0</div><div class="panel-sub">in this round</div></div></div>
+                <div class="ind" id="ind-main"><div class="panel-cap">Cards remaining</div><div class="panel-val" id="s-unl">0</div></div></div>
               <div class="bar-body" id="body-main"><div class="st-grid-wrap"><div class="hand-stack" id="hand-main"></div></div><div class="tgt-slot" id="tgt-main"></div></div>
             </div>
             <div class="bar keys" id="bar-keys" onclick="chooseMode_('keys')">
               <div class="bar-head"><div class="bar-main"><div class="seq-strip" id="strip-keys"></div><div class="bar-foot" id="foot-keys"></div></div>
-                <div class="ind key" id="ind-keys"><div class="panel-cap">Keys available</div><div class="panel-val" id="s-keys">0</div><div class="panel-sub">in hand</div></div></div>
+                <div class="ind key" id="ind-keys"><div class="panel-cap">Keys available</div><div class="panel-val" id="s-keys">0</div><div class="panel-sub" id="s-keys-sub">in hand</div></div></div>
               <div class="bar-body" id="body-keys"><div class="st-grid-wrap"><div class="hand-stack" id="hand-keys"></div></div><div class="tgt-slot" id="tgt-keys"></div></div>
             </div>
             <div class="bar alt locked" id="panel-alt" onclick="openAltSwitch_()">
@@ -1773,7 +1777,7 @@ function taskFromSeedQ_(seed, version, t){
   const gifted = k ? k.gift : keysGiftedS_(seed, version), c = k ? k.gift + k.made : coveredAtOfferS_(seed, version), d = deckCoveredS_(seed, c), pos = c - gifted;
   return { keysVersion: k ? keysVersionS_(k) : version, design: seed, length: d.L, live: d.live.slice(), winner: d.winner, x: pos, keysGifted: gifted, keysAtOffer: c, altDuration: seed.alt, ends: true,
     offerPlan: [{ k: 1, pos, alt: seed.alt, shown: true, eStay: seed.fair1 }], deckOptions: [{ live: d.live.slice() }], nDecks: 1, deckDefaultPos: 0,
-    qs: { keys: gifted, opened: [], stage: 'pre', mode: 'keys', nextMode: null, cur: 'key', card: null } };
+    qs: { keys: gifted, gk: gifted, opened: [], stage: 'pre', mode: 'keys', nextMode: null, cur: 'key', card: null } };
 }
 function generateTasks(){
   const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
@@ -1872,7 +1876,7 @@ function nextStepS_(task){
   const q = task.qs; if(q.nextMode){ q.mode = q.nextMode; q.nextMode = null; }
   q.autoKey = false;
   if(q.mode === 'keys'){ q.cur = 'key'; q.card = null; return; }
-  if(q.keys > 0){ q.keys--; q.cur = 'card'; q.card = nextCardS_(task); setFx_('keyOut'); setFx_('unlock'); return; }
+  if(q.keys > 0){ q.keys--; q.lastGift = (q.gk || 0) > 0; if(q.lastGift) q.gk--; q.cur = 'card'; q.card = nextCardS_(task); setFx_('keyOut'); setFx_('unlock'); return; }
   q.cur = 'key'; q.card = null; q.autoKey = true;                 // no key left: a key card first
 }
 // A click on the cards bar ('cards') or the keys bar ('keys'): at the offer, staying in that mode; after it, the mode
@@ -1891,7 +1895,7 @@ function chooseMode_(m){
   if(q.cur === 'key' && m === 'keys') q.autoKey = false;            // the key card running goes on, now by choice
   else if(q.cur === 'key' && q.keys === 0) q.autoKey = true;        // unlocking with no key: this key card is the one needed
   else {                                                            // dropped: the card being unlocked returns its key
-    if(q.cur === 'card'){ q.keys++; q.card = null; }
+    if(q.cur === 'card'){ q.keys++; if(q.lastGift) q.gk = (q.gk || 0) + 1; q.card = null; }
     dropped = true; task.cardsDropped = (task.cardsDropped || 0) + 1;
   }
   (task.modeLog = task.modeLog || []).push({ at: S.subtaskDone, mode: m, dropped, time: new Date().toISOString() });
@@ -1937,12 +1941,14 @@ function paintBars_(t, o){
     : autoKey ? ['key-on', 'No keys left: making a key first']
     : cPick ? ['act act-card', 'Click to unlock']
     : lock && q.mode === 'keys' ? ['', 'You can unlock again after this card'] : ['', '']);
-  const unl = el('s-unl'); if(unl) unl.textContent = (q.opened.length + (q.cur === 'card' ? 1 : 0)) + '/' + t.length;
+  const unl = el('s-unl'); if(unl) unl.textContent = t.length - q.opened.length - (q.cur === 'card' ? 1 : 0); // 2026-11-06: the cards still locked
 
   // the keys
   setBar('bar-keys', 'bar keys' + (open === 'keys' ? ' open' : '') + (alt ? ' off' : '') + (kPick ? ' pick' : ''));
-  let kh = ''; for(let i = 0; i < q.keys; i++) kh += '<div class="ss-c key' + (fx.keyIn && i === q.keys - 1 ? ' pop' : '') + '"></div>';
-  if(fx.keyOut && q.cur === 'card') kh += '<div class="ss-c key out"></div>';
+  // 2026-11-06: the keys gifted at the start (q.gk still in hand, used first) shown as 🗝️, the keys made as 🔑
+  const gk = Math.min(q.keys, q.gk || 0);
+  let kh = ''; for(let i = 0; i < q.keys; i++) kh += '<div class="ss-c key' + (i < gk ? ' gift' : '') + (fx.keyIn && i === q.keys - 1 ? ' pop' : '') + '"></div>';
+  if(fx.keyOut && q.cur === 'card') kh += '<div class="ss-c key out' + (q.lastGift ? ' gift' : '') + '"></div>';
   strip('strip-keys', kh || '<div class="ss-c nokey"></div>');
   foot('foot-keys', alt ? ['', 'You switched to the alternative']
     : offerOn ? ['act act-key', 'Click to make keys']
@@ -3508,7 +3514,7 @@ function graceRevealRest_(){
     el('grace-pay-txt').textContent=money_(task.pay);
     // WT_S: the keys gifted at the start, one 🔑 each (none: "None"); filled now, shown next
     const kg = task.keysGifted || 0, kt = el('grace-keys-txt');
-    kt.innerHTML = kg ? '<span class="grace-keys-row" aria-label="' + kg + ' keys">' + '<span>🔑</span>'.repeat(kg) + '</span>' : '<span class="grace-keys-none">None</span>';
+    kt.innerHTML = kg ? '<span class="grace-keys-row" aria-label="' + kg + ' keys">' + '<span class="gift-key">🗝️</span>'.repeat(kg) + '</span>' : '<span class="grace-keys-none">None</span>';
     // WT_N: the winning-card boxes as in the sequence, each with its chance inside
     // WT_O: all empty, also in the truncated version: its alternative card is found when the sequence starts (renderStrip_)
     // WT_P: the chance only in the first box (the next winning card to find)
