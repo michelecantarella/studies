@@ -212,6 +212,17 @@ function stayCost(st, A, k){
   return geo ? Math.exp(val) : Math.pow(val, 1 / k);
 }
 function altFixed(st, k){ let lo = 0.5, hi = 200; for(let i = 0; i < 40; i++){ const m = (lo + hi) / 2; if(stayCost(st, m, k) > m) lo = m; else hi = m; } return (lo + hi) / 2; }
+// Used by fair_lab.html only (the alternative is set on the deck drawn, altDraw(stepsFrom(...))): the steps from
+// slot `from` on (the slots of the deck: 2 cards of work each after the offer, in every version): slot s holds the
+// winning card, given it is not in an earlier one, with chance h_s = d_s / Σ_{t ≥ s} d_t, d = the slot's chance of
+// being orange (flatDeck's density, the last slot 1). With d ∝ e^(−2s/E) h is the same on every slot (2/E), so the
+// cards expected are E wherever one stands and the fair value is the same at every point of the deck.
+function massSteps(ds, from){
+  const st = []; let tail = 0; for(let s = ds.length - 1; s >= from; s--){ tail += ds[s]; st.unshift({ card: s + 1, cost: 2, o: ds[s] > 0, h: tail > 0 ? ds[s] / tail : 0, kind: 'slot' }); }
+  return st;
+}
+// The fair alternative (k = 1) on the mass, from slot `from` on (null past the last slot).
+function fairMass(ds, from){ const st = massSteps(ds, from || 0); return st.some(s => s.h > 0) ? altFixed(st, 1) : null; }
 // The alternative before rounding: u × altBand of the way from the fair value to the geometric bound (good: switching better)
 // or to the quadratic one (switching worse), u in [0, 1]: the half of each band nearer the fair value. Returns the three
 // fixed points and the value drawn.
@@ -246,7 +257,7 @@ function drawSequence(rng, opts){
     let j = Math.floor(rng() * K), winner = null; for(let t = 0; t < L; t++) if(live[t] && j-- === 0){ winner = t + 1; break; }
     const shape ={ E: deck.E, K: deck.K, debtK: deck.debtK, flatMean: r2(mean), flatDev: r2(flatDev) };
     const out = { L, shape, ds, live, nOrange: K, maxWhiteRun: maxRun, winner, x, u: +u.toFixed(3), good, M: +M.toFixed(2), fair1: +fair1.toFixed(2), geo: +ad.geo.toFixed(2), quad: +ad.quad.toFixed(2), alt,
-      expected: path.map(r2), switchAtX: optStop(st, alt).sw[0], redraws, tries };
+      slotDs: deck.ds, expected: path.map(r2), switchAtX: optStop(st, alt).sw[0], redraws, tries };
     out.trunc = truncDeck(out);
     return out;
   }
@@ -280,7 +291,7 @@ function bestMove(seq, n, opened){
   return { move: stay >= seq.alt ? 'switch' : st[0].kind, stay };
 }
 
-const api = { QCFG, makeRng, flatDeck, expectedPath, stepsFrom, optStop, stayCost, altFixed, altDraw, drawSequence, bestMove, truncDeck };
+const api = { QCFG, makeRng, flatDeck, expectedPath, stepsFrom, optStop, stayCost, altFixed, massSteps, fairMass, altDraw, drawSequence, bestMove, truncDeck };
 if(typeof module !== 'undefined' && module.exports) module.exports = api; else root.WTS = api;
 })(typeof window !== 'undefined' ? window : this);
 /*__WTS_END__*/

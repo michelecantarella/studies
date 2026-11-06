@@ -521,6 +521,10 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
 .stage{position:relative;}
 /* the front card's colour: a key, an orange card, the alternative, the winning card */
 .grid-box.key{background:var(--key);border-color:var(--keyd);}
+/* 2026-11-06: the automatic key card, laid over the main deck's next card: dashed, labelled, flashing while it fills */
+.grid-box.key.over{border-style:dashed;position:relative;animation:keyOver .7s ease-in-out 4;}
+.grid-box.key.over::before{content:'🔑 key card';position:absolute;top:-.95rem;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:.62rem;font-weight:700;background:var(--key);color:#2e1f05;border:1.5px dashed var(--keyd);border-radius:6px;padding:0 .35rem;white-space:nowrap;z-index:2;}
+@keyframes keyOver{0%,100%{box-shadow:0 4px 0 rgba(26,26,24,.14);}50%{box-shadow:0 0 0 6px rgba(207,174,99,.85);}}
 .grid-box.live{background:#f3a53a;border-color:#c98416;}
 .grid-box.alt{background:#5a8fd6;border-color:#1e4f96;}
 .grid-box.win{background:#f2c230;border-color:#b8860b;}
@@ -879,7 +883,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
                 <div class="ind" id="ind-main"><div class="panel-cap">Cards unlocked</div><div class="panel-val" id="s-unl">0</div><div class="panel-sub">in this round</div></div></div>
               <div class="bar-body" id="body-main"><div class="st-grid-wrap"><div class="hand-stack" id="hand-main"></div></div><div class="tgt-slot" id="tgt-main"></div></div>
             </div>
-            <div class="bar keys" id="bar-keys">
+            <div class="bar keys" id="bar-keys" onclick="chooseMode_('keys')">
               <div class="bar-head"><div class="bar-main"><div class="seq-strip" id="strip-keys"></div><div class="bar-foot" id="foot-keys"></div></div>
                 <div class="ind key" id="ind-keys"><div class="panel-cap">Keys available</div><div class="panel-val" id="s-keys">0</div><div class="panel-sub">in hand</div></div></div>
               <div class="bar-body" id="body-keys"><div class="st-grid-wrap"><div class="hand-stack" id="hand-keys"></div></div><div class="tgt-slot" id="tgt-keys"></div></div>
@@ -914,7 +918,7 @@ th{font-family:var(--mono);font-size:.62rem;letter-spacing:.08em;text-transform:
             <!-- The offer: its message and countdown. The choice is made with the bars: the cards or the keys to stay
                  (unlocking, or making keys), the alternative to switch — see showOfferScreen(). -->
             <div class="taskcard-offer" id="st-instr-offer">
-              <div id="st-offer-banner-text">Cards are available: unlock or switch</div>
+              <div id="st-offer-banner-text">Cards are available: unlock, make keys or switch</div>
               <div id="st-offer-ask" style="display:none;">
                 <p class="offer-ask-line">The task will resume in <strong id="st-offer-cd">—</strong> seconds</p>
               </div>
@@ -1215,6 +1219,17 @@ function stayCost(st, A, k){
   return geo ? Math.exp(val) : Math.pow(val, 1 / k);
 }
 function altFixed(st, k){ let lo = 0.5, hi = 200; for(let i = 0; i < 40; i++){ const m = (lo + hi) / 2; if(stayCost(st, m, k) > m) lo = m; else hi = m; } return (lo + hi) / 2; }
+// Used by fair_lab.html only (the alternative is set on the deck drawn, altDraw(stepsFrom(...))): the steps from
+// slot `from` on (the slots of the deck: 2 cards of work each after the offer, in every version): slot s holds the
+// winning card, given it is not in an earlier one, with chance h_s = d_s / Σ_{t ≥ s} d_t, d = the slot's chance of
+// being orange (flatDeck's density, the last slot 1). With d ∝ e^(−2s/E) h is the same on every slot (2/E), so the
+// cards expected are E wherever one stands and the fair value is the same at every point of the deck.
+function massSteps(ds, from){
+  const st = []; let tail = 0; for(let s = ds.length - 1; s >= from; s--){ tail += ds[s]; st.unshift({ card: s + 1, cost: 2, o: ds[s] > 0, h: tail > 0 ? ds[s] / tail : 0, kind: 'slot' }); }
+  return st;
+}
+// The fair alternative (k = 1) on the mass, from slot `from` on (null past the last slot).
+function fairMass(ds, from){ const st = massSteps(ds, from || 0); return st.some(s => s.h > 0) ? altFixed(st, 1) : null; }
 // The alternative before rounding: u × altBand of the way from the fair value to the geometric bound (good: switching better)
 // or to the quadratic one (switching worse), u in [0, 1]: the half of each band nearer the fair value. Returns the three
 // fixed points and the value drawn.
@@ -1249,7 +1264,7 @@ function drawSequence(rng, opts){
     let j = Math.floor(rng() * K), winner = null; for(let t = 0; t < L; t++) if(live[t] && j-- === 0){ winner = t + 1; break; }
     const shape ={ E: deck.E, K: deck.K, debtK: deck.debtK, flatMean: r2(mean), flatDev: r2(flatDev) };
     const out = { L, shape, ds, live, nOrange: K, maxWhiteRun: maxRun, winner, x, u: +u.toFixed(3), good, M: +M.toFixed(2), fair1: +fair1.toFixed(2), geo: +ad.geo.toFixed(2), quad: +ad.quad.toFixed(2), alt,
-      expected: path.map(r2), switchAtX: optStop(st, alt).sw[0], redraws, tries };
+      slotDs: deck.ds, expected: path.map(r2), switchAtX: optStop(st, alt).sw[0], redraws, tries };
     out.trunc = truncDeck(out);
     return out;
   }
@@ -1283,7 +1298,7 @@ function bestMove(seq, n, opened){
   return { move: stay >= seq.alt ? 'switch' : st[0].kind, stay };
 }
 
-const api = { QCFG, makeRng, flatDeck, expectedPath, stepsFrom, optStop, stayCost, altFixed, altDraw, drawSequence, bestMove, truncDeck };
+const api = { QCFG, makeRng, flatDeck, expectedPath, stepsFrom, optStop, stayCost, altFixed, massSteps, fairMass, altDraw, drawSequence, bestMove, truncDeck };
 if(typeof module !== 'undefined' && module.exports) module.exports = api; else root.WTS = api;
 })(typeof window !== 'undefined' ? window : this);
 /*__WTS_END__*/
@@ -1369,7 +1384,7 @@ if(!_prolificID && _isPilotStudy){
 // backend.txt rewrites a header row that doesn't match RESP_HEADER). While
 // it's the PASTE_ placeholder, backendConfigured_() is false and nothing is
 // sent.
-const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbzQSToivEEI84PAmkmioWY2OZGgoRyckykFqivYWZXmHevAa8HgZb2Oh7htmgMl7R2mpg/exec'; // WT_S: set to the new Apps Script deployment (a NEW spreadsheet: WT_S's pool of pairs must not mix with another study's)
+const BACKEND_URL = 'https://script.google.com/macros/s/AKfycbxoAsq7-p4mU4cbiuoki2ZK5-0qyceXk5DLpCUa4JpjxDXOW9ikWO2mCWOvhPHZ4r7azw/exec'; // WT_S: set to the new Apps Script deployment (a NEW spreadsheet: WT_S's pool of pairs must not mix with another study's)
 const COMPLETION_CODE  = 'C194BROI';
 const NO_CONSENT_CODE  = 'C1E6TYZR';
 // No payment for the walkthrough: the whole bonus is the reward pool
@@ -1645,7 +1660,7 @@ function drawRewardSplit_(){
   return { pool: toMoney(poolUnits), split: units.map(toMoney) };
 }
 // ── Pairing plan ──
-// SESSION.seedPlan[i] = { seed_id, version: 'full'|'full_gift'|'trunc'|'trunc_gift', role: 'pair'|'new'|'unpaired', seed }.
+// SESSION.seedPlan[i] = { seed_id, version: 'full'|'mixed'|'trunc'|'trunc_gift', role: 'pair'|'new'|'unpaired', seed }.
 // Built once per respondent (prepareSeedPlan_, before the first sequence).
 // WT_S quartets: each design is played in four versions, by four different participants (VERSIONS_S below). Versions:
 // one of each and one at random, shuffled over the five sequences. For each sequence (band, version) the backend is asked for an open
@@ -1661,12 +1676,15 @@ async function prepareSeedPlan_(){
   if(SESSION.seedPlan && SESSION.seedPlan.length === CFG.numTasks) return;
   const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
   const bands = Array.from({length: CFG.numTasks}, () => 0); // WT_S: no p_inside bands (one pool)
+  // WT_S (2026-11-05): quartets: one of each version and one at random, shuffled. A treated sequence (every version but
+  // trunc) draws its extra keys and its deck choice (drawTreatS_).
   const versions = _clearMode ? bands.map(() => 'any') : shuf(VERSIONS_S.concat([pick(VERSIONS_S)]));
+  const treats = versions.map(v => v !== 'trunc' && v !== 'any' ? drawTreatS_(v) : null);
   const pooled = backendConfigured_() && _demoMode < 2 && !_isAnyPilot;
-  // WT_S: the deck choice, a factor of its own, the same in every version: half the sequences show 2 or 3 decks (equally
-  // likely), the rest one. The decks are designs from the pool open in this sequence's version (claimed together, all
-  // different), completed with new designs when the pool has too few. Clearing mode: one deck.
-  const nDecks = bands.map(() => _clearMode ? 1 : Math.random() < 0.5 ? 1 : Math.random() < 0.5 ? 2 : 3);
+  // WT_S: the deck choice (a treated sequence's factor): 2 or 3 decks (equally likely), else one. The decks are designs
+  // from the pool open in this sequence's version (claimed together, all different), completed with new designs when the
+  // pool has too few. Clearing mode: one deck.
+  const nDecks = bands.map((b, i) => !_clearMode && treats[i] && treats[i].choice ? (Math.random() < 0.5 ? 2 : 3) : 1);
   const slotOf = []; bands.forEach((b, i) => { for(let j = 0; j < nDecks[i]; j++) slotOf.push(i); });
   let claimed = [];
   if(pooled){
@@ -1683,10 +1701,13 @@ async function prepareSeedPlan_(){
     // Without the pool (demomode=2, test modes) the versions are still played as assigned, unpaired; clearing mode: full.
     const pairable = pooled && !_clearMode, mine = claimed.filter((c, k) => slotOf[k] === i && c && c.design);
     const version = mine.length ? mine[0].version : pairable || (!pooled && !_clearMode) ? versions[i] : 'full';
+    // a treated version claimed in clearing mode, or one deck only: its own draw, without a choice
+    let treat = version === 'trunc' ? null : treats[i];
+    if(version !== 'trunc' && (!treat || treat.version !== version || (nDecks[i] === 1 && treat.choice))) treat = Object.assign(drawTreatS_(version), { choice: false });
     const options = mine.slice(0, nDecks[i]).map(c => ({ seed_id: c.seed_id, role: 'pair', seed: c.design }));
     while(options.length < nDecks[i]) options.push({ seed_id: newSeedId_(), role: pairable ? 'new' : 'unpaired', seed: designSeedQ_(), fresh: true });
     const a = options[0];
-    plan.push({ seed_id: a.seed_id, version, role: a.role, seed: a.seed, options });
+    plan.push({ seed_id: a.seed_id, version, treat, role: a.role, seed: a.seed, options });
     // the assigned deck, if new, goes to the pool now (as before); the other new decks only if chosen (applyDeckChoice_)
     if(a.fresh && pairable){ fresh.push({ seed_id: a.seed_id, version, design: a.seed }); a.fresh = false; a.added = true; }
   });
@@ -1699,35 +1720,65 @@ function seedPost_(payload){
   postToBackend_(payload, 3).catch(()=>{});
 }
 // WT_S: a design (the generator above, WTS.drawSequence): the deck, the pause, the alternative and the exact truncated deck;
-// plus `gift`, the keys gifted in the two gift versions: even (an extra white card for every two keys, so they save
-// nothing), a share of x drawn in 25–75%, at least 2, and no more than the deck's slots allow.
-// Quartets: full (x keys made), full_gift (g gifted at the start, then x made: x + g at the offer), trunc (no keys),
-// trunc_gift (g gifted, the offer at the start). Every key, made or gifted, covers a card with an extra white card in front
-// of each covered pair: every orange card costs the same to reach from the offer in all four (quartet_lab.html).
-const VERSIONS_S = ['full', 'full_gift', 'trunc', 'trunc_gift'];
-function drawGiftS_(s){ const slots = s.trunc.live.length, max = 2 * (slots - 1) - s.x;
-  return Math.max(2, Math.min(max, 2 * Math.round(s.x * (0.25 + 0.5 * Math.random()) / 2))); }
-function designSeedQ_(){ const s = WTS.drawSequence(WTS.makeRng(Math.floor(Math.random() * 4294967296))); return Object.assign(s, { gen: 'S3', gift: drawGiftS_(s) }); }
-// The keys gifted at the start (Starting keys) and the cards covered by the keys at the offer, by version.
-function keysGiftedS_(seed, version){ return /_gift$/.test(version) ? (seed.gift || 2) : 0; }
-function coveredAtOfferS_(seed, version){ return (/^full/.test(version) ? seed.x : 0) + keysGiftedS_(seed, version); }
-// The deck with c cards covered by the keys at the offer, from the design's slots (its truncated deck): an extra white card
+// plus the mixed version's keys: `gift` (gifted at the start, x × U(25%, 75%)) and `mixMade` (made before the offer,
+// x × U(25%, 100%)), drawn independently, at least 1 each, their sum even (an extra white card for every two keys, so they
+// save nothing) and no more than the deck's slots allow.
+// Quartets: full (x keys made), mixed (gift gifted at the start, then mixMade made), trunc (no keys), trunc_gift (the full
+// version with all its x keys gifted: x in hand, none made, the offer at the start). Every key, made or gifted, covers a
+// card, with an extra white card in front of each covered pair: every orange card costs the same to reach from the offer in
+// all four (quartet_lab.html).
+// 2026-11-05 (final): quartets of a truncated baseline and three treated versions, each with a deck choice 50/50:
+//   full (A): the design's x keys to make, and with chance EXTRA_P_S some keys gifted too (x × Beta(0.5, 0.5), at least 1);
+//   mixed (B): keys gifted and made, always (the design's gift and mixMade, as before);
+//   trunc_gift (C): the inverse of A: x keys gifted, and with chance EXTRA_P_S some keys to make too (as A's extra).
+// The keys (keysFromTreatS_): their sum made even (the odd one moved to an even number; an extra white card for every two
+// keys) and within the deck's slots.
+const VERSIONS_S = ['full', 'mixed', 'trunc', 'trunc_gift'];
+const EXTRA_P_S = 0.2;
+const betaHalfS_ = () => Math.pow(Math.sin(Math.PI / 2 * Math.random()), 2); // Beta(0.5, 0.5)
+function drawTreatS_(version){
+  return { version, choice: Math.random() < 0.5, extra: version !== 'mixed' && Math.random() < EXTRA_P_S ? +betaHalfS_().toFixed(3) : null };
+}
+function keysFromTreatS_(seed, version, t){
+  const x = seed.x, max = 2 * (seed.trunc.live.length - 1), ex = t && t.extra != null ? Math.max(1, Math.round(x * t.extra)) : 0;
+  let m = version === 'mixed' ? (seed.mixMade || 1) : version === 'full' ? x : ex;
+  let g = version === 'mixed' ? (seed.gift || 1) : version === 'trunc_gift' ? x : ex;
+  if((m + g) % 2){ if(m % 2) m += m > 1 ? -1 : 1; else g += g > 1 ? -1 : 1; } // the odd one to an even number (1 → 2)
+  while(m + g > max){ if(m >= g && m >= 2) m -= 2; else if(g >= 2) g -= 2; else break; }
+  return { made: m, gift: g };
+}
+function keysVersionS_(k){ return k.made && k.gift ? 'mixed' : k.made ? 'full' : k.gift ? 'trunc_gift' : 'trunc'; }
+function drawMixS_(s){
+  const max = 2 * (s.trunc.live.length - 1), x = s.x;
+  let g = Math.max(1, Math.round(x * (0.25 + 0.5 * Math.random()))), m = Math.max(1, Math.round(x * (0.25 + 0.75 * Math.random())));
+  if((g + m) % 2) m += m > 1 ? -1 : 1;                              // the keys in hand even
+  while(g + m > max){ if(g > 1) g--; else m--; if((g + m) % 2){ if(m > 1) m--; else g--; } }
+  return { gift: g, mixMade: m };
+}
+function designSeedQ_(){ const s = WTS.drawSequence(WTS.makeRng(Math.floor(Math.random() * 4294967296))); return Object.assign(s, { gen: 'S4' }, drawMixS_(s)); }
+// The keys gifted at the start (Starting keys) and the cards covered by the keys at the offer, by version: full 0 / x,
+// mixed gift / gift + mixMade, trunc 0 / 0, trunc_gift x / x (the full version's deck and keys, all gifted).
+function keysGiftedS_(seed, version){ return version === 'mixed' ? (seed.gift || 1) : version === 'trunc_gift' ? seed.x : 0; }
+function coveredAtOfferS_(seed, version){ return version === 'mixed' ? (seed.gift || 1) + (seed.mixMade || 1) : version === 'trunc' ? 0 : seed.x; }// The deck with c cards covered by the keys at the offer, from the design's slots (its truncated deck): an extra white card
 // in front of each of the first c/2 slots (c = x: the design's own deck; c = 0: the truncated deck).
 function deckCoveredS_(seed, c){
   const slots = seed.trunc.live, live = []; slots.forEach((o, j) => { if(j < c / 2) live.push(false); live.push(o); });
   const tw = seed.trunc.winner; return { live, L: live.length, winner: tw <= c / 2 ? 2 * tw : tw + c / 2 };
 }
-// The deck a version plays, the keys gifted already in hand and the key cards still to make before the offer (full and
-// full_gift: x; trunc and trunc_gift: none, the offer at the start). qs = the progress in the main sequence (see nextStepS_).
-function taskFromSeedQ_(seed, version){
-  const gifted = keysGiftedS_(seed, version), c = coveredAtOfferS_(seed, version), d = deckCoveredS_(seed, c), pos = c - gifted;
-  return { design: seed, length: d.L, live: d.live.slice(), winner: d.winner, x: pos, keysGifted: gifted, keysAtOffer: c, altDuration: seed.alt, ends: true,
+// The deck a version plays, the keys gifted already in hand and the key cards still to make before the offer (full x,
+// mixed mixMade; trunc and trunc_gift none, the offer at the start). qs = the progress in the main sequence (see nextStepS_).
+// WT_S treated versions (its draw t: the extra keys): the keys from keysFromTreatS_.
+function taskFromSeedQ_(seed, version, t){
+  const k = version !== 'trunc' && t ? keysFromTreatS_(seed, version, t) : null;
+  const gifted = k ? k.gift : keysGiftedS_(seed, version), c = k ? k.gift + k.made : coveredAtOfferS_(seed, version), d = deckCoveredS_(seed, c), pos = c - gifted;
+  return { keysVersion: k ? keysVersionS_(k) : version, design: seed, length: d.L, live: d.live.slice(), winner: d.winner, x: pos, keysGifted: gifted, keysAtOffer: c, altDuration: seed.alt, ends: true,
     offerPlan: [{ k: 1, pos, alt: seed.alt, shown: true, eStay: seed.fair1 }], deckOptions: [{ live: d.live.slice() }], nDecks: 1, deckDefaultPos: 0,
     qs: { keys: gifted, opened: [], stage: 'pre', mode: 'keys', nextMode: null, cur: 'key', card: null } };
-}function generateTasks(){
+}
+function generateTasks(){
   const regime = (_regimeOverride != null) ? _regimeOverride : (SESSION.regime != null ? SESSION.regime : 1);
   if(!SESSION.seedPlan || SESSION.seedPlan.length !== CFG.numTasks){ // offline fallback: all new, unpooled
-    SESSION.seedPlan = Array.from({length: CFG.numTasks}, () => ({ seed_id: newSeedId_(), version: 'full', role: 'unpaired', seed: designSeedQ_() }));
+    SESSION.seedPlan = Array.from({length: CFG.numTasks}, () => ({ seed_id: newSeedId_(), version: 'full', treat: { version: 'full', choice: false, extra: null }, role: 'unpaired', seed: designSeedQ_() }));
   }
   return Array.from({length:CFG.numTasks},(_,i)=>{
     const p = SESSION.seedPlan[i];
@@ -1736,12 +1787,13 @@ function taskFromSeedQ_(seed, version){
     // WT_S: the decks shown (prepareSeedPlan_: 1 in half the sequences, else 2 or 3, in every version), in random order,
     // each as this version plays it (the truncated deck in trunc)
     let decks = null;
+    const tr = p.version !== 'trunc' ? (p.treat || { version: p.version, choice: false, extra: null }) : null;
     const opts = p.options && p.options.length ? p.options : [{ seed_id: p.seed_id, role: p.role, seed: p.seed }];
     if(opts.length > 1){
       const order = shuf(opts.map((_, k) => k));
-      decks = { deckOptions: order.map(k => ({ live: taskFromSeedQ_(opts[k].seed, p.version).live, design: opts[k].seed, opt: opts[k] })), nDecks: opts.length, deckDefaultPos: order.indexOf(0) };
+      decks = { deckOptions: order.map(k => ({ live: taskFromSeedQ_(opts[k].seed, p.version, tr).live, design: opts[k].seed, opt: opts[k] })), nDecks: opts.length, deckDefaultPos: order.indexOf(0) };
     }
-    return Object.assign({ index:i, regime, pay, seedId: p.seed_id, seedVersion: p.version, seedRole: p.role, seedDesignGen: (p.seed && p.seed.gen) || 1 }, taskFromSeedQ_(p.seed, p.version), decks || {}, {
+    return Object.assign({ index:i, regime, pay, seedId: p.seed_id, seedVersion: p.version, treat: tr, seedRole: p.role, seedDesignGen: (p.seed && p.seed.gen) || 1 }, taskFromSeedQ_(p.seed, p.version, tr), decks || {}, {
              deckChosenPos: null,
              offerLog: [], curOffer: null, nextOfferIdx: 0,
              penaltyAtPause:null,
@@ -1769,7 +1821,7 @@ function applyDeckChoice_(task, k){
   if(k === task.deckDefaultPos) return;
   const o = ch.opt, d = o.seed, pooled = backendConfigured_() && _demoMode < 2 && !_isAnyPilot && !_clearMode;
   const role = o.role === 'pair' ? 'pair' : pooled ? 'new' : 'unpaired';
-  Object.assign(task, taskFromSeedQ_(d, task.seedVersion), { deckOptions: task.deckOptions, nDecks: task.nDecks, deckDefaultPos: task.deckDefaultPos, deckChosenPos: k,
+  Object.assign(task, taskFromSeedQ_(d, task.seedVersion, task.treat), { deckOptions: task.deckOptions, nDecks: task.nDecks, deckDefaultPos: task.deckDefaultPos, deckChosenPos: k,
     seedId: o.seed_id, seedRole: role, seedDesignGen: d.gen || 1 });
   if(o.fresh && pooled) seedPost_({ action:'seedAdd', pid:_prolificID, study_id:_studyID, seeds: [{ seed_id: o.seed_id, version: task.seedVersion, design: d }] });
   const p = (SESSION.seedPlan || [])[task.index]; if(p) Object.assign(p, { seed_id: o.seed_id, seed: d, role });
@@ -1795,9 +1847,11 @@ function latestOfferUpTo_(task, done){
 // ── TASK SCREEN (WT_S): the cards, the keys, the alternative ──────────
 // task.qs: keys (in hand); opened (the cards unlocked, in order, all empty); stage ('pre' before the offer: keys only,
 // 'offer' during it, 'play' after it); mode ('keys' before the offer, 'cards' after it: unlocking); cur ('key' | 'card' |
-// null during the offer); card (the card being unlocked). A card being unlocked has already used its key. After the
-// offer the keys bar is not a choice: the cards are unlocked in order, and a card with no key left gets a key card
-// first, played automatically. The only choice left is switching.
+// null during the offer); card (the card being unlocked). A card being unlocked has already used its key.
+// 2026-11-05: at the offer and after it the participant chooses between unlocking the cards (mode 'cards') and making
+// keys (mode 'keys'), by clicking the cards bar or the keys bar; a click while a card runs takes effect from the next
+// card (nextMode). The offer's countdown running out makes keys. Unlocking with no key left makes one first,
+// automatically (autoKey), then goes on unlocking.
 const OBJECTS = ['🔨','🔧','🔩','💡','🔦','🧲','💎','🧰','📎','📌','🔔','🎁','📦','🧸','⏰','📷','🔭','🧪','🎈','🪑']; // the key cards (the cards and the alternative: EMOJIS)
 function nextCardS_(t){ for(let k = 1; k <= t.length; k++) if(!t.qs.opened.includes(k)) return k; return null; }
 const coveredS_ = q => q.opened.length + q.keys + (q.cur === 'card' ? 1 : 0);   // the cards a key has been made for
@@ -1806,18 +1860,43 @@ function bestMoveS_(task, qs){
   qs = qs || task.qs;
   return WTS.bestMove(Object.assign({}, task.design, { live: task.live, L: task.length, winner: task.winner, alt: task.altDuration }), Math.min(task.length, coveredS_(qs)), qs.opened);
 }
-// After the offer: the next card of work: the next card with a key in hand, else a key card first.
-function nextStepS_(task){
-  const q = task.qs; q.mode = 'cards'; q.nextMode = null;
-  if(q.keys > 0){ q.keys--; q.cur = 'card'; q.card = nextCardS_(task); setFx_('keyOut'); setFx_('unlock'); return; }
-  q.cur = 'key'; q.card = null;                                   // no key left: a key card first
+// The fair alternative in a state: the length A at which staying (switching allowed later, the best way) costs A.
+function fairS_(task, qs){
+  qs = qs || task.qs;
+  const st = WTS.stepsFrom(task.live, Math.min(task.length, coveredS_(qs)), qs.opened);
+  return st.some(s => s.o) ? WTS.altFixed(st, 1) : null;
 }
-// A click on the cards bar: at the offer, staying (unlocking the cards); otherwise nothing.
+// After the offer: the next card of work, in the mode chosen: making keys → a key card; unlocking → the next card with a
+// key in hand, else a key card first (automatic).
+function nextStepS_(task){
+  const q = task.qs; if(q.nextMode){ q.mode = q.nextMode; q.nextMode = null; }
+  q.autoKey = false;
+  if(q.mode === 'keys'){ q.cur = 'key'; q.card = null; return; }
+  if(q.keys > 0){ q.keys--; q.cur = 'card'; q.card = nextCardS_(task); setFx_('keyOut'); setFx_('unlock'); return; }
+  q.cur = 'key'; q.card = null; q.autoKey = true;                 // no key left: a key card first
+}
+// A click on the cards bar ('cards') or the keys bar ('keys'): at the offer, staying in that mode; after it, the mode
+// changes AT ONCE (2026-11-06). The card running is kept when it is already what the new mode plays (a key card: made by
+// choice in 'keys', or the automatic one in 'cards' with no key in hand); otherwise it is dropped, unfinished and unpaid
+// (a card being unlocked gives its key back), and the new mode's card starts. After a change the mode is locked
+// (q.modeLock) until the next card is completed.
 function chooseMode_(m){
-  if(trainingActive || m !== 'cards') return;
+  if(trainingActive || (m !== 'cards' && m !== 'keys')) return;
   const task = S.tasks[S.taskIdx];
   if(!task || S.phase !== 'main' || S.forfeitOverlayOpen || S.switchOverlayOpen) return;
-  if(S.switchAvailable) resolveOffer_('continue', 'cards');
+  if(S.switchAvailable){ resolveOffer_('continue', m); return; }
+  const q = task.qs; if(q.stage !== 'play' || q.mode === m || q.modeLock) return;
+  q.mode = m; q.nextMode = null; q.modeLock = true;
+  let dropped = false;
+  if(q.cur === 'key' && m === 'keys') q.autoKey = false;            // the key card running goes on, now by choice
+  else if(q.cur === 'key' && q.keys === 0) q.autoKey = true;        // unlocking with no key: this key card is the one needed
+  else {                                                            // dropped: the card being unlocked returns its key
+    if(q.cur === 'card'){ q.keys++; q.card = null; }
+    dropped = true; task.cardsDropped = (task.cardsDropped || 0) + 1;
+  }
+  (task.modeLog = task.modeLog || []).push({ at: S.subtaskDone, mode: m, dropped, time: new Date().toISOString() });
+  if(dropped){ nextStepS_(task); startSubtask(); }
+  updateStats(); redrawProg();
 }
 
 // The change of state just made, shown for a moment while the next card starts: the padlock opening on the card
@@ -1832,10 +1911,14 @@ function paintBars_(t, o){
   if(!t || !t.qs){ if(park && go){ park.appendChild(go); park.appendChild(tgt); park.appendChild(cds); } return; }
   o = o || {};
   const q = t.qs, fx = S.fx || {}, alt = o.phase === 'alt', offerOn = !!o.offerOn, offered = !!t.altRevealed || offerOn;
-  const live = offered && !offerOn && !alt, autoKey = live && q.cur === 'key';   // after the offer: a key card before the next card
+  const live = offered && !offerOn && !alt, autoKey = live && q.cur === 'key' && !!q.autoKey;   // after the offer: a key card before the next card (none left)
+  const keyMode = live && q.cur === 'key' && !q.autoKey, lock = live && !!q.modeLock;          // making keys, by choice; the mode just changed
   const front = q.cur === 'card' ? q.card : nextCardS_(t), frontLive = !!t.live[front - 1];
-  const open = alt ? 'alt' : offerOn ? null : q.cur === 'key' ? 'keys' : 'main';
-  const cPick = offerOn, aPick = !alt && offered;                                 // the buttons: the cards at the offer, the alternative from it on
+  // 2026-11-06: the automatic key card (unlocking, no key left) is played in the main deck, over its next card
+  const open = alt ? 'alt' : offerOn ? null : q.cur === 'key' && !autoKey ? 'keys' : 'main';
+  // the buttons: the cards and the keys at the offer, then whichever is not the mode chosen (not until a card is completed
+  // after a change); the alternative from the offer on
+  const cPick = offerOn || (live && q.mode === 'keys' && !lock), kPick = offerOn || (live && q.mode === 'cards' && !lock), aPick = !alt && offered;
   const nT = Math.max(25, t.length, t.altDuration || 0);
   const keep = n => ['train-dim','train-lit','switch-flash','confirming'].filter(c => n.classList.contains(c)).map(c => ' ' + c).join('');
   const setBar = (id, cls) => { const n = el(id); if(n) n.className = cls + keep(n); };
@@ -1851,17 +1934,23 @@ function paintBars_(t, o){
   foot('foot-main', alt ? ['', 'You switched to the alternative']
     : q.cur === 'card' ? [frontLive ? 'live' : '', frontLive ? 'This card can be the winning card' : 'This card cannot be the winning card']
     : !offered ? ['', '🔒 Locked until the offer']
+    : autoKey ? ['key-on', 'No keys left: making a key first']
     : cPick ? ['act act-card', 'Click to unlock']
-    : autoKey ? ['key-on', 'No keys left: making one'] : ['', '']);
+    : lock && q.mode === 'keys' ? ['', 'You can unlock again after this card'] : ['', '']);
   const unl = el('s-unl'); if(unl) unl.textContent = (q.opened.length + (q.cur === 'card' ? 1 : 0)) + '/' + t.length;
 
   // the keys
-  setBar('bar-keys', 'bar keys' + (open === 'keys' ? ' open' : '') + (alt ? ' off' : ''));
+  setBar('bar-keys', 'bar keys' + (open === 'keys' ? ' open' : '') + (alt ? ' off' : '') + (kPick ? ' pick' : ''));
   let kh = ''; for(let i = 0; i < q.keys; i++) kh += '<div class="ss-c key' + (fx.keyIn && i === q.keys - 1 ? ' pop' : '') + '"></div>';
   if(fx.keyOut && q.cur === 'card') kh += '<div class="ss-c key out"></div>';
   strip('strip-keys', kh || '<div class="ss-c nokey"></div>');
   foot('foot-keys', alt ? ['', 'You switched to the alternative']
+    : offerOn ? ['act act-key', 'Click to make keys']
+    : keyMode ? ['key-on', 'Making keys']
+    : autoKey && kPick ? ['act act-key', 'Click to make keys']
     : autoKey ? ['key-on', 'Making a key for the next card']
+    : kPick ? ['act act-key', 'Click to make keys']
+    : lock && q.mode === 'cards' ? ['key-on', 'You can make keys again after this card']
     : offered ? ['key-on', 'Each key unlocks one card']
     : ['key-on', 'Every card you complete gives you a key']);
   const ks = el('s-keys'); if(ks) ks.textContent = q.keys;
@@ -1887,7 +1976,7 @@ function paintBars_(t, o){
   deck('hand-keys', [], []);
   deck('hand-alt', Array.from({ length: Math.max(0, (t.altDuration || 0) - altDone - 1) }, () => 'is-alt'), Array.from({ length: Math.min(altDone, t.altDuration || 0) }, () => 'is-done'));
   const gb = el('st-grid');
-  if(gb) gb.className = 'grid-box ' + (open === 'keys' ? 'key' : open === 'alt' ? 'alt' : frontLive ? 'live' : '') + (gb.classList.contains('card-flash') ? ' card-flash' : '');
+  if(gb) gb.className = 'grid-box ' + (autoKey ? 'key over' : open === 'keys' ? 'key' : open === 'alt' ? 'alt' : frontLive ? 'live' : '') + (gb.classList.contains('card-flash') ? ' card-flash' : '');
   if(go){
     go.className = 'grid-outer' + (open === 'main' && q.cur !== 'card' ? ' lock-badge' : open === 'main' && fx.unlock ? ' fx-unlock' : '');
     const stack = open ? el('hand-' + (open === 'keys' ? 'keys' : open)) : null, slot = open ? el('tgt-' + (open === 'keys' ? 'keys' : open)) : null;
@@ -2049,7 +2138,7 @@ function buildFullData_(){
     seq_frame_treatment:   SESSION.nSeqFrame || 5,
     reward_pool:           SESSION.rewardPool,  // total of the 5 sections' rewards (each section's own reward is Responses.pay)
     // WT_S: the versions assigned to the five sequences, in order, and their designs (one per sequence, | separated)
-    version_plan:          (SESSION.seedPlan || []).map(p => p.version).join('|'),
+    version_plan:          (SESSION.seedPlan || []).map(p => p.version + (p.treat ? (p.treat.extra != null ? ':extra' + p.treat.extra : '') + (p.treat.choice ? ':choice' : '') : '')).join('|'),
     seed_plan:             (SESSION.seedPlan || []).map(p => p.seed_id).join('|'),
     total_earnings:        Math.round(totalEarnings*100)/100,
     total_grid_pay:        Math.round(totalGridPay*100)/100,
@@ -2314,8 +2403,14 @@ function applyResume_(snap, sameTab){
 
 // WT_S: seconds per deck, from the cards' own times (tasks_json started_at → submitted_at).
 function deckSecsS_(grids){
-  const sum = step => { let t = 0; (grids || []).forEach(g => { if(g.step === step && g.started_at && g.submitted_at) t += (Date.parse(g.submitted_at) - Date.parse(g.started_at)) / 1000; }); return Math.round(t * 10) / 10; };
-  return { keys_pre_secs: sum('key_pre'), keys_post_secs: sum('key'), cards_post_secs: sum('card'), alt_secs: sum('alt') };
+  const secs = g => g.started_at && g.submitted_at ? (Date.parse(g.submitted_at) - Date.parse(g.started_at)) / 1000 : 0;
+  const tot = f => Math.round((grids || []).filter(f).reduce((a, g) => a + secs(g), 0) * 10) / 10;
+  const n = f => (grids || []).filter(f).length;
+  // inefficient: a key made by choice after the offer while a key was already in hand (an unlock available), and of these
+  // the ones where the next card to unlock was orange
+  const ineff = g => g.step === 'key' && g.unlock_ready === 1, ineffO = g => ineff(g) && g.orange_ready === 1;
+  return { keys_pre_secs: tot(g => g.step === 'key_pre'), keys_post_secs: tot(g => g.step === 'key'), cards_post_secs: tot(g => g.step === 'card'), alt_secs: tot(g => g.step === 'alt'),
+    keys_inefficient: n(ineff), keys_inefficient_secs: tot(ineff), keys_inefficient_orange: n(ineffO), keys_inefficient_orange_secs: tot(ineffO) };
 }
 // The Responses fields fixed at generation time (the sequence's own draw) —
 // shared by endTask()'s row and buildAbandonedRecord_() below (WT_S: plus the model at the offer and the time per deck).
@@ -2329,11 +2424,12 @@ function staticSeqFields_(task){
     live_pattern:   task.live.map(v=>v?'L':'S').join(''), // the deck played (L = orange, S = white)
     n_live:         task.live.filter(Boolean).length,
     winning_card:   task.winner,     // card number of the winning card in the deck played
-    pause:          task.x,          // key cards to make before the offer: full and full_gift x, trunc and trunc_gift 0 (the offer at the start)
-    keys_at_offer:  s.x,             // the design's x (every version): the keys made in full and full_gift
+    pause:          task.x,          // key cards to make before the offer: full x, mixed its keys to make, trunc and trunc_gift 0 (the offer at the start)
+    keys_at_offer:  s.x,             // the design's x (every version): the keys made in full
     keys_gifted:    task.keysGifted || 0, // WT_S quartets: keys in hand at the start (full 0, part the design's gift, gift x, trunc 0)
-    keys_in_hand_at_offer: task.keysAtOffer != null ? task.keysAtOffer : null, // the cards covered at the offer: full x, full_gift x + gift, trunc 0, trunc_gift gift
-    design_gift:    s.gift != null ? s.gift : null, // the design's gift (both gift versions): even, 25–75% of x, at least 2
+    keys_in_hand_at_offer: task.keysAtOffer != null ? task.keysAtOffer : null, // the cards covered at the offer: full x, mixed gift + made, trunc 0, trunc_gift x
+    design_gift:    s.gift != null ? s.gift : null, // the mixed version's keys gifted (x × U(25%, 75%))
+    design_mix_made: s.mixMade != null ? s.mixMade : null, // the mixed version's keys made (x × U(25%, 100%))
     alt_duration:   task.altDuration,
     alt_geo:        r3(s.geo),       // the geometric fixed point (the alternative's lower bound)
     alt_quad:       r3(s.quad),      // the quadratic fixed point (its upper bound)
@@ -2347,6 +2443,7 @@ function staticSeqFields_(task){
     stay_cost_at_offer:       task.stayCostAtOffer != null ? r3(task.stayCostAtOffer) : null,
     effort_expected_at_offer: task.effortAtOffer != null ? r3(task.effortAtOffer) : null,
     switch_gain_at_offer:     task.stayCostAtOffer != null ? r3(task.stayCostAtOffer - task.altDuration) : null,
+    fair_at_offer:            task.fairAtOffer != null ? r3(task.fairAtOffer) : null, // the fair alternative at the offer, from the state there
     // WT_S: seconds spent on each deck, before and after the offer (sum of the cards' own times, started → submitted;
     // the offer's pause and the dialogs not included): key cards before it, key cards after it, cards unlocked, the alternative
     ...deckSecsS_(task.grids),
@@ -2356,7 +2453,10 @@ function staticSeqFields_(task){
     seq_frame_treatment: SESSION.nSeqFrame || 5,
     seq_is_bonus:   isBonusIdx_(task.index) ? 1 : 0,
     seed_id:        task.seedId,      // the design shared by the pair
-    seed_version:   task.seedVersion, // 'full', 'full_gift' (gift on top of the x made), 'trunc' or 'trunc_gift' (gift, the offer at the start)
+    seed_version:   task.seedVersion, // 'trunc' (baseline: no keys, one deck), 'full' (x made, extra gifted 20%), 'mixed' (gifted and made), 'trunc_gift' (x gifted, extra made 20%)
+    keys_version:   task.keysVersion || task.seedVersion, // the keys actually there: 'full' (made only), 'mixed' (gifted and made), 'trunc_gift' (gifted only), 'trunc' (none)
+    treat_extra:    task.treat && task.treat.extra != null ? task.treat.extra : null, // full / trunc_gift: the extra keys' share of x, Beta(0.5, 0.5) (blank: none, 80%)
+    treat_choice:   task.treat ? (task.treat.choice ? 1 : 0) : 0, // treated versions: a choice of 2 or 3 decks (50%)
     seed_role:      task.seedRole,    // 'pair' (completes a design from the pool), 'new' (created it, or the deck chosen instead of the assigned one), 'unpaired'
     // the decks shown before the sequence: 1 in half the sequences, else 2 or 3, in every version (designs from the pool or new)
     n_decks:          task.nDecks,
@@ -2824,7 +2924,8 @@ function trainLightAll_(){
 function trainDemo_(o){
   const stage = o.stage || 'play';
   return { live: TRAIN.live, length: TRAIN.length, altDuration: TRAIN.altDuration, altRevealed: !!(o.offered || o.alt),
-    qs: { keys: o.keys || 0, opened: o.opened || [], stage, mode: o.mode || 'keys', nextMode: null, cur: o.cur === undefined ? 'card' : o.cur, card: o.card || null } };
+    qs: { keys: o.keys || 0, opened: o.opened || [], stage, mode: o.mode || 'keys', nextMode: null, cur: o.cur === undefined ? 'card' : o.cur, card: o.card || null,
+      autoKey: o.cur === 'key' && o.mode === 'cards' && !o.keys } };
 }
 // Flash just the front card's blue outline (nothing else) — used when introducing "this is a card". Repeats a few
 // times, since a single .6s flash is easy to miss. Explicitly removes the class once done (#st-grid is the real node).
@@ -2895,6 +2996,8 @@ function renderTip_(bodyHtml, buttons){
     btn.className = b.cls || 'btn';
     btn.textContent = b.label;
     btn.onclick = b.onClick;
+    if(b.id) btn.id = b.id;
+    if(b.disabled) btn.disabled = true;
     acts.appendChild(btn);
   });
 }
@@ -3085,9 +3188,12 @@ function trainScreen2_(){
   trainPaint_(trainPre_(1));
   trainLightUpTo_(['bar-keys']);
   trainBuildGrid_(OBJECTS);
-  renderTip_('Click every matching emoji. You can continue once the grid has been submitted.', tipNav_());
+  // the grid submitted (by itself, when the countdown ends): only the Continue button turns on; the key earned is shown
+  // when it is pressed
+  renderTip_('Click every matching emoji. You can continue once the grid has been submitted.',
+    tipNav_([{ label: 'Continue', cls: 'btn', id: 'train-c2', disabled: true, onClick: () => { if(trainTaskPlayed){ earned(); trainShowGridStatic_(); } } }]));
   _trainSkipCurrent = trainSkipPracticeRound_;
-  trainRevealGrid_(()=>{ trainTaskPlayed = true; _trainSkipCurrent = null; earned(); });
+  trainRevealGrid_(()=>{ trainTaskPlayed = true; _trainSkipCurrent = null; const b = el('train-c2'); if(b) b.disabled = false; });
 }
 
 // 3. The first way to win: the winning card, in the main deck (every card locked).
@@ -3096,7 +3202,7 @@ function trainScreen3_(){
   trainCloseKeys_(); trainNameDecks_();
   trainLightUpTo_(['bar-main']);
   trainFlashTracker_();
-  renderTip_('There are <b>two ways</b> to win a round. You can find the <b>winning card</b> in the <b>Main Deck</b>, hidden among its <b>orange cards</b>. All cards in the main deck are <b>locked</b> 🔒, and need a <b>key</b> 🔑 to be unlocked. In this case, the main deck has '+TRAIN.length+' cards.', tipContinue_());
+  renderTip_('There are <b>two ways</b> to win a round. You can find the <b>winning card</b> in the <b>Main Deck</b>, which is always hidden among <b>one of its orange cards</b>. All cards in the main deck are <b>locked</b> 🔒, and need a <b>key</b> 🔑 to be unlocked. In this case, to unlock the '+TRAIN.length+' cards, you would need '+TRAIN.length+' keys.', tipContinue_());
 }
 
 // 4. The second way: the alternative deck (its cards shown, still locked until the offer).
@@ -3106,7 +3212,7 @@ function trainScreen4_(){
   trainCloseKeys_(); trainNameDecks_();
   trainLightUpTo_(['panel-alt']);
   trainFlashEl_('strip-alt');
-  renderTip_('You also win the round by completing the <b>Alternative Deck</b>. Cards in the alternative deck are <b>not locked</b> and there are <b>no winning cards</b> to be found. In this case, you just need to go through all its <b>'+TRAIN.altDuration+' cards</b>.', tipContinue_());
+  renderTip_('You also win the round by completing the <b>Alternative Deck</b>. Cards in the alternative deck are <b>not locked</b> and there are <b>no winning cards</b> to be found. In this case, you just need to go through all its '+TRAIN.altDuration+' cards.', tipContinue_());
 }
 
 // Flash one element of the task screen (training only; trainKill/renderTrainStep clear the class).
@@ -3116,8 +3222,8 @@ function trainFlashEl_(id){ const n=el(id); if(!n) return; n.classList.remove('s
 function trainScreen5_(){
   trainPaint_({ stage:'offer', cur:null, keys:TRAIN.x, mode:'keys', offered:true });
   trainLightUpTo_(['bar-main','bar-keys','panel-alt','below']);
-  ['st-offer-banner-text','foot-main','foot-alt'].forEach(trainFlashEl_);
-  renderTip_('The main and alternative decks may not <b>available</b> from the start. At some point, we will <b>pause the game</b> and let you choose between <b>unlocking your cards</b>, or <b>switching</b> to the alternative.', tipContinue_());
+  ['st-offer-banner-text','foot-main','foot-keys','foot-alt'].forEach(trainFlashEl_);
+  renderTip_('The main and alternative decks may not be <b>available</b> from the start. At some point, we will <b>pause the game</b> and let you choose between <b>unlocking your cards</b>, <b>making more keys</b>, or <b>switching</b> to the alternative. If you do not choose in time, the game keeps making keys.', tipContinue_());
 }
 
 // 6. Unlocking: one key for card 1, a white card.
@@ -3144,7 +3250,7 @@ function trainScreen8_(){
   trainLightUpTo_(['bar-main','bar-keys']);
   trainResetGridPlaceholders_(); el('st-target').textContent = pick(OBJECTS);
   trainFlashEl_('foot-main'); trainFlashEl_('foot-keys');
-  renderTip_('We haven\'t found the winning card, too bad! If you run out of keys, the game <b>automatically</b> switches between decks so that you can get keys and unlock cards.', tipContinue_());
+  renderTip_('We haven\'t found the winning card, too bad! If you are unlocking cards and run out of keys, the game <b>automatically</b> gives you a key to make.', tipContinue_());
 }
 
 // 9. Switching: only the alternative's button flashes.
@@ -3444,7 +3550,7 @@ function graceRevealRest_(){
 // picks one, and Start is enabled once a deck is selected.
 // The longest deck that can be drawn: both sections at their longest, plus
 // the extra length allowed for non-default decks.
-function deckMaxLen_(){ return WTS.QCFG.lengthHi + 8; } // WT_S: full_gift decks have up to (x + g)/2 extra white cards
+function deckMaxLen_(){ return WTS.QCFG.lengthHi + 8; } // WT_S: mixed decks have up to (gift + made)/2 extra white cards
 function renderDeckChoice_(task){
   const box = el('grace-decks'); if(!box || !task || !task.deckOptions) return;
   const n = task.nDecks;
@@ -3518,7 +3624,7 @@ function startTask(resumeSubtaskDone){
     if(o){ task.altDuration = o.alt; task.curOffer = o.k; }
     (task.offerPlan || []).filter(x => x.shown && x.pos < startAt && !(task.offerLog || []).some(l => l.k === x.k))
       .forEach(x => task.offerLog.push({ k: x.k, pos: x.pos, alt: x.alt, eStay: x.eStay, missing: x.missing, found: x.found, outcome: 'lapsed_on_resume' }));
-    if(task.qs.stage === 'offer'){ task.qs.stage = 'play'; nextStepS_(task); } // WT_S: reloaded during the pause: it lapses, going on in the state it was in
+    if(task.qs.stage === 'offer'){ task.qs.stage = 'play'; task.qs.mode = 'keys'; if(task.offerMode == null) task.offerMode = 'keys'; nextStepS_(task); } // WT_S: reloaded during the pause: it lapses, as a timeout (making keys)
   }
   showScreen('subtask');
   updateStats();
@@ -3672,6 +3778,11 @@ function submitMatrix(){
       card:       S.phase==='main' && task.qs.cur==='card' ? task.qs.card : null,
       keys:       S.phase==='main' ? task.qs.keys : null,
       mode:       S.phase==='main' && task.qs.stage==='play' ? task.qs.mode : null,
+      key_auto:   S.phase==='main' && task.qs.stage==='play' && task.qs.cur==='key' ? (task.qs.autoKey ? 1 : 0) : null, // a key after the offer: 1 automatic (unlocking, none left), 0 chosen
+      // a key chosen after the offer with a key already in hand (an unlock was available: inefficient), and whether the
+      // next card to unlock was orange
+      unlock_ready: S.phase==='main' && task.qs.stage==='play' && task.qs.cur==='key' ? (!task.qs.autoKey && task.qs.keys > 0 ? 1 : 0) : null,
+      orange_ready: S.phase==='main' && task.qs.stage==='play' && task.qs.cur==='key' ? (!task.qs.autoKey && task.qs.keys > 0 && task.live[(nextCardS_(task) || 0) - 1] ? 1 : 0) : null,
       is_winner:  S.phase==='main' && task.qs.cur==='card' && task.qs.card===task.winner,
       // after the offer, the model's best move before this card ('switch', 'card' with a key in hand, 'key' with none),
       // 1 = switching, the cards expected if staying
@@ -3751,6 +3862,7 @@ function proceedAfterSubmit(){
       if(q.card === task.winner){ endTaskOrDefer_('completed'); return; }
       q.opened.push(q.card);
     } else { q.keys++; setFx_('keyIn'); if(q.stage === 'play') task.keysAfter = (task.keysAfter || 0) + 1; }
+    q.modeLock = false;                                             // a card completed: the mode can be changed again
     if(q.stage === 'pre'){ const o = offerAt_(task, S.subtaskDone); if(o){ showOfferScreen(task, o); return; } }
     else nextStepS_(task);
   }
@@ -3776,7 +3888,7 @@ function showOfferScreen(task, offer){
   if(task.stayCostAtOffer == null){
     const st = WTS.stepsFrom(task.live, coveredS_(task.qs), task.qs.opened);
     let alive = 1, eff = 0; st.forEach(s => { eff += alive * s.cost; alive *= 1 - s.h; });
-    task.stayCostAtOffer = bestMoveS_(task).stay; task.effortAtOffer = eff;
+    task.stayCostAtOffer = bestMoveS_(task).stay; task.effortAtOffer = eff; task.fairAtOffer = fairS_(task);
   }
   S.offerFlash = true; clearTimeout(S._offerFlashT); S._offerFlashT = setTimeout(() => { S.offerFlash = false; }, 2600); // its three buttons pulse
   S.switchAvailable = true;
@@ -3804,7 +3916,7 @@ function showOfferScreen(task, offer){
   offerBox.style.display='flex';
   offerBox.classList.add('is-expanded');
   const bannerText=el('st-offer-banner-text');
-  bannerText.textContent = 'Cards are available: unlock or switch';
+  bannerText.textContent = 'Cards are available: unlock, make keys or switch';
   bannerText.classList.remove('switch-flash');
   void bannerText.offsetWidth; // restart the animation even if it's still mid-run
   bannerText.classList.add('switch-flash');
@@ -3905,13 +4017,14 @@ function hideOfferBanner_(){
 // WT_S: staying (the cards bar clicked, or the countdown ran out) = unlocking the cards.
 function resolveOffer_(choice, mode){
   const task=S.tasks[S.taskIdx];
-  if(choice!=='switch') task.qs.mode = 'cards';
+  // WT_S: the cards bar → unlocking, the keys bar → making keys; the countdown running out (no mode) → making keys
+  if(choice!=='switch'){ task.qs.mode = mode === 'cards' ? 'cards' : 'keys'; task.qs.nextMode = null; if((task.offerLog || []).length <= 1) task.offerMode = task.qs.mode; }
   if(task && task._pHidSince != null){ task.pauseHiddenMs = (task.pauseHiddenMs || 0) + (Date.now() - task._pHidSince); task._pHidSince = null; } // WT_N: the pause ended while hidden (e.g. timeout)
   if(S.offerTimer){ clearInterval(S.offerTimer); S.offerTimer=null; }
   const secs = task.offerFiredAt ? Math.round((Date.now() - new Date(task.offerFiredAt)) / 100) / 10 : null;
   // WT_M: this offer's own record; the single-offer fields keep the FIRST offer.
   const lg = (task.offerLog || [])[task.offerLog.length - 1];
-  if(lg && lg.outcome == null){ lg.elapsedSecs = secs; lg.outcome = choice==='switch' ? 'switched' : (task.autoRefusedNow ? 'timeout' : 'unlock'); }
+  if(lg && lg.outcome == null){ lg.elapsedSecs = secs; lg.outcome = choice==='switch' ? 'switched' : (task.autoRefusedNow ? 'timeout' : task.qs.mode === 'keys' ? 'keys' : 'unlock'); }
   if((task.offerLog || []).length <= 1){
     task.deliberationSecs = secs;
     task.offerChoice = choice==='switch' ? 'accept' : 'refuse';
@@ -4283,7 +4396,10 @@ function endTask(outcome){
     pause_started_at_time: fired ? task.offerFiredAt : null,
     pause_duration_secs:   fired ? task.pauseSecs : null,       // its randomised countdown, Uniform[10,30]s
     pause_elapsed_secs:    task.deliberationSecs,               // pause shown → ended (a bar clicked, or timeout)
-    pause_outcome:         fired ? (task.switchSource==='offer' ? 'switched' : task.autoRefused ? 'timeout' : 'unlock') : null, // WT_S: the cards bar clicked (timeout: unlocking too)
+    pause_outcome:         fired ? (task.switchSource==='offer' ? 'switched' : task.autoRefused ? 'timeout' : task.offerMode === 'keys' ? 'keys' : 'unlock') : null, // WT_S: the cards bar clicked ('unlock'), the keys bar ('keys'); timeout: making keys
+    mode_changes:          (task.modeLog || []).length,  // WT_S: clicks changing the mode after the offer (cards ↔ keys)
+    mode_log:              (task.modeLog || []).map(m => m.at + ':' + m.mode + (m.dropped ? '!' : '')).join('|'), // main cards completed : the mode chosen (at once; ! = the card running dropped)
+    cards_dropped:         task.cardsDropped || 0,        // cards dropped unfinished by a change of mode
     penalty_at_pause:      fired ? task.penaltyAtPause : null,
     // ── Switching (the Alternative button, during the pause or later) ──
     switched:              task.switchTaken ? 1 : 0,
@@ -4302,11 +4418,14 @@ function endTask(outcome){
     exit_type:             exitType,
     sunk_cost_at_exit:     nMain,                 // main cards worked when the main sequence was left
     keys_made_pre:         grids.filter(g => g.step === 'key_pre').length, // keys made before the offer (full version: x)
-    keys_made_after:       grids.filter(g => g.step === 'key').length,     // key cards after the offer (automatic: none left)
+    keys_made_after:       grids.filter(g => g.step === 'key').length,     // key cards after the offer (chosen, or automatic: none left)
+    keys_made_chosen:      grids.filter(g => g.step === 'key' && g.key_auto === 0).length, // …of which chosen (the keys bar)
     keys_at_exit:          xs.keys,               // keys in hand when the main sequence was left (made for nothing)
     unlocked_at_exit:      xs.opened.length + (xs.cur === 'card' ? 1 : 0), // cards unlocked (the one being unlocked included)
     stay_cost_at_exit:     bmExit ? r3x(bmExit.stay) : null, // cards still expected if staying from there (the best way)
     switch_best_at_exit:   bmExit ? (bmExit.move === 'switch' ? 1 : 0) : null,
+    fair_at_exit:          bmExit ? r3x(fairS_(task, xs)) : null, // the fair alternative where the main deck was left
+    switch_gain_at_exit:   bmExit ? r3x(bmExit.stay - task.altDuration) : null, // cards saved by switching there (> 0: switching better)
     best_move_at_exit:     bmExit ? ({ unlock:'card', lock:'key' }[bmExit.move] || 'switch') : null,
     steps_after_offer:     after.length,          // main cards worked after the offer
     steps_switch_best:     after.filter(g => g.switch_best === 1).length, // …before which switching was the best move

@@ -10,7 +10,7 @@
  *   Responses — one row per respondent × sequence × attempt. Everything
  *               about a sequence — its draw, the offer, the switch, the
  *               outcome — lives on this one row.
- *   Seeds     — the pool of quartets (full / full_gift / trunc / trunc_gift).
+ *   Seeds     — the pool of quartets (full / mixed / trunc / trunc_gift).
  *
  * Deploy: Extensions → Apps Script → Deploy → New deployment
  *   Execute as: Me  |  Who has access: Anyone
@@ -67,6 +67,9 @@ var META_HEADER = [
   // seq_reload_count/seq_attempt for the per-sequence breakdown) ──
   'reload_count', 'reload_log_json',
   'resume_snapshot_json', // full resume snapshot; cleared on completion
+  // WT_S (2026-11-05): a cell holds at most 50,000 characters; the snapshot (≈ 40k after one sequence) is split over
+  // these columns, 45,000 characters each (read back joined)
+  'resume_snapshot_json_2', 'resume_snapshot_json_3', 'resume_snapshot_json_4', 'resume_snapshot_json_5', 'resume_snapshot_json_6', 'resume_snapshot_json_7', 'resume_snapshot_json_8',
   // ── Hidden treatment ──
   'seq_frame_treatment', // 4 or 5 — hidden sequence-count framing treatment
   // ── Background survey ──
@@ -123,7 +126,7 @@ var META_HEADER = [
   // steps), split at random across them (each ≥ £0.10) — each sequence's own
   // share is Responses.pay.
   'reward_pool',
-  // WT_S: the versions assigned to the five sequences, in order (full / full_gift / trunc / trunc_gift, | separated), and their designs
+  // WT_S: the versions assigned to the five sequences, in order (full / mixed / trunc / trunc_gift, | separated), and their designs
   'version_plan', 'seed_plan'
 ];
 
@@ -136,47 +139,50 @@ var RESP_HEADER = [
   'prolific_pid', 'study_id', 'session_id', 'demo_mode',
   'seq_n', 'seq_attempt', 'is_latest_attempt', // see "Reload/attempt tracking" in DATA_DICTIONARY.md
   // ── The design (fixed before the sequence starts) ──
-  'pay', 'seq_len', 'live_pattern', 'n_live', 'winning_card', 'pause', 'keys_at_offer', 'keys_gifted', 'keys_in_hand_at_offer', 'design_gift',
+  'pay', 'seq_len', 'live_pattern', 'n_live', 'winning_card', 'pause', 'keys_at_offer', 'keys_gifted', 'keys_in_hand_at_offer', 'design_gift', 'design_mix_made',
   'alt_duration', 'alt_geo', 'alt_quad', 'alt_u', 'alt_good', 'alt_m', 'alt_fair', 'switch_best_at_offer',
-  'stay_cost_at_offer', 'effort_expected_at_offer', 'switch_gain_at_offer',
+  'stay_cost_at_offer', 'effort_expected_at_offer', 'switch_gain_at_offer', 'fair_at_offer',
   'shape_params', 'densities', 'design_redraws', 'design_gen', 'seq_frame_treatment', 'seq_is_bonus',
-  'seed_id', 'seed_version', 'seed_role',
+  'seed_id', 'seed_version', 'seed_role', 'keys_version', 'treat_extra', 'treat_choice',
   'n_decks', 'deck_default_pos', 'deck_chosen_pos', 'chose_default', 'deck_live_options', 'deck_seed_options', 'deck_new_options', 'deck_clicks', 'deck_changes', 'deck_choice_secs',
   // ── Timestamps / reloads ──
   'start_at', 'end_at', 'briefing_ended_at', 'seq_reload_count',
   // ── Outcome ──
   'outcome_summary', 'card_order', 'alt_revealed',
   // ── The offer (the pause) ──
-  'pause_started_at_time', 'pause_duration_secs', 'pause_elapsed_secs', 'pause_outcome', 'penalty_at_pause',
+  'pause_started_at_time', 'pause_duration_secs', 'pause_elapsed_secs', 'pause_outcome', 'penalty_at_pause', 'mode_changes', 'mode_log',
   // ── Switching (only with the Alternative button, during the pause or later) ──
   'switched', 'switched_at_pause', 'switched_at', 'switched_at_time',
   'switch_pressed_at', 'switch_pressed_at_time', 'switch_decision_secs',
   'switch_dialog_opens', 'switch_dialog_cancels', 'locked_alt_clicks', 'pause_hidden_secs', 'seq_hidden_secs',
   // ── Exit point and the model's benchmark there ──
-  'exit_type', 'sunk_cost_at_exit', 'unlocked_at_exit', 'stay_cost_at_exit', 'switch_best_at_exit', 'best_move_at_exit',
+  'exit_type', 'sunk_cost_at_exit', 'unlocked_at_exit', 'stay_cost_at_exit', 'switch_best_at_exit', 'best_move_at_exit', 'fair_at_exit', 'switch_gain_at_exit',
   'steps_after_offer', 'steps_switch_best',
   // ── WT_S: keys and the path taken after the offer ──
-  'keys_made_pre', 'keys_made_after', 'keys_at_exit',
+  'keys_made_pre', 'keys_made_after', 'keys_made_chosen', 'keys_at_exit', 'cards_dropped',
   // ── WT_S: seconds per deck (the cards' own times): key cards before the offer, key cards after it, cards unlocked, the alternative ──
   'keys_pre_secs', 'keys_post_secs', 'cards_post_secs', 'alt_secs',
+  // ── WT_S: inefficient time: keys made by choice after the offer with a key already in hand (and the next card orange) ──
+  'keys_inefficient', 'keys_inefficient_secs', 'keys_inefficient_orange', 'keys_inefficient_orange_secs',
   // ── Give up / autokick / the alternative ──
   'forfeited', 'forfeited_in', 'forfeited_at', 'forfeited_at_time', 'auto_kicked', 'alt_started', 'alt_started_at_time',
   // ── Effort and earnings ──
   'n_main_tasks_done', 'n_alt_tasks_done', 'n_tasks_done',
   'earnings', 'grid_pay', 'penalty', 'net_earnings',
   'total_targets', 'total_found', 'total_false_pos', 'total_missed',
-  'tasks_json'
+  'tasks_json', 'tasks_json_2', 'tasks_json_3', 'tasks_json_4' // split: 45,000 characters each, to be joined
 ];
 
-// WT_S: the pool of quartets. One row per design ("seed"); each design is played in four versions by four different
-// participants: full (x keys made), full_gift (g keys gifted at the start, then the x made), trunc (the truncated deck, no
-// keys, the offer at the start), trunc_gift (g gifted, the offer at the start). Status per version: open / claimed / done.
-// A claim older than SEED_CLAIM_HOURS without 'done' counts as open again.
+// WT_S: the pool of quartets (2026-11-05). One row per design ("seed"); each design is played in four versions by four
+// different participants: trunc (the baseline: the truncated deck, no keys, one deck), full (x keys made; extra keys
+// gifted with chance 20%), mixed (keys gifted and made), trunc_gift (x keys gifted; extra keys to make with chance 20%);
+// the three treated versions with a choice of decks 50/50 (drawn by the participant's page). Status per version: open /
+// claimed / done. A claim older than SEED_CLAIM_HOURS without 'done' counts as open again.
 var SEED_SHEET = 'Seeds';
-var SEED_VERSIONS = ['full', 'full_gift', 'trunc', 'trunc_gift'];
+var SEED_VERSIONS = ['full', 'mixed', 'trunc', 'trunc_gift'];
 var SEED_HEADER = [
   'seed_id', 'study_id', 'created_at', 'created_by', 'design_json',
-  'full_status', 'full_pid', 'full_at', 'full_gift_status', 'full_gift_pid', 'full_gift_at',
+  'full_status', 'full_pid', 'full_at', 'mixed_status', 'mixed_pid', 'mixed_at',
   'trunc_status', 'trunc_pid', 'trunc_at', 'trunc_gift_status', 'trunc_gift_pid', 'trunc_gift_at'
 ];
 var SEED_CLAIM_HOURS = 3;
@@ -203,7 +209,19 @@ function getMetaSheet_()  { return ensureSheet_(META_SHEET, META_HEADER); }
 function getRespSheet_()  { return ensureSheet_(RESP_SHEET, RESP_HEADER); }
 function getSeedSheet_()  { return ensureSheet_(SEED_SHEET, SEED_HEADER); }
 
+// WT_S (2026-11-05): a sheet cell holds at most 50,000 characters, and a longer one makes the whole row's write fail.
+// Long texts are split over several columns (CELL_MAX characters each); anything still longer is cut (cellValue_).
+var CELL_MAX = 45000;
+var SNAP_COLS_ = ['resume_snapshot_json', 'resume_snapshot_json_2', 'resume_snapshot_json_3', 'resume_snapshot_json_4', 'resume_snapshot_json_5', 'resume_snapshot_json_6', 'resume_snapshot_json_7', 'resume_snapshot_json_8'];
+var TASKS_COLS_ = ['tasks_json', 'tasks_json_2', 'tasks_json_3', 'tasks_json_4'];
+function splitCell_(s, n) {
+  var out = []; for (var k = 0; k < n; k++) out.push(s.slice(k * CELL_MAX, (k + 1) * CELL_MAX)); return out;
+}
 function cellValue_(v) {
+  var c = cellValue0_(v);
+  return typeof c === 'string' && c.length > 49990 ? c.slice(0, 49990) : c;
+}
+function cellValue0_(v) {
   if (v === null || v === undefined) return '';
   if (typeof v === 'object') return JSON.stringify(v);
   // Strings made only of numbers must not be reinterpreted by the sheet's locale
@@ -302,8 +320,7 @@ function upsertMeta_(sheet, pid, study_id, session_id, sl, snapshot, now, setCom
     ['final_bonus',            sl.final_bonus            != null ? sl.final_bonus            : ''],
     ['reload_count',           sl.reload_count           != null ? sl.reload_count           : ''],
     ['reload_log_json',        JSON.stringify(sl.reload_log || [])],
-    ['resume_snapshot_json',   setComplete ? '' : JSON.stringify(snapshot || {})],
-    ['geo_country',            sl.geo_country || ''],
+    ['geo_country',           sl.geo_country || ''],
     ['geo_region',             sl.geo_region  || ''],
     ['geo_city',               sl.geo_city    || ''],
     ['geo_ip',                 sl.geo_ip      || ''],
@@ -336,6 +353,10 @@ function upsertMeta_(sheet, pid, study_id, session_id, sl, snapshot, now, setCom
 
   if (setComplete) updates.push(['study_complete_at', now]);
 
+  // the snapshot, split over SNAP_COLS_ (every column written: the unused ones blank, as on completion)
+  var snapParts = splitCell_(setComplete ? '' : JSON.stringify(snapshot || {}), SNAP_COLS_.length);
+  SNAP_COLS_.forEach(function(c, k) { updates.push([c, snapParts[k]]); });
+
   var existing = isNew ? null : readMetaRow_(sheet, rowIndex);
   var ex = function(name) { return existing ? existing[META_HEADER.indexOf(name)] : ''; };
 
@@ -348,7 +369,7 @@ function upsertMeta_(sheet, pid, study_id, session_id, sl, snapshot, now, setCom
     // the survey, the timestamps and final_bonus). Only the resume snapshot may be
     // cleared, on completion.
     updates = updates.filter(function(p) {
-      if (p[0] === 'resume_snapshot_json') return true;
+      if (SNAP_COLS_.indexOf(p[0]) >= 0) return true;
       return !(p[1] === '' || p[1] === null || p[1] === undefined || p[1] === '[]' || p[1] === '{}');
     });
   }
@@ -403,9 +424,15 @@ function upsertRespRows_(sheet, pid, study_id, session_id, demo_mode, sections) 
     // client sent (null/undefined → blank, objects/arrays → JSON string —
     // see cellValue_). A column the client didn't send is left untouched.
     RESP_HEADER.forEach(function(col) {
-      if (SERVER_COLS[col]) return;
+      if (SERVER_COLS[col] || TASKS_COLS_.indexOf(col) >= 0) return;
       if (Object.prototype.hasOwnProperty.call(s, col)) updates.push([col, s[col]]);
     });
+    // tasks_json, split over TASKS_COLS_ (read back joined)
+    if (Object.prototype.hasOwnProperty.call(s, 'tasks_json')) {
+      var tj = typeof s.tasks_json === 'string' ? s.tasks_json : JSON.stringify(s.tasks_json || []);
+      var tParts = splitCell_(tj, TASKS_COLS_.length);
+      TASKS_COLS_.forEach(function(c, k) { updates.push([c, tParts[k]]); });
+    }
 
     writeRowBatched_(sheet, rowIndex, isNew, updates, RESP_HEADER);
     rowMap[seqKey][attempt] = rowIndex;
@@ -492,7 +519,7 @@ function seedClaim_(pid, slots, now) {
 }
 // Open versions still waiting for a partner, by version (for planning a clearing batch).
 function seedPoolStatus_(now) {
-  var rows = seedRows_(getSeedSheet_()), nowMs = Date.parse(now), out = { open: 0, by_version: { full: 0, full_gift: 0, trunc: 0, trunc_gift: 0 } };
+  var rows = seedRows_(getSeedSheet_()), nowMs = Date.parse(now), out = { open: 0, by_version: { full: 0, mixed: 0, trunc: 0, trunc_gift: 0 } };
   rows.forEach(function(r) {
     if (isPilotStudy_(r.study_id)) return;
     SEED_VERSIONS.forEach(function(v) {
@@ -557,7 +584,7 @@ function doGet(e) {
 
     if (!studyComplete) {
       try {
-        var raw = get('resume_snapshot_json');
+        var raw = SNAP_COLS_.map(function(c) { return get(c) || ''; }).join('');
         if (raw) resumeSnap = JSON.parse(raw);
       } catch (err) {}
     }
@@ -612,8 +639,9 @@ function doPost(e) {
       var metaSheet  = getMetaSheet_();
       var respSheet  = getRespSheet_();
       if (staleProgress_(metaSheet, pid, sl)) return jsonOut_({ ok: true, ignored: true });
-      upsertMeta_(metaSheet, pid, study_id, session_id, sl, body.snapshot, now, false);
+      // WT_S (2026-11-05): the sequences first, so that a failure writing Meta (e.g. the snapshot) cannot lose them
       upsertRespRows_(respSheet, pid, study_id, session_id, sl.demo_mode, sections);
+      upsertMeta_(metaSheet, pid, study_id, session_id, sl, body.snapshot, now, false);
       return jsonOut_({ ok: true });
     } catch (err) {
       return jsonOut_({ ok: false, error: String(err) });
@@ -639,8 +667,8 @@ function doPost(e) {
         }
       }
 
-      upsertMeta_(metaSheet2, pid, study_id, session_id, sl, null, now, true);
       upsertRespRows_(respSheet2, pid, study_id, session_id, sl.demo_mode, sections);
+      upsertMeta_(metaSheet2, pid, study_id, session_id, sl, null, now, true);
       return jsonOut_({ ok: true });
     } catch (err) {
       return jsonOut_({ ok: false, error: String(err) });
